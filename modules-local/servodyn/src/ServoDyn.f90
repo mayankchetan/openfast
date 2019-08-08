@@ -35,11 +35,11 @@ MODULE ServoDyn
 
    TYPE(ProgDesc), PARAMETER            :: SrvD_Ver = ProgDesc( 'ServoDyn', '', '' )
    
-#ifdef COMPILE_SIMULINK
+!#ifdef COMPILE_SIMULINK
    LOGICAL, PARAMETER, PUBLIC           :: Cmpl4SFun  = .TRUE.                            ! Is the module being compiled as an S-Function for Simulink?
-#else
-   LOGICAL, PARAMETER, PUBLIC           :: Cmpl4SFun  = .FALSE.                           ! Is the module being compiled as an S-Function for Simulink?
-#endif
+!#else
+!   LOGICAL, PARAMETER, PUBLIC           :: Cmpl4SFun  = .FALSE.                           ! Is the module being compiled as an S-Function for Simulink?
+!#endif
 
 #ifdef COMPILE_LABVIEW
    LOGICAL, PARAMETER, PUBLIC           :: Cmpl4LV    = .TRUE.                            ! Is the module being compiled for Labview?
