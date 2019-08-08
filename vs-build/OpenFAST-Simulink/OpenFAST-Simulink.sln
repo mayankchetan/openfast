@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.421
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6989167D-11E4-40FE-8C1A-2192A86A7E90}") = "OpenFAST-Simulink", "OpenFAST-Simulink.vfproj", "{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug_Matlab|x64 = Debug_Matlab|x64
+		Debug_Matlab|x86 = Debug_Matlab|x86
+		Release_Matlab|x64 = Release_Matlab|x64
+		Release_Matlab|x86 = Release_Matlab|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Debug_Matlab|x64.ActiveCfg = Debug_Matlab|x64
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Debug_Matlab|x64.Build.0 = Debug_Matlab|x64
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Debug_Matlab|x86.ActiveCfg = Debug_Matlab|Win32
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Debug_Matlab|x86.Build.0 = Debug_Matlab|Win32
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Release_Matlab|x64.ActiveCfg = Release_Matlab|x64
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Release_Matlab|x64.Build.0 = Release_Matlab|x64
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Release_Matlab|x86.ActiveCfg = Release_Matlab|Win32
+		{C3C93CC0-EDD7-438F-988C-1F917FAEFA67}.Release_Matlab|x86.Build.0 = Release_Matlab|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2C9380A2-5F2E-4DFF-BEC5-73A0F7BDD2DA}
+	EndGlobalSection
+EndGlobal

@@ -33,7 +33,19 @@ __pycache__/*
 # Build specific files
 build*/
 install/
-vs-build/
+!vs-build/
+*.h
+*.u2d
+*.suo
+*.db
+*.htm
+*.opendb
+*.tlog
+*.log
+*.pdb
+*.user
+*.db-shm
+*.db-wal
 
 # OS and IDE specific files
 .DS_Store
