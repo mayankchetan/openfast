@@ -65,7 +65,7 @@ Dependencies
 ------------
 The following packages are required for regression testing:
 
-- Python 3+
+- Python 3.7+
 - Numpy
 - CMake and CTest (Optional)
 - Bokeh 1.4 (Optional)
@@ -262,7 +262,7 @@ suite.
 .. code-block:: bash
 
     # Download the source code from GitHub
-    #    Note: The default branch is 'master'
+    #    Note: The default branch is 'main'
     git clone --recursive https://github.com/openfast/openfast.git
     cd openfast
 
@@ -298,7 +298,7 @@ with CMake for use with the CTest command.
 .. code-block:: bash
 
     # Download the source code from GitHub
-    #    Note: The default branch is 'master'
+    #    Note: The default branch is 'main'
     git clone --recursive https://github.com/openfast/openfast.git
     cd openfast
 
@@ -339,7 +339,7 @@ included Python driver.
 .. code-block:: bash
 
     # Download the source code from GitHub
-    #    Note: The default branch is 'master'
+    #    Note: The default branch is 'main'
     git clone --recursive https://github.com/openfast/openfast.git
     cd openfast
 
