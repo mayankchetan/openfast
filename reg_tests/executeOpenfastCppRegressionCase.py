@@ -16,7 +16,7 @@
 
 import os
 import sys
-basepath = os.path.sep.join(sys.argv[0].split(os.path.sep)[:-1]) if os.path.sep in sys.argv[0] else "."
+basepath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.sep.join([basepath, "lib"]))
 import argparse
 import shutil
@@ -133,7 +133,6 @@ if not os.path.isdir(testBuildDirectory):
 if not noExec:
     cwd = os.getcwd()
     os.chdir(testBuildDirectory)
-    print("** CWD: ", os.getcwd())
     caseInputFile = os.path.abspath("cDriver.yaml")
     returnCode = openfastDrivers.runOpenfastCase(caseInputFile, executable)
     if returnCode != 0:
