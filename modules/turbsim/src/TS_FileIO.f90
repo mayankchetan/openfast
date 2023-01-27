@@ -4209,6 +4209,9 @@ SUBROUTINE ProcessLine_IEC_WindType(Line, p, ErrStat, ErrMsg)
          CASE ('3')
             p%IEC%Vref = 37.5_ReKi
             Line = Line(2:)
+         CASE ('T') ! adding Typhoon class
+            p%IEC%Vref = 57.0_ReKi
+            Line = Line(2:)
          CASE DEFAULT
                ! There's no number at the start of the string so let's move on (it's NTM).
             p%IEC%Vref = -999.9_ReKi
