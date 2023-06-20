@@ -282,10 +282,9 @@ END SUBROUTINE BldNdOuts_InitOut
 !----------------------------------------------------------------------------------------------------------------------------------
 !> This subroutine populates the headers with the blade node outputs.  The iteration cycle is blade:node:channel (channel iterated
 !! fastest).  If this iteration order is changed, it should be changed in the Calc_WriteBldNdOutput routine as well.
-SUBROUTINE Calc_WriteBldNdOutput( p, m, u, y, ErrStat, ErrMsg )
+SUBROUTINE Calc_WriteBldNdOutput( p, m, y, ErrStat, ErrMsg )
    TYPE(BD_ParameterType),       INTENT(IN   )  :: p                                ! The module parameters
    TYPE(BD_MiscVarType),         INTENT(INOUT)  :: m                                ! misc variables
-   TYPE(BD_InputType),           INTENT(INOUT)  :: u                                ! Inputs at t
    TYPE(BD_OutputType),          INTENT(INOUT)  :: y                                ! outputs
    INTEGER(IntKi),               INTENT(  OUT)  :: ErrStat                          ! The error status code
    CHARACTER(*),                 INTENT(  OUT)  :: ErrMsg                           ! The error message, if an error occurred
