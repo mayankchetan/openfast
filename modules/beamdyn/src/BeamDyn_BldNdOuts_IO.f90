@@ -100,96 +100,103 @@ MODULE BeamDyn_BldNdOuts_IO
    INTEGER(IntKi), PARAMETER      :: BldNd_RAxr     =  52
    INTEGER(IntKi), PARAMETER      :: BldNd_RAyr     =  53
    INTEGER(IntKi), PARAMETER      :: BldNd_RAzr     =  54
+   INTEGER(IntKi), PARAMETER      :: BldNd_AbsXh    =  55
+   INTEGER(IntKi), PARAMETER      :: BldNd_AbsYh    =  56
+   INTEGER(IntKi), PARAMETER      :: BldNd_AbsZh    =  57
+   INTEGER(IntKi), PARAMETER      :: BldNd_AbsRXh   =  58
+   INTEGER(IntKi), PARAMETER      :: BldNd_AbsRYh   =  59
+   INTEGER(IntKi), PARAMETER      :: BldNd_AbsRZh   =  60
 
      ! Applied Loads:
 
-   INTEGER(IntKi), PARAMETER      :: BldNd_PFxL     =  55
-   INTEGER(IntKi), PARAMETER      :: BldNd_PFyL     =  56
-   INTEGER(IntKi), PARAMETER      :: BldNd_PFzL     =  57
-   INTEGER(IntKi), PARAMETER      :: BldNd_PMxL     =  58
-   INTEGER(IntKi), PARAMETER      :: BldNd_PMyL     =  59
-   INTEGER(IntKi), PARAMETER      :: BldNd_PMzL     =  60
-   INTEGER(IntKi), PARAMETER      :: BldNd_DFxL     =  61
-   INTEGER(IntKi), PARAMETER      :: BldNd_DFyL     =  62
-   INTEGER(IntKi), PARAMETER      :: BldNd_DFzL     =  63
-   INTEGER(IntKi), PARAMETER      :: BldNd_DMxL     =  64
-   INTEGER(IntKi), PARAMETER      :: BldNd_DMyL     =  65
-   INTEGER(IntKi), PARAMETER      :: BldNd_DMzL     =  66
-   INTEGER(IntKi), PARAMETER      :: BldNd_DFxR     =  67
-   INTEGER(IntKi), PARAMETER      :: BldNd_DFyR     =  68
-   INTEGER(IntKi), PARAMETER      :: BldNd_DFzR     =  69
-   INTEGER(IntKi), PARAMETER      :: BldNd_DMxR     =  70
-   INTEGER(IntKi), PARAMETER      :: BldNd_DMyR     =  71
-   INTEGER(IntKi), PARAMETER      :: BldNd_DMzR     =  72
+   INTEGER(IntKi), PARAMETER      :: BldNd_PFxL     =  61
+   INTEGER(IntKi), PARAMETER      :: BldNd_PFyL     =  62
+   INTEGER(IntKi), PARAMETER      :: BldNd_PFzL     =  63
+   INTEGER(IntKi), PARAMETER      :: BldNd_PMxL     =  64
+   INTEGER(IntKi), PARAMETER      :: BldNd_PMyL     =  65
+   INTEGER(IntKi), PARAMETER      :: BldNd_PMzL     =  66
+   INTEGER(IntKi), PARAMETER      :: BldNd_DFxL     =  67
+   INTEGER(IntKi), PARAMETER      :: BldNd_DFyL     =  68
+   INTEGER(IntKi), PARAMETER      :: BldNd_DFzL     =  69
+   INTEGER(IntKi), PARAMETER      :: BldNd_DMxL     =  70
+   INTEGER(IntKi), PARAMETER      :: BldNd_DMyL     =  71
+   INTEGER(IntKi), PARAMETER      :: BldNd_DMzL     =  72
+   INTEGER(IntKi), PARAMETER      :: BldNd_DFxR     =  73
+   INTEGER(IntKi), PARAMETER      :: BldNd_DFyR     =  74
+   INTEGER(IntKi), PARAMETER      :: BldNd_DFzR     =  75
+   INTEGER(IntKi), PARAMETER      :: BldNd_DMxR     =  76
+   INTEGER(IntKi), PARAMETER      :: BldNd_DMyR     =  77
+   INTEGER(IntKi), PARAMETER      :: BldNd_DMzR     =  78
 
 
      ! Sectional Partial Loads (debugging):
 
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFbxl    =  73
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFbyl    =  74
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFbzl    =  75
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFbxr    =  76
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFbyr    =  77
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFbzr    =  78
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFbxl    =  79
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFbyl    =  80
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFbzl    =  81
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFbxr    =  82
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFbyr    =  83
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFbzr    =  84
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFcxl    =  85
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFcyl    =  86
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFczl    =  87
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFcxr    =  88
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFcyr    =  89
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFczr    =  90
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFcxl    =  91
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFcyl    =  92
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFczl    =  93
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFcxr    =  94
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFcyr    =  95
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFczr    =  96
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFdxl    =  97
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFdyl    =  98
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFdzl    =  99
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFdxr    = 100
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFdyr    = 101
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFdzr    = 102
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFdxl    = 103
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFdyl    = 104
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFdzl    = 105
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFdxr    = 106
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFdyr    = 107
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFdzr    = 108
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFgxl    = 109
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFgyl    = 110
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFgzl    = 111
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFgxr    = 112
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFgyr    = 113
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFgzr    = 114
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFgxl    = 115
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFgyl    = 116
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFgzl    = 117
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFgxr    = 118
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFgyr    = 119
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFgzr    = 120
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFixl    = 121
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFiyl    = 122
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFizl    = 123
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFixr    = 124
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFiyr    = 125
-   INTEGER(IntKi), PARAMETER      :: BldNd_FFizr    = 126
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFixl    = 127
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFiyl    = 128
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFizl    = 129
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFixr    = 130
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFiyr    = 131
-   INTEGER(IntKi), PARAMETER      :: BldNd_MFizr    = 132
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFbxl    =  79
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFbyl    =  80
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFbzl    =  81
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFbxr    =  82
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFbyr    =  83
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFbzr    =  84
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFbxl    =  85
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFbyl    =  86
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFbzl    =  87
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFbxr    =  88
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFbyr    =  89
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFbzr    =  90
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFcxl    =  91
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFcyl    =  92
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFczl    =  93
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFcxr    =  94
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFcyr    =  95
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFczr    =  96
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFcxl    =  97
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFcyl    =  98
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFczl    =  99
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFcxr    = 100
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFcyr    = 101
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFczr    = 102
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFdxl    = 103
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFdyl    = 104
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFdzl    = 105
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFdxr    = 106
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFdyr    = 107
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFdzr    = 108
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFdxl    = 109
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFdyl    = 110
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFdzl    = 111
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFdxr    = 112
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFdyr    = 113
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFdzr    = 114
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFgxl    = 115
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFgyl    = 116
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFgzl    = 117
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFgxr    = 118
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFgyr    = 119
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFgzr    = 120
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFgxl    = 121
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFgyl    = 122
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFgzl    = 123
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFgxr    = 124
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFgyr    = 125
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFgzr    = 126
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFixl    = 127
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFiyl    = 128
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFizl    = 129
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFixr    = 130
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFiyr    = 131
+   INTEGER(IntKi), PARAMETER      :: BldNd_FFizr    = 132
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFixl    = 133
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFiyl    = 134
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFizl    = 135
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFixr    = 136
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFiyr    = 137
+   INTEGER(IntKi), PARAMETER      :: BldNd_MFizr    = 138
 
-   ! The maximum number of output channels which can be output by the code.
-   INTEGER(IntKi), PARAMETER, PUBLIC      :: BldNd_MaxOutPts      = 132
 
-!End of code generated by Matlab script
+! The maximum number of output channels which can be output by the code.
+   INTEGER(IntKi), PARAMETER, PUBLIC      :: BldNd_MaxOutPts      = 138
+
+!End of code generated by Matlab script Write_ChckOutLst
 ! ===================================================================================================
 
 CONTAINS
@@ -275,9 +282,10 @@ END SUBROUTINE BldNdOuts_InitOut
 !----------------------------------------------------------------------------------------------------------------------------------
 !> This subroutine populates the headers with the blade node outputs.  The iteration cycle is blade:node:channel (channel iterated
 !! fastest).  If this iteration order is changed, it should be changed in the Calc_WriteBldNdOutput routine as well.
-SUBROUTINE Calc_WriteBldNdOutput( p, m, y, ErrStat, ErrMsg )
+SUBROUTINE Calc_WriteBldNdOutput( p, m, u, y, ErrStat, ErrMsg )
    TYPE(BD_ParameterType),       INTENT(IN   )  :: p                                ! The module parameters
    TYPE(BD_MiscVarType),         INTENT(INOUT)  :: m                                ! misc variables
+   TYPE(BD_InputType),           INTENT(INOUT)  :: u                                ! Inputs at t
    TYPE(BD_OutputType),          INTENT(INOUT)  :: y                                ! outputs
    INTEGER(IntKi),               INTENT(  OUT)  :: ErrStat                          ! The error status code
    CHARACTER(*),                 INTENT(  OUT)  :: ErrMsg                           ! The error message, if an error occurred
@@ -386,8 +394,45 @@ SUBROUTINE Calc_WriteBldNdOutput( p, m, y, ErrStat, ErrMsg )
                   END SELECT
                ENDDO
 
+            CASE(BldNd_AbsXh, BldNd_AbsYh, BldNd_AbsZh, BldNd_AbsRXh, BldNd_AbsRYh, BldNd_AbsRZh)
+               DO idx_node=1,y%BldMotion%NNodes    ! Note p%node_total is total number of nodes including all elements
+                  IdxOutList = p%NumOuts + idx_node + (IdxChan-1)*y%BldMotion%NNodes      ! Index to current output
 
+                  ! d     = y%BldMotion%TranslationDisp(:, idx_node) - m%u2%HubMotion%TranslationDisp(:,1)
+                  ! d_ref = y%BldMotion%Position(       :, idx_node) - m%u2%HubMotion%Position(       :,1)
+                  ! temp_vec2 = d + d_ref
 
+                  ! New position of the Hub wrt Global
+                  d_ref = m%u2%HubMotion%Position(       :,1) + m%u2%HubMotion%TranslationDisp(:,1)
+
+                  ! New position of the node wrt Global
+                  d = y%BldMotion%Position(       :, idx_node) + y%BldMotion%TranslationDisp(:, idx_node) 
+
+                  ! Relative position of the node wrt to the Hub
+                  temp_vec2 = d - d_ref
+
+                  ! Correcting the orientation from Global to the Hub
+                  temp_vec3 = MATMUL(m%u2%HubMotion%Orientation(:,:,1),temp_vec2)
+
+                  ! Trying to compute the rotations of the blade nodes wrt to the hub
+                  Tmp33a = MATMUL(y%BldMotion%Orientation(:,:,idx_node), TRANSPOSE(m%u2%HubMotion%Orientation(:,:,1)))
+                  temp_vec = EulerExtract(Tmp33a)
+
+                  SELECT CASE( p%BldNd_OutParam(IdxChan)%Indx )      ! Indx contains the information on what channel should be output
+                     CASE (BldNd_AbsXh)
+                        y%WriteOutput( IdxOutList ) = temp_vec3(1)
+                     CASE (BldNd_AbsYh)
+                        y%WriteOutput( IdxOutList ) = temp_vec3(2)
+                     CASE (BldNd_AbsZh)
+                        y%WriteOutput( IdxOutList ) = temp_vec3(3)
+                     CASE (BldNd_AbsRXh)
+                        y%WriteOutput( IdxOutList ) = temp_vec(1) * R2D
+                     CASE (BldNd_AbsRYh)
+                        y%WriteOutput( IdxOutList ) = temp_vec(2) * R2D
+                     CASE (BldNd_AbsRZh)
+                        y%WriteOutput( IdxOutList ) = temp_vec(3) * R2D
+                  END SELECT
+               ENDDO
             !----------------------------------------
             ! Rotational displacements as W-M parameters
             CASE ( BldNd_RDxr, BldNd_RDyr, BldNd_RDzr )
@@ -1268,86 +1313,66 @@ SUBROUTINE BldNdOuts_SetOutParam(BldNd_OutList, p, ErrStat, ErrMsg )
    INTEGER                      :: I                                               ! Generic loop-counting index
    INTEGER                      :: J                                               ! Generic loop-counting index
    INTEGER                      :: INDX                                            ! Index for valid arrays
-
    LOGICAL                      :: InvalidOutput(1:BldNd_MaxOutPts)                      ! This array determines if the output channel is valid for this configuration
-   CHARACTER(ChanLen)           :: OutListTmp                                      ! A string to temporarily hold OutList(I)
    CHARACTER(*), PARAMETER      :: RoutineName = "BldNdOuts_SetOutParam"
 
-   CHARACTER(OutStrLenM1), PARAMETER  :: ValidParamAry(177) =  (/  &   ! This lists the names of the allowed parameters, which must be sorted alphabetically
-                               "ABSXG   ","ABSXR   ","ABSYG   ","ABSYR   ","ABSZG   ", &
-                               "ABSZR   ","AXB     ","AXL     ","AYB     ","AYL     ","AZB     ","AZL     ", &
-                               "DFXL    ","DFXR    ","DFYL    ","DFYR    ","DFZL    ","DFZR    ","DMXL    ", &
-                               "DMXR    ","DMYL    ","DMYR    ","DMZL    ","DMZR    ","FFBXL   ","FFBXR   ","FFBYL   ", &
-                               "FFBYR   ","FFBZL   ","FFBZR   ","FFCXL   ","FFCXR   ","FFCYL   ","FFCYR   ","FFCZL   ", &
-                               "FFCZR   ","FFDXL   ","FFDXR   ","FFDYL   ","FFDYR   ","FFDZL   ","FFDZR   ","FFGXL   ", &
-                               "FFGXR   ","FFGYL   ","FFGYR   ","FFGZL   ","FFGZR   ","FFIXL   ","FFIXR   ","FFIYL   ", &
-                               "FFIYR   ","FFIZL   ","FFIZR   ","FXB     ","FXL     ","FXR     ","FYB     ","FYL     ", &
-                               "FYR     ","FZB     ","FZL     ","FZR     ","MFBXL   ","MFBXR   ","MFBYL   ","MFBYR   ", &
-                               "MFBZL   ","MFBZR   ","MFCXL   ","MFCXR   ","MFCYL   ","MFCYR   ","MFCZL   ","MFCZR   ", &
-                               "MFDXL   ","MFDXR   ","MFDYL   ","MFDYR   ","MFDZL   ","MFDZR   ","MFGXL   ","MFGXR   ", &
-                               "MFGYL   ","MFGYR   ","MFGZL   ","MFGZR   ","MFIXL   ","MFIXR   ","MFIYL   ","MFIYR   ", &
-                               "MFIZL   ","MFIZR   ","MXB     ","MXL     ","MXR     ","MYB     ","MYL     ","MYR     ", &
-                               "MZB     ","MZL     ","MZR     ","PFXL    ","PFYL    ","PFZL    ","PMXL    ","PMYL    ", &
-                               "PMZL    ","PXB     ","PXG     ","PYB     ","PYG     ","PZB     ","PZG     ","QXB     ", &
-                               "QXL     ","QYB     ","QYL     ","QZB     ","QZL     ","RAXL    ","RAXR    ","RAYL    ", &
-                               "RAYR    ","RAZL    ","RAZR    ","RDXR    ","RDYR    ", &
-                               "RDZR    ","RVXG    ","RVXL    ","RVXR    ","RVYG    ","RVYL    ","RVYR    ","RVZG    ", &
-                               "RVZL    ","RVZR    ","TAXL    ","TAXR    ","TAYL    ", &
-                               "TAYR    ","TAZL    ","TAZR    ","TDXR    ","TDYR    ","TDZR    ", &
-                               "TVXG    ","TVXL    ","TVXR    ","TVYG    ","TVYL    ","TVYR    ","TVZG    ","TVZL    ", &
-                               "TVZR    ","UXB     ","UYB     ","UZB     ","VXB     ","VXG     ", &
-                               "VXL     ","VYB     ","VYG     ","VYL     ","VZB     ","VZG     ","VZL     ","WXB     ", &
-                               "WXG     ","WXL     ","WYB     ","WYG     ","WYL     ","WZB     ","WZG     ","WZL     "/)
-   INTEGER(IntKi), PARAMETER :: ParamIndxAry(177) =  (/ &                            ! This lists the index into AllOuts(:) of the allowed parameters ValidParamAry(:)
-                                 BldNd_AbsXg ,    BldNd_AbsXr ,    BldNd_AbsYg ,    BldNd_AbsYr ,    BldNd_AbsZg , &
-                                   BldNd_AbsZr ,     BldNd_TAxr ,     BldNd_TAxl ,     BldNd_TAyr ,     BldNd_TAyl ,     BldNd_TAzr ,     BldNd_TAzl ,  &
-                                  BldNd_DFxL ,     BldNd_DFxR ,     BldNd_DFyL ,     BldNd_DFyR ,     BldNd_DFzL ,     BldNd_DFzR ,     BldNd_DMxL , &
-                                    BldNd_DMxR ,     BldNd_DMyL ,     BldNd_DMyR ,     BldNd_DMzL ,     BldNd_DMzR ,    BldNd_FFbxl ,    BldNd_FFbxr ,    BldNd_FFbyl , &
-                                   BldNd_FFbyr ,    BldNd_FFbzl ,    BldNd_FFbzr ,    BldNd_FFcxl ,    BldNd_FFcxr ,    BldNd_FFcyl ,    BldNd_FFcyr ,    BldNd_FFczl , &
-                                   BldNd_FFczr ,    BldNd_FFdxl ,    BldNd_FFdxr ,    BldNd_FFdyl ,    BldNd_FFdyr ,    BldNd_FFdzl ,    BldNd_FFdzr ,    BldNd_FFgxl , &
-                                   BldNd_FFgxr ,    BldNd_FFgyl ,    BldNd_FFgyr ,    BldNd_FFgzl ,    BldNd_FFgzr ,    BldNd_FFixl ,    BldNd_FFixr ,    BldNd_FFiyl , &
-                                   BldNd_FFiyr ,    BldNd_FFizl ,    BldNd_FFizr ,      BldNd_Fxr ,      BldNd_FxL ,      BldNd_Fxr ,      BldNd_Fyr ,      BldNd_FyL , &
-                                     BldNd_Fyr ,      BldNd_Fzr ,      BldNd_FzL ,      BldNd_Fzr ,    BldNd_MFbxl ,    BldNd_MFbxr ,    BldNd_MFbyl ,    BldNd_MFbyr , &
-                                   BldNd_MFbzl ,    BldNd_MFbzr ,    BldNd_MFcxl ,    BldNd_MFcxr ,    BldNd_MFcyl ,    BldNd_MFcyr ,    BldNd_MFczl ,    BldNd_MFczr , &
-                                   BldNd_MFdxl ,    BldNd_MFdxr ,    BldNd_MFdyl ,    BldNd_MFdyr ,    BldNd_MFdzl ,    BldNd_MFdzr ,    BldNd_MFgxl ,    BldNd_MFgxr , &
-                                   BldNd_MFgyl ,    BldNd_MFgyr ,    BldNd_MFgzl ,    BldNd_MFgzr ,    BldNd_MFixl ,    BldNd_MFixr ,    BldNd_MFiyl ,    BldNd_MFiyr , &
-                                   BldNd_MFizl ,    BldNd_MFizr ,      BldNd_Mxr ,      BldNd_MxL ,      BldNd_Mxr ,      BldNd_Myr ,      BldNd_MyL ,      BldNd_Myr , &
-                                     BldNd_Mzr ,      BldNd_MzL ,      BldNd_Mzr ,     BldNd_PFxL ,     BldNd_PFyL ,     BldNd_PFzL ,     BldNd_PMxL ,     BldNd_PMyL , &
-                                    BldNd_PMzL ,    BldNd_AbsXr ,    BldNd_AbsXg ,    BldNd_AbsYr ,    BldNd_AbsYg ,    BldNd_AbsZr ,    BldNd_AbsZg ,     BldNd_RAxr , &
-                                    BldNd_RAxl ,     BldNd_RAyr ,     BldNd_RAyl ,     BldNd_RAzr ,     BldNd_RAzl ,     BldNd_RAxl ,     BldNd_RAxr ,     BldNd_RAyl , &
-                                    BldNd_RAyr ,     BldNd_RAzl ,     BldNd_RAzr ,     BldNd_RDxr ,     BldNd_RDyr , &
-                                    BldNd_RDzr ,     BldNd_RVxg ,     BldNd_RVxl ,     BldNd_RVxr ,     BldNd_RVyg ,     BldNd_RVyl ,     BldNd_RVyr ,     BldNd_RVzg , &
-                                    BldNd_RVzl ,     BldNd_RVzr ,     BldNd_TAxl ,     BldNd_TAxr ,     BldNd_TAyl , &
-                                    BldNd_TAyr ,     BldNd_TAzl ,     BldNd_TAzr ,     BldNd_TDxr ,     BldNd_TDyr ,     BldNd_TDzr , &
-                                    BldNd_TVxg ,     BldNd_TVxl ,     BldNd_TVxr ,     BldNd_TVyg ,     BldNd_TVyl ,     BldNd_TVyr ,     BldNd_TVzg ,     BldNd_TVzl , &
-                                    BldNd_TVzr ,     BldNd_TDxr ,     BldNd_TDyr ,     BldNd_TDzr ,     BldNd_TVxr ,     BldNd_TVxg , &
-                                    BldNd_TVxl ,     BldNd_TVyr ,     BldNd_TVyg ,     BldNd_TVyl ,     BldNd_TVzr ,     BldNd_TVzg ,     BldNd_TVzl ,     BldNd_RVxr , &
-                                    BldNd_RVxg ,     BldNd_RVxl ,     BldNd_RVyr ,     BldNd_RVyg ,     BldNd_RVyl ,     BldNd_RVzr ,     BldNd_RVzg ,     BldNd_RVzl /)
-   CHARACTER(ChanLen), PARAMETER :: ParamUnitsAry(177) =  (/  &  ! This lists the units corresponding to the allowed parameters
-                               "(m)      ","(m)      ","(m)      ","(m)      ","(m)      ", &
-                               "(m)      ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ",&
-                               "(N/m)    ","(N/m)    ","(N/m)    ","(N/m)    ","(N/m)    ","(N/m)    ","(N-m/m)  ", &
-                               "(N-m/m)  ","(N-m/m)  ","(N-m/m)  ","(N-m/m)  ","(N-m/m)  ","(N)      ","(N)      ","(N)      ", &
-                               "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
-                               "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
-                               "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
-                               "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
-                               "(N)      ","(N)      ","(N)      ","(N)      ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
-                               "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
-                               "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
-                               "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
-                               "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
-                               "(N-m)    ","(N-m)    ","(N-m)    ","(N)      ","(N)      ","(N)      ","(N-m)    ","(N-m)    ", &
-                               "(N-m)    ","(m)      ","(m)      ","(m)      ","(m)      ","(m)      ","(m)      ","(deg/s^2)", &
-                               "(deg/s^2)","(deg/s^2)","(deg/s^2)","(deg/s^2)","(deg/s^2)","(deg/s^2)","(deg/s^2)","(deg/s^2)", &
-                               "(deg/s^2)","(deg/s^2)","(deg/s^2)","(-)      ","(-)      ", &
-                               "(-)      ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ", &
-                               "(deg/s)  ","(deg/s)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ", &
-                               "(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m)      ","(m)      ","(m)      ", &
-                               "(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ", &
-                               "(m/s)    ","(m)      ","(m)      ","(m)      ","(m/s)    ","(m/s)    ", &
-                               "(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(deg/s)  ", &
-                               "(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  "/)
+   CHARACTER(OutStrLenM1), PARAMETER  :: ValidParamAry(138) =  (/  &   ! This lists the names of the allowed parameters, which must be sorted alphabetically
+                               "ABSRXH","ABSRYH","ABSRZH","ABSXG ","ABSXH ","ABSXR ","ABSYG ","ABSYH ", &
+                               "ABSYR ","ABSZG ","ABSZH ","ABSZR ","DFXL  ","DFXR  ","DFYL  ","DFYR  ", &
+                               "DFZL  ","DFZR  ","DMXL  ","DMXR  ","DMYL  ","DMYR  ","DMZL  ","DMZR  ", &
+                               "FFBXL ","FFBXR ","FFBYL ","FFBYR ","FFBZL ","FFBZR ","FFCXL ","FFCXR ", &
+                               "FFCYL ","FFCYR ","FFCZL ","FFCZR ","FFDXL ","FFDXR ","FFDYL ","FFDYR ", &
+                               "FFDZL ","FFDZR ","FFGXL ","FFGXR ","FFGYL ","FFGYR ","FFGZL ","FFGZR ", &
+                               "FFIXL ","FFIXR ","FFIYL ","FFIYR ","FFIZL ","FFIZR ","FXL   ","FXR   ", &
+                               "FYL   ","FYR   ","FZL   ","FZR   ","MFBXL ","MFBXR ","MFBYL ","MFBYR ", &
+                               "MFBZL ","MFBZR ","MFCXL ","MFCXR ","MFCYL ","MFCYR ","MFCZL ","MFCZR ", &
+                               "MFDXL ","MFDXR ","MFDYL ","MFDYR ","MFDZL ","MFDZR ","MFGXL ","MFGXR ", &
+                               "MFGYL ","MFGYR ","MFGZL ","MFGZR ","MFIXL ","MFIXR ","MFIYL ","MFIYR ", &
+                               "MFIZL ","MFIZR ","MXL   ","MXR   ","MYL   ","MYR   ","MZL   ","MZR   ", &
+                               "PFXL  ","PFYL  ","PFZL  ","PMXL  ","PMYL  ","PMZL  ","RAXL  ","RAXR  ", &
+                               "RAYL  ","RAYR  ","RAZL  ","RAZR  ","RDXR  ","RDYR  ","RDZR  ","RVXG  ", &
+                               "RVXL  ","RVXR  ","RVYG  ","RVYL  ","RVYR  ","RVZG  ","RVZL  ","RVZR  ", &
+                               "TAXL  ","TAXR  ","TAYL  ","TAYR  ","TAZL  ","TAZR  ","TDXR  ","TDYR  ", &
+                               "TDZR  ","TVXG  ","TVXL  ","TVXR  ","TVYG  ","TVYL  ","TVYR  ","TVZG  ", &
+                               "TVZL  ","TVZR  "/)
+   INTEGER(IntKi), PARAMETER :: ParamIndxAry(138) =  (/ &                            ! This lists the index into AllOuts(:) of the allowed parameters ValidParamAry(:)
+                               BldNd_AbsRXh , BldNd_AbsRYh , BldNd_AbsRZh ,  BldNd_AbsXg ,  BldNd_AbsXh ,  BldNd_AbsXr ,  BldNd_AbsYg ,  BldNd_AbsYh , &
+                                BldNd_AbsYr ,  BldNd_AbsZg ,  BldNd_AbsZh ,  BldNd_AbsZr ,   BldNd_DFxL ,   BldNd_DFxR ,   BldNd_DFyL ,   BldNd_DFyR , &
+                                 BldNd_DFzL ,   BldNd_DFzR ,   BldNd_DMxL ,   BldNd_DMxR ,   BldNd_DMyL ,   BldNd_DMyR ,   BldNd_DMzL ,   BldNd_DMzR , &
+                                BldNd_FFbxl ,  BldNd_FFbxr ,  BldNd_FFbyl ,  BldNd_FFbyr ,  BldNd_FFbzl ,  BldNd_FFbzr ,  BldNd_FFcxl ,  BldNd_FFcxr , &
+                                BldNd_FFcyl ,  BldNd_FFcyr ,  BldNd_FFczl ,  BldNd_FFczr ,  BldNd_FFdxl ,  BldNd_FFdxr ,  BldNd_FFdyl ,  BldNd_FFdyr , &
+                                BldNd_FFdzl ,  BldNd_FFdzr ,  BldNd_FFgxl ,  BldNd_FFgxr ,  BldNd_FFgyl ,  BldNd_FFgyr ,  BldNd_FFgzl ,  BldNd_FFgzr , &
+                                BldNd_FFixl ,  BldNd_FFixr ,  BldNd_FFiyl ,  BldNd_FFiyr ,  BldNd_FFizl ,  BldNd_FFizr ,    BldNd_FxL ,    BldNd_Fxr , &
+                                  BldNd_FyL ,    BldNd_Fyr ,    BldNd_FzL ,    BldNd_Fzr ,  BldNd_MFbxl ,  BldNd_MFbxr ,  BldNd_MFbyl ,  BldNd_MFbyr , &
+                                BldNd_MFbzl ,  BldNd_MFbzr ,  BldNd_MFcxl ,  BldNd_MFcxr ,  BldNd_MFcyl ,  BldNd_MFcyr ,  BldNd_MFczl ,  BldNd_MFczr , &
+                                BldNd_MFdxl ,  BldNd_MFdxr ,  BldNd_MFdyl ,  BldNd_MFdyr ,  BldNd_MFdzl ,  BldNd_MFdzr ,  BldNd_MFgxl ,  BldNd_MFgxr , &
+                                BldNd_MFgyl ,  BldNd_MFgyr ,  BldNd_MFgzl ,  BldNd_MFgzr ,  BldNd_MFixl ,  BldNd_MFixr ,  BldNd_MFiyl ,  BldNd_MFiyr , &
+                                BldNd_MFizl ,  BldNd_MFizr ,    BldNd_MxL ,    BldNd_Mxr ,    BldNd_MyL ,    BldNd_Myr ,    BldNd_MzL ,    BldNd_Mzr , &
+                                 BldNd_PFxL ,   BldNd_PFyL ,   BldNd_PFzL ,   BldNd_PMxL ,   BldNd_PMyL ,   BldNd_PMzL ,   BldNd_RAxl ,   BldNd_RAxr , &
+                                 BldNd_RAyl ,   BldNd_RAyr ,   BldNd_RAzl ,   BldNd_RAzr ,   BldNd_RDxr ,   BldNd_RDyr ,   BldNd_RDzr ,   BldNd_RVxg , &
+                                 BldNd_RVxl ,   BldNd_RVxr ,   BldNd_RVyg ,   BldNd_RVyl ,   BldNd_RVyr ,   BldNd_RVzg ,   BldNd_RVzl ,   BldNd_RVzr , &
+                                 BldNd_TAxl ,   BldNd_TAxr ,   BldNd_TAyl ,   BldNd_TAyr ,   BldNd_TAzl ,   BldNd_TAzr ,   BldNd_TDxr ,   BldNd_TDyr , &
+                                 BldNd_TDzr ,   BldNd_TVxg ,   BldNd_TVxl ,   BldNd_TVxr ,   BldNd_TVyg ,   BldNd_TVyl ,   BldNd_TVyr ,   BldNd_TVzg , &
+                                 BldNd_TVzl ,   BldNd_TVzr /)
+   CHARACTER(ChanLen), PARAMETER :: ParamUnitsAry(138) =  (/ character(ChanLen) :: &  ! This lists the units corresponding to the allowed parameters
+                                 "(deg)    ","(deg)    ","(deg)    ","(m)      ","(m)      ","(m)      ","(m)      ","(m)      ", &
+                                 "(m)      ","(m)      ","(m)      ","(m)      ","(N/m)    ","(N/m)    ","(N/m)    ","(N/m)    ", &
+                                 "(N/m)    ","(N/m)    ","(N-m/m)  ","(N-m/m)  ","(N-m/m)  ","(N-m/m)  ","(N-m/m)  ","(N-m/m)  ", &
+                                 "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
+                                 "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
+                                 "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
+                                 "(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ","(N)      ", &
+                                 "(N)      ","(N)      ","(N)      ","(N)      ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
+                                 "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
+                                 "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
+                                 "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
+                                 "(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ","(N-m)    ", &
+                                 "(N)      ","(N)      ","(N)      ","(N-m)    ","(N-m)    ","(N-m)    ","(deg/s^2)","(deg/s^2)", &
+                                 "(deg/s^2)","(deg/s^2)","(deg/s^2)","(deg/s^2)","(-)      ","(-)      ","(-)      ","(deg/s)  ", &
+                                 "(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ","(deg/s)  ", &
+                                 "(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m/s^2)  ","(m)      ","(m)      ", &
+                                 "(m)      ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ","(m/s)    ", &
+                                 "(m/s)    ","(m/s)    "/)
 
 
       ! Initialize values
@@ -1457,14 +1482,15 @@ SUBROUTINE BldNdOuts_SetOutParam(BldNd_OutList, p, ErrStat, ErrMsg )
 
    DO I = 1,p%BldNd_NumOuts
 
-      p%BldNd_OutParam(I)%Name  = "_"//BldNd_OutList(I)
-      OutListTmp          = BldNd_OutList(I)
-      p%BldNd_OutParam(I)%SignM = 1   ! this won't be used
+      p%BldNd_OutParam(I)%Name  = BldNd_OutList(I)
 
-      CALL Conv2UC( OutListTmp )    ! Convert OutListTmp to upper case
+      Indx = FindValidChannelIndx(BldNd_OutList(I), ValidParamAry, p%BldNd_OutParam(I)%SignM)
 
-
-      Indx = IndexCharAry( OutListTmp(1:OutStrLenM1), ValidParamAry )
+      if (p%BldNd_OutParam(I)%SignM /= 1) then   ! this won't be used
+         CALL SetErrStat(ErrID_Severe, "Negative channels not allowed for nodal outputs. Resetting channel name.", ErrStat, ErrMsg, RoutineName)
+         p%BldNd_OutParam(I)%SignM = 1
+         p%BldNd_OutParam(I)%Name  = p%BldNd_OutParam(I)%Name(2:) ! remove the first character that makes this a negative value
+      end if
 
       IF ( Indx > 0 ) THEN ! we found the channel name
          IF ( InvalidOutput( ParamIndxAry(Indx) ) ) THEN  ! but, it isn't valid for these settings
@@ -1479,10 +1505,10 @@ SUBROUTINE BldNdOuts_SetOutParam(BldNd_OutList, p, ErrStat, ErrMsg )
          p%BldNd_OutParam(I)%Indx  = 0                    ! pick any valid channel (I just picked "Time=0" here because it's universal)
          p%BldNd_OutParam(I)%Units = "INVALID"
          p%BldNd_OutParam(I)%SignM = 0                    ! multiply all results by zero
-
+   
          CALL SetErrStat(ErrID_Fatal, TRIM(p%BldNd_OutParam(I)%Name)//" is not an available output channel.",ErrStat,ErrMsg,RoutineName)
       END IF
-
+   
    END DO
 
    RETURN
