@@ -895,7 +895,8 @@ ALPHA_LOOP: DO Row=1,p%Table(iTable)%NumAlf-1
          
          if (CalcDefaults%filtCutOff     ) p%UA_BL%filtCutOff     =  0.50_ReKi
          
-         p%UA_BL%UACutout_blend  = max(0.0_ReKi, abs(p%UA_BL%UACutout) - abs(p%UA_BL%UACutout_delta))
+         ! p%UA_BL%UACutout_blend  = max(0.0_ReKi, abs(p%UA_BL%UACutout) - abs(p%UA_BL%UACutout_delta))
+         p%UA_BL%UACutout_blend  = p%UA_BL%UACutout
          
          !-------------------------------------
          ! Calculate based on airfoil polar:
