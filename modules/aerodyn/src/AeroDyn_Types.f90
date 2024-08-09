@@ -182,6 +182,9 @@ IMPLICIT NONE
     REAL(ReKi)  :: HubCenBx = 0.0_ReKi      !< Hub center of buoyancy x direction offset [m]
     REAL(ReKi)  :: VolNac = 0.0_ReKi      !< Nacelle volume [m^3]
     REAL(ReKi) , DIMENSION(1:3)  :: NacCenB = 0.0_ReKi      !< Position of nacelle center of buoyancy from yaw bearing in nacelle coordinates [m]
+    REAL(ReKi) , DIMENSION(1:3)  :: NacArea = 0.0_ReKi      !< Projected area of the nacelle in X, Y, Z in the nacelle coordinate system [m^2]
+    REAL(ReKi) , DIMENSION(1:3)  :: NacCd = 0.0_ReKi      !< Drag cefficient for the nacelle areas defied above [-]
+    REAL(ReKi) , DIMENSION(1:3)  :: NacDragAC = 0.0_ReKi      !< Position of aerodynamic center of nacelle drag in nacelle coordinates [m]
     LOGICAL  :: TFinAero = .FALSE.      !< Calculate tail fin aerodynamics model (flag) [flag]
     CHARACTER(1024)  :: TFinFile      !< Input file for tail fin aerodynamics [used only when TFinAero=True] [-]
     TYPE(TFinInputFileType)  :: TFin      !< Input file data for tail fin [-]
@@ -199,6 +202,7 @@ IMPLICIT NONE
     LOGICAL  :: FrozenWake = .false.      !< Flag that tells this module it should assume a frozen wake during linearization. [-]
     LOGICAL  :: CavitCheck = .false.      !< Flag that tells us if we want to check for cavitation [-]
     LOGICAL  :: Buoyancy = .false.      !< Include buoyancy effects? [flag]
+    LOGICAL  :: NacelleDrag = .false.      !< Include NacelleDrag effects? [flag]
     LOGICAL  :: CompAA = .false.      !< Compute AeroAcoustic noise [flag]
     CHARACTER(1024)  :: AA_InputFile      !< AeroAcoustics input file name [quoted strings]
     CHARACTER(1024) , DIMENSION(:), ALLOCATABLE  :: ADBlFile      !< AD blade file (NumBl filenames) [quoted strings]
@@ -336,6 +340,10 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: HubMB      !< buoyant moment at hub node [Nm]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: NacFB      !< buoyant force at nacelle (tower top) node [N]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: NacMB      !< buoyant moment at nacelle (tower top) node [Nm]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: NacDragF      !< drag force at nacelle (tower top) node [N]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: NacDragM      !< drag moment at nacelle (tower top) node [Nm]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: NacFi      !< Total force at nacelle (tower top) node [N]
+    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: NacMi      !< Total moment at nacelle (tower top) node [Nm]
     TYPE(MeshType) , DIMENSION(:), ALLOCATABLE  :: BladeRootLoad      !< meshes at blade root; used to compute an integral for mapping the output blade loads to single points (for writing to file only) [-]
     TYPE(MeshMapType) , DIMENSION(:), ALLOCATABLE  :: B_L_2_R_P      !< mapping data structure to map each bladeLoad output mesh to corresponding MiscVar%BladeRootLoad mesh [-]
     TYPE(MeshType) , DIMENSION(:), ALLOCATABLE  :: BladeBuoyLoadPoint      !< point mesh for lumped buoyant blade loads [-]
@@ -386,6 +394,9 @@ IMPLICIT NONE
     REAL(ReKi)  :: HubCenBx = 0.0_ReKi      !< Hub center of buoyancy x direction offset [m]
     REAL(ReKi)  :: VolNac = 0.0_ReKi      !< Nacelle volume [m^3]
     REAL(ReKi) , DIMENSION(1:3)  :: NacCenB = 0.0_ReKi      !< Position of nacelle center of buoyancy from yaw bearing in nacelle coordinates [m]
+    REAL(ReKi) , DIMENSION(1:3)  :: NacArea = 0.0_ReKi      !< Projected area of the nacelle in X, Y, Z in the nacelle coordinate system [m^2]
+    REAL(ReKi) , DIMENSION(1:3)  :: NacCd = 0.0_ReKi      !< Drag cefficient for the nacelle areas defied above [-]
+    REAL(ReKi) , DIMENSION(1:3)  :: NacDragAC = 0.0_ReKi      !< Position of aerodynamic center of nacelle drag in nacelle coordinates [m]
     REAL(ReKi)  :: VolBl = 0.0_ReKi      !< Buoyancy volume of all blades [m^3]
     REAL(ReKi)  :: VolTwr = 0.0_ReKi      !< Buoyancy volume of the tower [m^3]
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: BlRad      !< Matrix of equivalent blade radius at each node, used in buoyancy calculation [m]
@@ -409,6 +420,7 @@ IMPLICIT NONE
     LOGICAL  :: FrozenWake = .false.      !< Flag that tells this module it should assume a frozen wake during linearization. [-]
     LOGICAL  :: CavitCheck = .false.      !< Flag that tells us if we want to check for cavitation [-]
     LOGICAL  :: Buoyancy = .false.      !< Include buoyancy effects? [flag]
+    LOGICAL  :: NacelleDrag = .false.      !< Include NacelleDrag effects? [flag]
     INTEGER(IntKi)  :: MHK = 0_IntKi      !< MHK [flag]
     LOGICAL  :: CompAA = .false.      !< Compute AeroAcoustic noise [flag]
     REAL(ReKi)  :: AirDens = 0.0_ReKi      !< Air density [kg/m^3]
@@ -2356,6 +2368,9 @@ subroutine AD_CopyRotInputFile(SrcRotInputFileData, DstRotInputFileData, CtrlCod
    DstRotInputFileData%HubCenBx = SrcRotInputFileData%HubCenBx
    DstRotInputFileData%VolNac = SrcRotInputFileData%VolNac
    DstRotInputFileData%NacCenB = SrcRotInputFileData%NacCenB
+   DstRotInputFileData%NacArea = SrcRotInputFileData%NacArea
+   DstRotInputFileData%NacCd = SrcRotInputFileData%NacCd
+   DstRotInputFileData%NacDragAC = SrcRotInputFileData%NacDragAC
    DstRotInputFileData%TFinAero = SrcRotInputFileData%TFinAero
    DstRotInputFileData%TFinFile = SrcRotInputFileData%TFinFile
    call AD_CopyTFinInputFileType(SrcRotInputFileData%TFin, DstRotInputFileData%TFin, CtrlCode, ErrStat2, ErrMsg2)
@@ -2448,6 +2463,9 @@ subroutine AD_PackRotInputFile(Buf, Indata)
    call RegPack(Buf, InData%HubCenBx)
    call RegPack(Buf, InData%VolNac)
    call RegPack(Buf, InData%NacCenB)
+   call RegPack(Buf, InData%NacArea)
+   call RegPack(Buf, InData%NacCd)
+   call RegPack(Buf, InData%NacDragAC)
    call RegPack(Buf, InData%TFinAero)
    call RegPack(Buf, InData%TFinFile)
    call AD_PackTFinInputFileType(Buf, InData%TFin) 
@@ -2558,6 +2576,12 @@ subroutine AD_UnPackRotInputFile(Buf, OutData)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%NacCenB)
    if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacArea)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacCd)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacDragAC)
+   if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%TFinAero)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%TFinFile)
@@ -2588,6 +2612,7 @@ subroutine AD_CopyInputFile(SrcInputFileData, DstInputFileData, CtrlCode, ErrSta
    DstInputFileData%FrozenWake = SrcInputFileData%FrozenWake
    DstInputFileData%CavitCheck = SrcInputFileData%CavitCheck
    DstInputFileData%Buoyancy = SrcInputFileData%Buoyancy
+   DstInputFileData%NacelleDrag = SrcInputFileData%NacelleDrag
    DstInputFileData%CompAA = SrcInputFileData%CompAA
    DstInputFileData%AA_InputFile = SrcInputFileData%AA_InputFile
    if (allocated(SrcInputFileData%ADBlFile)) then
@@ -2745,6 +2770,7 @@ subroutine AD_PackInputFile(Buf, Indata)
    call RegPack(Buf, InData%FrozenWake)
    call RegPack(Buf, InData%CavitCheck)
    call RegPack(Buf, InData%Buoyancy)
+   call RegPack(Buf, InData%NacelleDrag)
    call RegPack(Buf, InData%CompAA)
    call RegPack(Buf, InData%AA_InputFile)
    call RegPack(Buf, allocated(InData%ADBlFile))
@@ -2845,6 +2871,8 @@ subroutine AD_UnPackInputFile(Buf, OutData)
    call RegUnpack(Buf, OutData%CavitCheck)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%Buoyancy)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacelleDrag)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%CompAA)
    if (RegCheckErr(Buf, RoutineName)) return
@@ -4047,6 +4075,54 @@ subroutine AD_CopyRotMiscVarType(SrcRotMiscVarTypeData, DstRotMiscVarTypeData, C
       end if
       DstRotMiscVarTypeData%NacMB = SrcRotMiscVarTypeData%NacMB
    end if
+   if (allocated(SrcRotMiscVarTypeData%NacDragF)) then
+      LB(1:1) = lbound(SrcRotMiscVarTypeData%NacDragF)
+      UB(1:1) = ubound(SrcRotMiscVarTypeData%NacDragF)
+      if (.not. allocated(DstRotMiscVarTypeData%NacDragF)) then
+         allocate(DstRotMiscVarTypeData%NacDragF(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstRotMiscVarTypeData%NacDragF.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstRotMiscVarTypeData%NacDragF = SrcRotMiscVarTypeData%NacDragF
+   end if
+   if (allocated(SrcRotMiscVarTypeData%NacDragM)) then
+      LB(1:1) = lbound(SrcRotMiscVarTypeData%NacDragM)
+      UB(1:1) = ubound(SrcRotMiscVarTypeData%NacDragM)
+      if (.not. allocated(DstRotMiscVarTypeData%NacDragM)) then
+         allocate(DstRotMiscVarTypeData%NacDragM(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstRotMiscVarTypeData%NacDragM.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstRotMiscVarTypeData%NacDragM = SrcRotMiscVarTypeData%NacDragM
+   end if
+   if (allocated(SrcRotMiscVarTypeData%NacFi)) then
+      LB(1:1) = lbound(SrcRotMiscVarTypeData%NacFi)
+      UB(1:1) = ubound(SrcRotMiscVarTypeData%NacFi)
+      if (.not. allocated(DstRotMiscVarTypeData%NacFi)) then
+         allocate(DstRotMiscVarTypeData%NacFi(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstRotMiscVarTypeData%NacFi.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstRotMiscVarTypeData%NacFi = SrcRotMiscVarTypeData%NacFi
+   end if
+   if (allocated(SrcRotMiscVarTypeData%NacMi)) then
+      LB(1:1) = lbound(SrcRotMiscVarTypeData%NacMi)
+      UB(1:1) = ubound(SrcRotMiscVarTypeData%NacMi)
+      if (.not. allocated(DstRotMiscVarTypeData%NacMi)) then
+         allocate(DstRotMiscVarTypeData%NacMi(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstRotMiscVarTypeData%NacMi.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstRotMiscVarTypeData%NacMi = SrcRotMiscVarTypeData%NacMi
+   end if
    if (allocated(SrcRotMiscVarTypeData%BladeRootLoad)) then
       LB(1:1) = lbound(SrcRotMiscVarTypeData%BladeRootLoad)
       UB(1:1) = ubound(SrcRotMiscVarTypeData%BladeRootLoad)
@@ -4269,6 +4345,18 @@ subroutine AD_DestroyRotMiscVarType(RotMiscVarTypeData, ErrStat, ErrMsg)
    if (allocated(RotMiscVarTypeData%NacMB)) then
       deallocate(RotMiscVarTypeData%NacMB)
    end if
+   if (allocated(RotMiscVarTypeData%NacDragF)) then
+      deallocate(RotMiscVarTypeData%NacDragF)
+   end if
+   if (allocated(RotMiscVarTypeData%NacDragM)) then
+      deallocate(RotMiscVarTypeData%NacDragM)
+   end if
+   if (allocated(RotMiscVarTypeData%NacFi)) then
+      deallocate(RotMiscVarTypeData%NacFi)
+   end if
+   if (allocated(RotMiscVarTypeData%NacMi)) then
+      deallocate(RotMiscVarTypeData%NacMi)
+   end if
    if (allocated(RotMiscVarTypeData%BladeRootLoad)) then
       LB(1:1) = lbound(RotMiscVarTypeData%BladeRootLoad)
       UB(1:1) = ubound(RotMiscVarTypeData%BladeRootLoad)
@@ -4487,6 +4575,26 @@ subroutine AD_PackRotMiscVarType(Buf, Indata)
    if (allocated(InData%NacMB)) then
       call RegPackBounds(Buf, 1, lbound(InData%NacMB), ubound(InData%NacMB))
       call RegPack(Buf, InData%NacMB)
+   end if
+   call RegPack(Buf, allocated(InData%NacDragF))
+   if (allocated(InData%NacDragF)) then
+      call RegPackBounds(Buf, 1, lbound(InData%NacDragF), ubound(InData%NacDragF))
+      call RegPack(Buf, InData%NacDragF)
+   end if
+   call RegPack(Buf, allocated(InData%NacDragM))
+   if (allocated(InData%NacDragM)) then
+      call RegPackBounds(Buf, 1, lbound(InData%NacDragM), ubound(InData%NacDragM))
+      call RegPack(Buf, InData%NacDragM)
+   end if
+   call RegPack(Buf, allocated(InData%NacFi))
+   if (allocated(InData%NacFi)) then
+      call RegPackBounds(Buf, 1, lbound(InData%NacFi), ubound(InData%NacFi))
+      call RegPack(Buf, InData%NacFi)
+   end if
+   call RegPack(Buf, allocated(InData%NacMi))
+   if (allocated(InData%NacMi)) then
+      call RegPackBounds(Buf, 1, lbound(InData%NacMi), ubound(InData%NacMi))
+      call RegPack(Buf, InData%NacMi)
    end if
    call RegPack(Buf, allocated(InData%BladeRootLoad))
    if (allocated(InData%BladeRootLoad)) then
@@ -4972,6 +5080,62 @@ subroutine AD_UnPackRotMiscVarType(Buf, OutData)
       call RegUnpack(Buf, OutData%NacMB)
       if (RegCheckErr(Buf, RoutineName)) return
    end if
+   if (allocated(OutData%NacDragF)) deallocate(OutData%NacDragF)
+   call RegUnpack(Buf, IsAllocAssoc)
+   if (RegCheckErr(Buf, RoutineName)) return
+   if (IsAllocAssoc) then
+      call RegUnpackBounds(Buf, 1, LB, UB)
+      if (RegCheckErr(Buf, RoutineName)) return
+      allocate(OutData%NacDragF(LB(1):UB(1)),stat=stat)
+      if (stat /= 0) then 
+         call SetErrStat(ErrID_Fatal, 'Error allocating OutData%NacDragF.', Buf%ErrStat, Buf%ErrMsg, RoutineName)
+         return
+      end if
+      call RegUnpack(Buf, OutData%NacDragF)
+      if (RegCheckErr(Buf, RoutineName)) return
+   end if
+   if (allocated(OutData%NacDragM)) deallocate(OutData%NacDragM)
+   call RegUnpack(Buf, IsAllocAssoc)
+   if (RegCheckErr(Buf, RoutineName)) return
+   if (IsAllocAssoc) then
+      call RegUnpackBounds(Buf, 1, LB, UB)
+      if (RegCheckErr(Buf, RoutineName)) return
+      allocate(OutData%NacDragM(LB(1):UB(1)),stat=stat)
+      if (stat /= 0) then 
+         call SetErrStat(ErrID_Fatal, 'Error allocating OutData%NacDragM.', Buf%ErrStat, Buf%ErrMsg, RoutineName)
+         return
+      end if
+      call RegUnpack(Buf, OutData%NacDragM)
+      if (RegCheckErr(Buf, RoutineName)) return
+   end if
+   if (allocated(OutData%NacFi)) deallocate(OutData%NacFi)
+   call RegUnpack(Buf, IsAllocAssoc)
+   if (RegCheckErr(Buf, RoutineName)) return
+   if (IsAllocAssoc) then
+      call RegUnpackBounds(Buf, 1, LB, UB)
+      if (RegCheckErr(Buf, RoutineName)) return
+      allocate(OutData%NacFi(LB(1):UB(1)),stat=stat)
+      if (stat /= 0) then 
+         call SetErrStat(ErrID_Fatal, 'Error allocating OutData%NacFi.', Buf%ErrStat, Buf%ErrMsg, RoutineName)
+         return
+      end if
+      call RegUnpack(Buf, OutData%NacFi)
+      if (RegCheckErr(Buf, RoutineName)) return
+   end if
+   if (allocated(OutData%NacMi)) deallocate(OutData%NacMi)
+   call RegUnpack(Buf, IsAllocAssoc)
+   if (RegCheckErr(Buf, RoutineName)) return
+   if (IsAllocAssoc) then
+      call RegUnpackBounds(Buf, 1, LB, UB)
+      if (RegCheckErr(Buf, RoutineName)) return
+      allocate(OutData%NacMi(LB(1):UB(1)),stat=stat)
+      if (stat /= 0) then 
+         call SetErrStat(ErrID_Fatal, 'Error allocating OutData%NacMi.', Buf%ErrStat, Buf%ErrMsg, RoutineName)
+         return
+      end if
+      call RegUnpack(Buf, OutData%NacMi)
+      if (RegCheckErr(Buf, RoutineName)) return
+   end if
    if (allocated(OutData%BladeRootLoad)) deallocate(OutData%BladeRootLoad)
    call RegUnpack(Buf, IsAllocAssoc)
    if (RegCheckErr(Buf, RoutineName)) return
@@ -5450,6 +5614,9 @@ subroutine AD_CopyRotParameterType(SrcRotParameterTypeData, DstRotParameterTypeD
    DstRotParameterTypeData%HubCenBx = SrcRotParameterTypeData%HubCenBx
    DstRotParameterTypeData%VolNac = SrcRotParameterTypeData%VolNac
    DstRotParameterTypeData%NacCenB = SrcRotParameterTypeData%NacCenB
+   DstRotParameterTypeData%NacArea = SrcRotParameterTypeData%NacArea
+   DstRotParameterTypeData%NacCd = SrcRotParameterTypeData%NacCd
+   DstRotParameterTypeData%NacDragAC = SrcRotParameterTypeData%NacDragAC
    DstRotParameterTypeData%VolBl = SrcRotParameterTypeData%VolBl
    DstRotParameterTypeData%VolTwr = SrcRotParameterTypeData%VolTwr
    if (allocated(SrcRotParameterTypeData%BlRad)) then
@@ -5598,6 +5765,7 @@ subroutine AD_CopyRotParameterType(SrcRotParameterTypeData, DstRotParameterTypeD
    DstRotParameterTypeData%FrozenWake = SrcRotParameterTypeData%FrozenWake
    DstRotParameterTypeData%CavitCheck = SrcRotParameterTypeData%CavitCheck
    DstRotParameterTypeData%Buoyancy = SrcRotParameterTypeData%Buoyancy
+   DstRotParameterTypeData%NacelleDrag = SrcRotParameterTypeData%NacelleDrag
    DstRotParameterTypeData%MHK = SrcRotParameterTypeData%MHK
    DstRotParameterTypeData%CompAA = SrcRotParameterTypeData%CompAA
    DstRotParameterTypeData%AirDens = SrcRotParameterTypeData%AirDens
@@ -5812,6 +5980,9 @@ subroutine AD_PackRotParameterType(Buf, Indata)
    call RegPack(Buf, InData%HubCenBx)
    call RegPack(Buf, InData%VolNac)
    call RegPack(Buf, InData%NacCenB)
+   call RegPack(Buf, InData%NacArea)
+   call RegPack(Buf, InData%NacCd)
+   call RegPack(Buf, InData%NacDragAC)
    call RegPack(Buf, InData%VolBl)
    call RegPack(Buf, InData%VolTwr)
    call RegPack(Buf, allocated(InData%BlRad))
@@ -5879,6 +6050,7 @@ subroutine AD_PackRotParameterType(Buf, Indata)
    call RegPack(Buf, InData%FrozenWake)
    call RegPack(Buf, InData%CavitCheck)
    call RegPack(Buf, InData%Buoyancy)
+   call RegPack(Buf, InData%NacelleDrag)
    call RegPack(Buf, InData%MHK)
    call RegPack(Buf, InData%CompAA)
    call RegPack(Buf, InData%AirDens)
@@ -6048,6 +6220,12 @@ subroutine AD_UnPackRotParameterType(Buf, OutData)
    call RegUnpack(Buf, OutData%VolNac)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%NacCenB)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacArea)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacCd)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacDragAC)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%VolBl)
    if (RegCheckErr(Buf, RoutineName)) return
@@ -6224,6 +6402,8 @@ subroutine AD_UnPackRotParameterType(Buf, OutData)
    call RegUnpack(Buf, OutData%CavitCheck)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%Buoyancy)
+   if (RegCheckErr(Buf, RoutineName)) return
+   call RegUnpack(Buf, OutData%NacelleDrag)
    if (RegCheckErr(Buf, RoutineName)) return
    call RegUnpack(Buf, OutData%MHK)
    if (RegCheckErr(Buf, RoutineName)) return
