@@ -354,13 +354,14 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: UL_NS      !< Internal DOFs (L) displacements, No SIM (NS) [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: UL_dot 
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: UL_dotdot 
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: DU_full      !< Delta U used for extra moment, size nDOF [-]
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: U_full      !< Displacement of all DOFs (full system) with SIM [-]
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: U_full_NS      !< Displacement of all DOFs (full system), No SIM (NS) [-]
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: U_full_dot 
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: U_full_dotdot 
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: U_full_elast      !< Elastic displacements for computation of K ue (without rigid body mode for floating), includes SIM [-]
-    REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: U_red 
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: DU_full      !< Delta U used for extra moment, size nDOF [-]
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: U_full      !< Displacement of all DOFs (full system) with SIM [-]
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: U_full_NS      !< Displacement of all DOFs (full system), No SIM (NS) [-]
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: U_full_dot 
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: U_full_dotdot 
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: U_full_elast      !< Elastic displacements for computation of K ue (without rigid body mode for floating), includes SIM [-]
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: U_red 
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: x_full 
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: FC_unit      !< Cable Force vector (for varying cable load, of unit cable load) [N]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: SDWrOutput      !< Data from previous step to be written to a SubDyn output file [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: AllOuts      !< Data for output file [-]
@@ -3825,6 +3826,18 @@ subroutine SD_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
       end if
       DstMiscData%U_red = SrcMiscData%U_red
    end if
+   if (allocated(SrcMiscData%x_full)) then
+      LB(1:1) = lbound(SrcMiscData%x_full, kind=B8Ki)
+      UB(1:1) = ubound(SrcMiscData%x_full, kind=B8Ki)
+      if (.not. allocated(DstMiscData%x_full)) then
+         allocate(DstMiscData%x_full(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstMiscData%x_full.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstMiscData%x_full = SrcMiscData%x_full
+   end if
    if (allocated(SrcMiscData%FC_unit)) then
       LB(1:1) = lbound(SrcMiscData%FC_unit, kind=B8Ki)
       UB(1:1) = ubound(SrcMiscData%FC_unit, kind=B8Ki)
@@ -3983,6 +3996,9 @@ subroutine SD_DestroyMisc(MiscData, ErrStat, ErrMsg)
    if (allocated(MiscData%U_red)) then
       deallocate(MiscData%U_red)
    end if
+   if (allocated(MiscData%x_full)) then
+      deallocate(MiscData%x_full)
+   end if
    if (allocated(MiscData%FC_unit)) then
       deallocate(MiscData%FC_unit)
    end if
@@ -4036,6 +4052,7 @@ subroutine SD_PackMisc(RF, Indata)
    call RegPackAlloc(RF, InData%U_full_dotdot)
    call RegPackAlloc(RF, InData%U_full_elast)
    call RegPackAlloc(RF, InData%U_red)
+   call RegPackAlloc(RF, InData%x_full)
    call RegPackAlloc(RF, InData%FC_unit)
    call RegPackAlloc(RF, InData%SDWrOutput)
    call RegPackAlloc(RF, InData%AllOuts)
@@ -4081,6 +4098,7 @@ subroutine SD_UnPackMisc(RF, OutData)
    call RegUnpackAlloc(RF, OutData%U_full_dotdot); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%U_full_elast); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%U_red); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%x_full); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%FC_unit); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%SDWrOutput); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%AllOuts); if (RegCheckErr(RF, RoutineName)) return

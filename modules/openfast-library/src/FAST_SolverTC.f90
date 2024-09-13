@@ -156,6 +156,8 @@ subroutine FAST_SolverInit(p_FAST, p, m, GlueModData, GlueModMaps, Turbine, ErrS
 
    call CalcVarGlobalIndices(p, m%Mod, p%NumQ, p%NumJ, ErrStat2, ErrMsg2)
    if (Failed()) return
+   p%NumU = p%iJU(2) - p%iJU(2) + 1
+   p%NumUT = p%iUT(2) - p%iUT(1) + 1
 
    !----------------------------------------------------------------------------
    ! Initialize MiscVars
@@ -182,6 +184,10 @@ subroutine FAST_SolverInit(p_FAST, p, m, GlueModData, GlueModMaps, Turbine, ErrS
    m%StateCurr%a = 0.0_R8Ki
 
    ! Allocate Jacobian matrix, RHS/X matrix, Pivot array
+   call AllocAry(m%J11, p%NumQ, p%NumQ, "m%J11", ErrStat, ErrMsg); if (Failed()) return
+   call AllocAry(m%J12, p%NumQ, p%NumUT, "m%J12", ErrStat, ErrMsg); if (Failed()) return
+   call AllocAry(m%J21, p%NumUT, p%NumQ, "m%J21", ErrStat, ErrMsg); if (Failed()) return
+   call AllocAry(m%J22, p%NumU, p%NumU, "m%J22", ErrStat, ErrMsg); if (Failed()) return
    call AllocAry(m%Mod%Lin%J, p%NumJ, p%NumJ, "m%J", ErrStat, ErrMsg); if (Failed()) return
    call AllocAry(m%XB, p%NumJ, 1, "m%XB", ErrStat, ErrMsg); if (Failed()) return
    call AllocAry(m%IPIV, p%NumJ, "m%IPIV", ErrStat, ErrMsg); if (Failed()) return
@@ -215,7 +221,7 @@ contains
          end associate
       end do
 
-      ! dUdu 
+      ! dUdu
       ! VarsDst%u, VarDst(FieldTransDisp),         VarsDst%u, VarDst(FieldTransVel)
       ! VarsDst%u, VarDst(FieldTransDisp),         VarsDst%u, VarDst(FieldTransAcc)
       ! VarsSrc%u, VarSrcDisp(FieldTransDisp),     VarsDst%u, VarDst(FieldMoment)
@@ -266,7 +272,6 @@ contains
                      associate (Var => SrcMod%Vars%y(i))
                         if (MV_EqualDL(Mapping%SrcDL, Var%DL)) then
                            call MV_SetFlags(Var, VF_Solve)
-                           write (*,*) 'Solve y:', FAST_OutputFieldName(SrcMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                         end if
                      end associate
                   end do
@@ -276,7 +281,6 @@ contains
                      associate (Var => DstMod%Vars%u(i))
                         if (MV_EqualDL(Mapping%DstDL, Var%DL)) then
                            call MV_SetFlags(Var, VF_Solve)
-                           write (*,*) 'Solve u:', FAST_InputFieldName(DstMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                         end if
                      end associate
                   end do
@@ -290,7 +294,6 @@ contains
                      associate (Var => SrcMod%Vars%y(i))
                         if (MV_EqualDL(Mapping%SrcDL, Var%DL)) then
                            call MV_SetFlags(Var, VF_Solve)
-                           write (*,*) 'Solve y:', FAST_OutputFieldName(SrcMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                         end if
                      end associate
                   end do
@@ -302,7 +305,6 @@ contains
                            select case (Var%Field)
                            case (FieldTransAcc, FieldAngularAcc)
                               call MV_SetFlags(Var, VF_Solve)
-                              write (*,*) 'Solve u:', FAST_InputFieldName(DstMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                            end select
                         end if
                      end associate
@@ -318,7 +320,6 @@ contains
                      associate (Var => DstMod%Vars%u(i))
                         if (MV_EqualDL(Mapping%DstDL, Var%DL)) then
                            call MV_SetFlags(Var, VF_Solve)
-                           write (*,*) 'Solve u:', FAST_InputFieldName(DstMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                         end if
                      end associate
                   end do
@@ -330,7 +331,6 @@ contains
                            select case (Var%Field)
                            case (FieldTransDisp, FieldOrientation)
                               call MV_SetFlags(Var, VF_Solve)
-                              write (*,*) 'Solve y:', FAST_OutputFieldName(DstMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                            end select
                         end if
                      end associate
@@ -343,7 +343,6 @@ contains
                         associate (Var => SrcMod%Vars%y(i))
                            if (MV_EqualDL(Mapping%SrcDL, Var%DL)) then
                               call MV_SetFlags(Var, VF_Solve)
-                              write (*,*) 'Solve y:', FAST_OutputFieldName(SrcMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                            end if
                         end associate
                      end do
@@ -355,7 +354,6 @@ contains
                               select case (Var%Field)
                               case (FieldTransDisp)
                                  call MV_SetFlags(Var, VF_Solve)
-                                 write (*,*) 'Solve u:', FAST_InputFieldName(SrcMod, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
                               end select
                            end if
                         end associate
@@ -369,6 +367,32 @@ contains
 
          end associate
       end do
+
+      if (DebugSolver) then
+         do i = 1, size(GlueModData)
+            associate (ModData => GlueModData(i))
+               if (allocated(ModData%Vars%u)) then
+                  do j = 1, size(ModData%Vars%u)
+                     associate (Var => ModData%Vars%u(j))
+                        if (MV_HasFlagsAny(Var, VF_Solve)) then
+                           write (*, *) 'Solve u:', FAST_InputFieldName(ModData, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
+                        end if
+                     end associate
+                  end do
+               end if
+               if (allocated(ModData%Vars%y)) then
+                  do j = 1, size(ModData%Vars%y)
+                     associate (Var => ModData%Vars%y(j))
+                        if (MV_HasFlagsAny(Var, VF_Solve)) then
+                           write (*, *) 'Solve y:', FAST_OutputFieldName(ModData, Var%DL)//' '//MV_FieldString(Var%Field), Var%Num
+                        end if
+                     end associate
+                  end do
+               end if
+            end associate
+         end do
+      end if
+
    end subroutine
 
    logical function Failed()
@@ -1638,7 +1662,7 @@ subroutine BuildJacobianTC(p, m, GlueModMaps, ThisTime, iState, Turbine, ErrStat
    character(*), parameter                :: RoutineName = 'BuildJacobianTC'
    integer(IntKi)                         :: ErrStat2
    character(ErrMsgLen)                   :: ErrMsg2
-   real(R8Ki)                             :: phi, rv(3), T(3, 3), tmp1, tmp2, T2(3, 3)
+   real(R8Ki), allocatable                :: J22(:, :)
    integer(IntKi)                         :: i, j, k, idx
 
    ErrStat = ErrID_None
@@ -1710,24 +1734,24 @@ subroutine BuildJacobianTC(p, m, GlueModMaps, ThisTime, iState, Turbine, ErrStat
    if (p%iJX(1) > 0) then
 
       ! Group (1,1)
-      associate (J11 => m%Mod%Lin%J(p%iJX(1):p%iJX(2), p%iJX(1):p%iJX(2)), &
-                 dX2dx2 => m%Mod%Lin%dXdx(p%iX2(1):p%iX2(2), p%iX2(1):p%iX2(2)), &
+      associate (dX2dx2 => m%Mod%Lin%dXdx(p%iX2(1):p%iX2(2), p%iX2(1):p%iX2(2)), &
                  dX2dx1 => m%Mod%Lin%dXdx(p%iX2(1):p%iX2(2), p%iX1(1):p%iX1(2)))
-         J11 = -p%GammaPrime*dX2dx2 - p%BetaPrime*dX2dx1
+         m%J11 = -p%GammaPrime*dX2dx2 - p%BetaPrime*dX2dx1
          do i = p%iJX(1), p%iJX(2)
-            J11(i, i) = J11(i, i) + 1.0_R8Ki
+            m%J11(i, i) = m%J11(i, i) + 1.0_R8Ki
          end do
+         m%Mod%Lin%J(p%iJX(1):p%iJX(2), p%iJX(1):p%iJX(2)) = m%J11
       end associate
 
       ! Group (2,1)
       if (p%iyT(1) > 0 .and. p%iUT(1) > 0) then
-         associate (J21 => m%Mod%Lin%J(p%iJUT(1):p%iJUT(2), p%iJX(1):p%iJX(2)), &
-                    dUTdyT => m%Mod%Lin%dUdy(p%iUT(1):p%iUT(2), p%iyT(1):p%iyT(2)), &
+         associate (dUTdyT => m%Mod%Lin%dUdy(p%iUT(1):p%iUT(2), p%iyT(1):p%iyT(2)), &
                     dYTdx2 => m%Mod%Lin%dYdx(p%iyT(1):p%iyT(2), p%iX2(1):p%iX2(2)), &
                     dYTdx1 => m%Mod%Lin%dYdx(p%iyT(1):p%iyT(2), p%iX1(1):p%iX1(2)))
             ! J21 = C1*matmul(dUTdyT, dYTdx2) + C2*matmul(dUTdyT, dYTdx1)
-            call LAPACK_GEMM('N', 'N', p%GammaPrime, dUTdyT, dYTdx2, 0.0_R8Ki, J21, ErrStat2, ErrMsg2); if (Failed()) return
-            call LAPACK_GEMM('N', 'N', p%BetaPrime, dUTdyT, dYTdx1, 1.0_R8Ki, J21, ErrStat2, ErrMsg2); if (Failed()) return
+            call LAPACK_GEMM('N', 'N', p%GammaPrime, dUTdyT, dYTdx2, 0.0_R8Ki, m%J21, ErrStat2, ErrMsg2); if (Failed()) return
+            call LAPACK_GEMM('N', 'N', p%BetaPrime, dUTdyT, dYTdx1, 1.0_R8Ki, m%J21, ErrStat2, ErrMsg2); if (Failed()) return
+            m%Mod%Lin%J(p%iJUT(1):p%iJUT(2), p%iJX(1):p%iJX(2)) = m%J21
          end associate
       end if
 
@@ -1743,11 +1767,9 @@ subroutine BuildJacobianTC(p, m, GlueModMaps, ThisTime, iState, Turbine, ErrStat
 
    ! Group (2,2) - Inputs = dUdu + matmul(dUdy, dYdu)
    if (p%iJU(1) > 0) then
-      associate (J22 => m%Mod%Lin%J(p%iJU(1):p%iJU(2), p%iJU(1):p%iJU(2)))
-         ! J22 = m%Mod%Lin%dUdu + matmul(m%Mod%Lin%dUdy, m%Mod%Lin%dYdu)
-         J22 = m%Mod%Lin%dUdu
-         call LAPACK_GEMM('N', 'N', 1.0_R8Ki, m%Mod%Lin%dUdy, m%Mod%Lin%dYdu, 1.0_R8Ki, J22, ErrStat2, ErrMsg2); if (Failed()) return
-      end associate
+      J22 = m%Mod%Lin%dUdu
+      call LAPACK_GEMM('N', 'N', 1.0_R8Ki, m%Mod%Lin%dUdy, m%Mod%Lin%dYdu, 1.0_R8Ki, J22, ErrStat2, ErrMsg2); if (Failed()) return
+      m%Mod%Lin%J(p%iJU(1):p%iJU(2), p%iJU(1):p%iJU(2)) = J22
    end if
 
    ! Write debug matrices if requested

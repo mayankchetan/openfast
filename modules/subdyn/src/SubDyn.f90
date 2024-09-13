@@ -565,7 +565,7 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
       !locals
       INTEGER(IntKi)               :: I          ! Counters
       INTEGER(IntKi)               :: iSDNode
-      REAL(ReKi)                   :: rotations(3)
+      REAL(R8Ki)                   :: rotations(3)
       REAL(ReKi)                   :: Y1(6)
       REAL(ReKi)                   :: Y1_CB(6)
       REAL(ReKi)                   :: Y1_CB_L(6)
@@ -574,10 +574,8 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
       REAL(ReKi)                   :: Y1_Utp(6)
       REAL(ReKi)                   :: Y1_GuyanLoadCorrection(3) ! Lever arm moment contributions due to interface displacement
       REAL(ReKi)                   :: udotdot_TP(6)
-      INTEGER(IntKi), pointer      :: DOFList(:)
-      REAL(ReKi)                   :: DCM(3,3)
+      REAL(R8Ki)                   :: DCM(3,3)
       REAL(ReKi)                   :: F_I(6*p%nNodes_I) !  !Forces from all interface nodes listed in one big array  ( those translated to TP ref point HydroTP(6) are implicitly calculated in the equations)
-      TYPE(SD_ContinuousStateType) :: dxdt        ! Continuous state derivatives at t- for output file qmdotdot purposes only
       ! Variables for Guyan rigid body motion
       real(ReKi), dimension(3) :: Om, OmD ! Omega, OmegaDot (body rotational speed and acceleration)
       real(ReKi), dimension(3) ::  rIP  ! Vector from TP to rotated Node
@@ -598,7 +596,7 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
       ! --- Convert inputs to FEM DOFs and convenient 6-vector storage
       ! Compute the small rotation angles given the input direction cosine matrix
       rotations  = GetSmllRotAngs(u%TPMesh%Orientation(:,:,1), ErrStat2, Errmsg2); if(Failed()) return
-      m%u_TP       = (/REAL(u%TPMesh%TranslationDisp(:,1),ReKi), rotations/)
+      m%u_TP       = (/u%TPMesh%TranslationDisp(:,1), rotations/)
       m%udot_TP    = (/u%TPMesh%TranslationVel( :,1), u%TPMesh%RotationVel(:,1)/)
       m%udotdot_TP = (/u%TPMesh%TranslationAcc( :,1), u%TPMesh%RotationAcc(:,1)/)
       Rg2b(1:3,1:3) = u%TPMesh%Orientation(:,:,1)  ! global 2 body coordinates
@@ -679,7 +677,7 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
          Om(1:3)      = u%TPMesh%RotationVel(1:3,1)
          OmD(1:3)     = u%TPMesh%RotationAcc(1:3,1)
          do iSDNode = 1,p%nNodes
-            DOFList => p%NodesDOF(iSDNode)%List  ! Alias to shorten notations
+            associate (DOFList => p%NodesDOF(iSDNode)%List)  ! Alias to shorten notations
             ! --- Guyan (rigid body) motion in global coordinates
             rIP0(1:3)   = p%DP0(1:3, iSDNode)
             rIP(1:3)    = matmul(Rb2g, rIP0)
@@ -725,11 +723,12 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
             y%Y2mesh%TranslationAcc  (:,iSDNode)     = m%U_full_dotdot (DOFList(1:3))
             y%Y2mesh%RotationVel     (:,iSDNode)     = m%U_full_dot    (DOFList(4:6))
             y%Y2mesh%RotationAcc     (:,iSDNode)     = m%U_full_dotdot (DOFList(4:6))
+            end associate
          enddo
       else
          ! --- Fixed bottom - Y3 and Y2 meshes are identical in this case
          do iSDNode = 1,p%nNodes
-            DOFList => p%NodesDOF(iSDNode)%List  ! Alias to shorten notations
+            associate(DOFList => p%NodesDOF(iSDNode)%List)  ! Alias to shorten notations
             ! TODO TODO which orientation to give for joints with more than 6 dofs?
             ! Construct the direction cosine matrix given the output angles
             CALL SmllRotTrans( 'UR_bar input angles', m%U_full_NS(DOFList(4)), m%U_full_NS(DOFList(5)), m%U_full_NS(DOFList(6)), DCM, '', ErrStat2, ErrMsg2)
@@ -740,18 +739,17 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
             y%Y2mesh%TranslationAcc  (:,iSDNode)     = m%U_full_dotdot (DOFList(1:3))
             y%Y2mesh%RotationVel     (:,iSDNode)     = m%U_full_dot    (DOFList(4:6))
             y%Y2mesh%RotationAcc     (:,iSDNode)     = m%U_full_dotdot (DOFList(4:6))
-            y%Y3mesh%TranslationDisp (:,iSDNode)     = y%Y2mesh%TranslationDisp (:,iSDNode)   
-            y%Y3mesh%Orientation     (:,:,iSDNode)   = y%Y2mesh%Orientation     (:,:,iSDNode)   
+            end associate
          enddo
+         y%Y3mesh%TranslationDisp = y%Y2mesh%TranslationDisp
+         y%Y3mesh%Orientation     = y%Y2mesh%Orientation
       endif
 
       ! --- Y3 mesh and Y2 mesh both have elastic (Guyan+CB) velocities and accelerations
-      do iSDNode = 1,p%nNodes
-         y%Y3mesh%TranslationVel  (:,iSDNode)     = y%Y2mesh%TranslationVel  (:,iSDNode) 
-         y%Y3mesh%TranslationAcc  (:,iSDNode)     = y%Y2mesh%TranslationAcc  (:,iSDNode)
-         y%Y3mesh%RotationVel     (:,iSDNode)     = y%Y2mesh%RotationVel     (:,iSDNode)
-         y%Y3mesh%RotationAcc     (:,iSDNode)     = y%Y2mesh%RotationAcc     (:,iSDNode)
-      enddo
+      y%Y3mesh%TranslationVel = y%Y2mesh%TranslationVel
+      y%Y3mesh%TranslationAcc = y%Y2mesh%TranslationAcc
+      y%Y3mesh%RotationVel    = y%Y2mesh%RotationVel
+      y%Y3mesh%RotationAcc    = y%Y2mesh%RotationAcc
 
       ! --------------------------------------------------------------------------------
       ! --- Outputs 1, Y1=-F_TP, reaction force from SubDyn to ElastoDyn (stored in y%Y1Mesh)
@@ -837,11 +835,9 @@ SUBROUTINE SD_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
          !find xdot at t
          IF ( p%nDOFM > 0 ) THEN
             ! note that this re-sets m%udotdot_TP and m%F_L, but they are the same values as earlier in this routine so it doesn't change results in SDOut_MapOutputs()
-            CALL SD_CalcContStateDeriv( t, u, p, x, xd, z, OtherState, m, dxdt, ErrStat2, ErrMsg2 ); if(Failed()) return
+            CALL SD_CalcContStateDeriv( t, u, p, x, xd, z, OtherState, m, m%dxdt_lin, ErrStat2, ErrMsg2 ); if(Failed()) return
             !Assign the acceleration to the x variable since it will be used for output file purposes for SSqmdd01-99, and dxdt will disappear
-            m%qmdotdot=dxdt%qmdot
-            ! Destroy dxdt because it is not necessary for the rest of the subroutine
-            CALL SD_DestroyContState( dxdt, ErrStat2, ErrMsg2); if(Failed()) return
+            m%qmdotdot = m%dxdt_lin%qmdot
          END IF
          ! 6-vectors (making sure they are up to date for outputs
          m%udot_TP    = (/u%TPMesh%TranslationVel( :,1),u%TPMesh%RotationVel(:,1)/) 
@@ -874,12 +870,7 @@ CONTAINS
    LOGICAL FUNCTION Failed()
         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'SD_CalcOutput') 
         Failed =  ErrStat >= AbortErrLev
-        if (Failed) call CleanUp()
    END FUNCTION Failed
-   
-   SUBROUTINE CleanUp
-       CALL SD_DestroyContState( dxdt, ErrStat2, ErrMsg2)
-   END SUBROUTINE CleanUp
 
 END SUBROUTINE SD_CalcOutput
 
@@ -895,7 +886,7 @@ SUBROUTINE SD_CalcContStateDeriv( t, u, p, x, xd, z, OtherState, m, dxdt, ErrSta
       TYPE(SD_ConstraintStateType), INTENT(IN   )  :: z           !< Constraint states at t
       TYPE(SD_OtherStateType),      INTENT(IN   )  :: OtherState  !< Other states at t
       TYPE(SD_MiscVarType),         INTENT(INOUT)  :: m           !< Misc/optimization variables
-      TYPE(SD_ContinuousStateType), INTENT(  OUT)  :: dxdt        !< Continuous state derivatives at t
+      TYPE(SD_ContinuousStateType), INTENT(INOUT)  :: dxdt        !< Continuous state derivatives at t
       INTEGER(IntKi),               INTENT(  OUT)  :: ErrStat     !< Error status of the operation
       CHARACTER(*),                 INTENT(  OUT)  :: ErrMsg      !< Error message if ErrStat /= ErrID_None
       REAL(ReKi) :: udotdot_TP(6)
@@ -904,12 +895,6 @@ SUBROUTINE SD_CalcContStateDeriv( t, u, p, x, xd, z, OtherState, m, dxdt, ErrSta
       ! Initialize ErrStat
       ErrStat = ErrID_None
       ErrMsg  = ""
-          
-      ! INTENT(OUT) automatically deallocates the arrays on entry, we have to allocate them here
-      CALL AllocAry(dxdt%qm,    p%nDOFM, 'dxdt%qm',    ErrStat2, ErrMsg2 ); CALL SetErrStat ( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'SD_CalcContStateDeriv' )
-      CALL AllocAry(dxdt%qmdot, p%nDOFM, 'dxdt%qmdot', ErrStat2, ErrMsg2 ); CALL SetErrStat ( ErrStat2, ErrMsg2, ErrStat, ErrMsg, 'SD_CalcContStateDeriv' )
-      IF ( ErrStat >= AbortErrLev ) RETURN
-      IF ( p%nDOFM == 0 ) RETURN
 
       ! Compute F_L, force on internal DOF
       CALL GetExtForceOnInternalDOF(u, p, x, m, m%F_L, ErrStat2, ErrMsg2, GuyanLoadCorrection=(p%GuyanLoadCorrection.and..not.p%Floating), RotateLoads=(p%GuyanLoadCorrection.and.p%Floating))
@@ -3065,11 +3050,14 @@ END SUBROUTINE PartitionDOFNodes
 !! This is a generic function, "x" can be used for displacements, velocities, accelerations
 !! m%U_red is only used as a intermediate storage
 SUBROUTINE ReducedToFull(p, m, xR_bar, xL, x_full)
+   use NWTC_LAPACK, only: LAPACK_GEMV
    TYPE(SD_ParameterType),target,INTENT(IN   )  :: p           !< Parameters
    TYPE(SD_MiscVarType),         INTENT(INOUT)  :: m           !< Misc/optimization variables
    REAL(ReKi), DIMENSION(:),     INTENT(IN   )  :: xR_bar      !< Values of "x" interface nodes (6xnI)
    REAL(ReKi), DIMENSION(:),     INTENT(IN   )  :: xL          !< Values of "x" internal nodes
-   REAL(ReKi), DIMENSION(:),     INTENT(  OUT)  :: x_full      !< Values of "x" transferred to full vector of DOF
+   REAL(R8Ki), DIMENSION(:),     INTENT(  OUT)  :: x_full      !< Values of "x" transferred to full vector of DOF
+   integer(IntKi)                               :: ErrStat
+   character(ErrMsgLen)                         :: ErrMsg
    if (p%reduced) then
       ! Filling up full vector of reduced DOF
       m%U_red(p%IDI__) = xR_bar
@@ -3077,7 +3065,9 @@ SUBROUTINE ReducedToFull(p, m, xR_bar, xL, x_full)
       m%U_red(p%IDC_Rb)= 0    ! NOTE: for now we don't have leader DOF at "C" (bottom)
       m%U_red(p%ID__F) = 0
       ! Transfer to full 
-      x_full = matmul(p%T_red, m%U_red) ! TODO use LAPACK, but T_red and U_red have different types...
+      ! x_full = matmul(p%T_red, m%U_red)
+      call LAPACK_GEMV('N', size(p%T_red, 1), size(p%T_red, 2), 1.0_R8Ki, p%T_red, &
+                       size(p%T_red, 1), m%U_red, 1, 0.0_R8ki, x_full, 1)
    else
       ! We use U_full directly
       x_full(p%IDI__) = xR_bar
@@ -3096,7 +3086,7 @@ SUBROUTINE LeverArm(u, p, x, m, DU_full, bGuyan, bElastic)
    TYPE(SD_MiscVarType),         INTENT(INOUT)  :: m           !< Misc/optimization variables
    LOGICAL,                      INTENT(IN   )  :: bGuyan      !< include Guyan Contribution
    LOGICAL,                      INTENT(IN   )  :: bElastic    !< include Elastic contribution
-   REAL(ReKi), DIMENSION(:),     INTENT(  OUT)  :: DU_full     !< LeverArm in full system
+   REAL(R8Ki), DIMENSION(:),     INTENT(  OUT)  :: DU_full     !< LeverArm in full system
    !locals
    INTEGER(IntKi)               :: iSDNode
    REAL(ReKi)                   :: rotations(3)
@@ -4136,7 +4126,8 @@ FUNCTION BeamMass(rho1,D1,t1,rho2,D2,t2,L,method)
    b0=rho1
    b1=(rho2-rho1)/L
    !Here we will need to figure out what element it is for now circular pipes
-   IF (method<=0) THEN 
+   select case (method)
+   case (:0)
       ! Mid values for r, t, and potentially rho
       r1 = 0.25_ReKi*(D1 + D2)
       t  = 0.50_ReKi*(t1 + t2)
@@ -4151,22 +4142,25 @@ FUNCTION BeamMass(rho1,D1,t1,rho2,D2,t2,L,method)
       else
          BeamMass = rho1 * L  * Area ! WHAT is currently used by FEM
       endif
-   ELSEIF (method==1) THEN !circular tube
+      
+   case (1) ! circular tube
       a0=pi * (D1*t1-t1**2.)
       dt=t2-t1 !thickness variation
       dd=D2-D1 !OD variation
       a1=pi * ( dd*t1 + D1*dt -2.*t1*dt)/L 
       a2=pi * ( dd*dt-dt**2.)/L**2.
       BeamMass = b0*a0*L +(a0*b1+b0*a1)*L**2/2. + (b0*a2+b1*a1)*L**3/3 + a2*b1*L**4/4.!Integral of rho*A dz
-   ELSEIF (method==2) THEN !linearly varying area
+
+   case (2) ! linearly varying area
       a0=D1  !This is an area
       a1=(D2-D1)/L !Delta area
       a2=0.
       BeamMass = b0*a0*L +(a0*b1+b0*a1)*L**2/2. + (b0*a2+b1*a1)*L**3/3 + a2*b1*L**4/4.!Integral of rho*A dz
-   ELSE
+
+   case default
       print*,'Wrong call to BeamMass, method unknown',method
       STOP
-   ENDIF
+   end select
 
 END FUNCTION BeamMass
 
