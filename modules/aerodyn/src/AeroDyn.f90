@@ -1,4 +1,4 @@
-!**********************************************************************************************************************************
+!*********************************************************************************************************************************
 ! LICENSING
 ! Copyright (C) 2015-2016  National Renewable Energy Laboratory
 ! Copyright (C) 2016-2021  Envision Energy USA, LTD
@@ -395,10 +395,10 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
    do iR = 1, nRotors
       p%rotors(iR)%TFinAero         = InputFileData%rotors(iR)%TFinAero
       p%rotors(iR)%TFin%TFinMod     = InputFileData%rotors(iR)%TFin%TFinMod
-      p%rotors(iR)%TFin%TFinChord   = InputFileData%rotors(iR)%TFin%TFinChord
       p%rotors(iR)%TFin%TFinArea    = InputFileData%rotors(iR)%TFin%TFinArea
       p%rotors(iR)%TFin%TFinIndMod  = InputFileData%rotors(iR)%TFin%TFinIndMod
       p%rotors(iR)%TFin%TFinAFID    = InputFileData%rotors(iR)%TFin%TFinAFID
+      p%rotors(iR)%TFin%TFinChord   = InputFileData%rotors(iR)%TFin%TFinChord
       p%rotors(iR)%TFin%TFinKp      = InputFileData%rotors(iR)%TFin%TFinKp
       p%rotors(iR)%TFin%TFinSigma   = InputFileData%rotors(iR)%TFin%TFinSigma
       p%rotors(iR)%TFin%TFinAStar   = InputFileData%rotors(iR)%TFin%TFinAStar
@@ -1403,8 +1403,6 @@ subroutine SetParameters( InitInp, InputFileData, RotData, p, p_AD, ErrStat, Err
    ErrStat  = ErrID_None
    ErrMsg   = ""
 
-   ! NOTE: p_AD%FlowField is set in the glue code (or ADI module); seems like FlowField should be an initialization input so that would be clearer for new developers...
-   
    p_AD%UA_Flag       = InputFileData%UA_Init%UAMod > UA_None
    p_AD%CompAeroMaps  = InitInp%CompAeroMaps
 
@@ -2457,17 +2455,30 @@ subroutine RotCalcBuoyantLoads( u, p, m, y, ErrStat, ErrMsg )
       ! Tower
    if ( p%NumTwrNds > 0 ) then
 
-      do j = 1,p%NumTwrNds ! loop through all nodes
-            ! Check that tower nodes do not go beneath the seabed or pierce the free surface
-         if ( u%TowerMotion%Position(3,j) + u%TowerMotion%TranslationDisp(3,j) >= p%MSL2SWL .OR. u%TowerMotion%Position(3,j) + u%TowerMotion%TranslationDisp(3,j) < -p%WtrDpth ) &
+      ! loop through all nodes
+      do j = 1, p%NumTwrNds 
+
+         ! Skip check for first node if this is a fixed bottom tower
+         if (j == 1 .and. p%MHK == MHK_FixedBottom) cycle
+
+         ! Check that tower nodes do not go beneath the seabed or pierce the free surface
+         if ( u%TowerMotion%Position(3,j) + u%TowerMotion%TranslationDisp(3,j) >= p%MSL2SWL .OR. &
+              u%TowerMotion%Position(3,j) + u%TowerMotion%TranslationDisp(3,j) < -p%WtrDpth ) then
             call SetErrStat( ErrID_Fatal, 'The tower cannot go beneath the seabed or pierce the free surface', ErrStat, ErrMsg, 'CalcBuoyantLoads' ) 
             if ( ErrStat >= AbortErrLev ) return
+         end if
       end do
 
       do j = 1,p%NumTwrNds - 1 ! loop through all nodes, except the last
             ! Global position of tower node
          TwrtmpPos = u%TowerMotion%Position(:,j) + u%TowerMotion%TranslationDisp(:,j) - (/ 0.0_ReKi, 0.0_ReKi, p%MSL2SWL /)
          TwrtmpPosplus = u%TowerMotion%Position(:,j+1) + u%TowerMotion%TranslationDisp(:,j+1) - (/ 0.0_ReKi, 0.0_ReKi, p%MSL2SWL /)
+
+         ! If base node on fixed bottom tower is below the water depth (during Jacobian perturbations),
+         ! clamp it to the water depth
+         if ((j == 1) .and. (p%MHK == MHK_FixedBottom) .and. (TwrtmpPos(3) < -p%WtrDpth)) then
+            TwrtmpPos = -p%WtrDpth
+         end if
          
             ! Heading and inclination angles of tower element
          TwrheadAng = atan2( TwrtmpPosplus(2) - TwrtmpPos(2), TwrtmpPosplus(1) - TwrtmpPos(1) )
@@ -4958,9 +4969,9 @@ SUBROUTINE TFin_CalcOutput(p, p_AD, u, RotInflow, m, y, ErrStat, ErrMsg )
       ! Unsteady aerodynamic model
 
       ! Calculate separation function (quasi-steady)
-      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(gamma_tf)*180.0_ReKi/pi)-p%TFin%TFinAStar(1)))) 
-      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(gamma_tf)*180.0_ReKi/pi)-p%TFin%TFinAStar(2)))) 
-      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(gamma_tf)*180.0_ReKi/pi)-p%TFin%TFinAStar(3))))
+      x1 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(1)*((ABS(gamma_tf)*R2D)-p%TFin%TFinAStar(1)))) 
+      x2 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(2)*((ABS(gamma_tf)*R2D)-p%TFin%TFinAStar(2)))) 
+      x3 = 1.0_Reki/(1.0_Reki+exp(p%TFin%TFinSigma(3)*((ABS(gamma_tf)*R2D)-p%TFin%TFinAStar(3))))
    
       ! Calculate unsteady force on tail fin
       force_tf(2) = 0.5_ReKi * p%AirDens * p%TFin%TFinArea * &
@@ -5647,9 +5658,13 @@ subroutine AD_InitVars(iR, u, p, x, z, OtherState, y, m, InitOut, InputFileData,
    character(1), parameter :: UVW(3) = ['U','V','W']
    real(R8Ki)              :: Perturb, PerturbTower, PerturbBlade(MaxBl)
    integer(IntKi)          :: i, j, n, state, Flags
+   logical                 :: LinearizeLoc
 
    ErrStat = ErrID_None
    ErrMsg = ""
+
+   ! Combine linearization flags
+   LinearizeLoc = Linearize .or. CompAeroMaps .or. (p%MHK /= MHK_None)
 
    ! Allocate space for variables (deallocate if already allocated)
    if (associated(p%Vars)) deallocate(p%Vars)
@@ -5866,9 +5881,9 @@ subroutine AD_InitVars(iR, u, p, x, z, OtherState, y, m, InitOut, InputFileData,
    ! Initialize Variables and Linearization data
    !----------------------------------------------------------------------------
 
-   call MV_InitVarsJac(p%Vars, m%Jac, Linearize .or. CompAeroMaps, ErrStat2, ErrMsg2); if (Failed()) return
+   call MV_InitVarsJac(p%Vars, m%Jac, LinearizeLoc, ErrStat2, ErrMsg2); if (Failed()) return
 
-   if (Linearize .or. CompAeroMaps) then
+   if (LinearizeLoc) then
       call AD_CopyRotContinuousStateType(x, m%x_init, MESH_NEWCOPY, ErrStat2, ErrMsg2); if (Failed()) return
       call AD_CopyRotContinuousStateType(x, m%x_perturb, MESH_NEWCOPY, ErrStat2, ErrMsg2); if (Failed()) return
       call AD_CopyRotContinuousStateType(x, m%dxdt_lin, MESH_NEWCOPY, ErrStat2, ErrMsg2); if (Failed()) return

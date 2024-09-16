@@ -49,15 +49,12 @@ subroutine FAST_SolverInit(p_FAST, p, m, GlueModData, GlueModMaps, Turbine, ErrS
    !----------------------------------------------------------------------------
 
    ! Generalized alpha damping coefficient
-   ! TODO: read from input file
    p%RhoInf = p_FAST%RhoInf
 
    ! Max number of convergence iterations
-   ! TODO: read from input file
    p%MaxConvIter = p_FAST%MaxConvIter
 
    ! Convergence tolerance
-   ! TODO: read from input file
    p%ConvTol = p_FAST%ConvTol
 
    ! Solver time step
@@ -99,7 +96,8 @@ subroutine FAST_SolverInit(p_FAST, p, m, GlueModData, GlueModMaps, Turbine, ErrS
    modIDs = [(GlueModData(i)%ID, i=1, size(GlueModData))]
 
    ! Indices of all modules in Step 0 initialization order (SrvD inputs)
-   p%iModInit = [pack(modInds, ModIDs == Module_ED), &
+   p%iModInit = [pack(modInds, ModIDs == Module_SED), &
+                 pack(modInds, ModIDs == Module_ED), &
                  pack(modInds, ModIDs == Module_BD), &
                  pack(modInds, ModIDs == Module_SD), &
                  pack(modInds, ModIDs == Module_IfW), &
@@ -112,19 +110,23 @@ subroutine FAST_SolverInit(p_FAST, p, m, GlueModData, GlueModMaps, Turbine, ErrS
                pack(modInds, ModIDs == Module_SD)]
 
    ! Indices of Option 1 modules
-   p%iModOpt1 = [pack(modInds, ModIDs == Module_ExtPtfm), &
+   p%iModOpt1 = [pack(modInds, ModIDs == Module_SED), &
+                 pack(modInds, ModIDs == Module_AD .and. p_FAST%MHK /= MHK_None), &
+                 pack(modInds, ModIDs == Module_ExtPtfm), &
                  pack(modInds, ModIDs == Module_HD), &
                  pack(modInds, ModIDs == Module_MD), &
                  pack(modInds, ModIDs == Module_Orca)]
 
    ! Indices of Option 2 modules
    p%iModOpt2 = [pack(modInds, ModIDs == Module_SrvD), &
+                 pack(modInds, ModIDs == Module_SED), &
                  pack(modInds, ModIDs == Module_ED), &
                  pack(modInds, ModIDs == Module_BD), &
                  pack(modInds, ModIDs == Module_SD), &
                  pack(modInds, ModIDs == Module_IfW), &
                  pack(modInds, ModIDs == Module_SeaSt), &
-                 pack(modInds, ModIDs == Module_AD), &
+                 pack(modInds, ModIDs == Module_AD .and. p_FAST%MHK == MHK_None), &
+                 pack(modInds, ModIDs == Module_ADsk), &
                  pack(modInds, ModIDs == Module_ExtLd), &
                  pack(modInds, ModIDs == Module_FEAM), &
                  pack(modInds, ModIDs == Module_IceD), &
@@ -255,10 +257,10 @@ contains
                     DstMod => GlueModData(GlueModMaps(j)%iModDst))
 
             ! Determine if source and destination modules are in tight coupling or Option 1
-            SrcModTC = any(SrcMod%ID == TC_Modules)
-            SrcModO1 = any(SrcMod%ID == O1_Modules)
-            DstModTC = any(DstMod%ID == TC_Modules)
-            DstModO1 = any(DstMod%ID == O1_Modules)
+            SrcModTC = any(SrcMod%iMod == p%iModTC)
+            SrcModO1 = any(SrcMod%iMod == p%iModOpt1)
+            DstModTC = any(DstMod%iMod == p%iModTC)
+            DstModO1 = any(DstMod%iMod == p%iModOpt1)
 
             ! Select based on mapping type
             select case (Mapping%MapType)
@@ -315,7 +317,7 @@ contains
 
                if (DstModTC .or. DstModO1) then
 
-                  ! Add flag for destination loads
+                  ! Add flag to destination loads
                   do i = 1, size(DstMod%Vars%u)
                      associate (Var => DstMod%Vars%u(i))
                         if (MV_EqualDL(Mapping%DstDL, Var%DL)) then
@@ -324,7 +326,7 @@ contains
                      end associate
                   end do
 
-                  ! Add flag to destination displacements for dUdy
+                  ! Add flag to destination displacements and orientations for dUdy
                   do i = 1, size(DstMod%Vars%y)
                      associate (Var => DstMod%Vars%y(i))
                         if (MV_EqualDL(Mapping%DstDispDL, Var%DL)) then
@@ -338,7 +340,7 @@ contains
 
                   if ((SrcModTC .or. SrcModO1)) then
 
-                     ! Add flag for source loads
+                     ! Add flag to source loads
                      do i = 1, size(SrcMod%Vars%y)
                         associate (Var => SrcMod%Vars%y(i))
                            if (MV_EqualDL(Mapping%SrcDL, Var%DL)) then
@@ -347,7 +349,7 @@ contains
                         end associate
                      end do
 
-                     ! Add flag for source translation displacement for dUdu
+                     ! Add flag to source translation displacement for dUdu
                      do i = 1, size(SrcMod%Vars%u)
                         associate (Var => SrcMod%Vars%u(i))
                            if (MV_EqualDL(Mapping%SrcDispDL, Var%DL)) then
