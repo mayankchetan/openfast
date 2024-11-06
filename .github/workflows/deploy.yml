@@ -82,7 +82,7 @@ jobs:
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
-          platforms: linux/amd64,linux/aarch64
+          platforms: linux/amd64 #,linux/aarch64
           tags: |
             ${{ env.GH_REGISTRY }}:${{ steps.extract-tag.outputs.openfast-tag }},${{ env.GH_REGISTRY }}:latest
 # ${{ env.DOCKERHUB_REPOSITORY }}:${{ steps.extract-tag.outputs.openfast-tag }},${{ env.DOCKERHUB_REPOSITORY }}:latest
