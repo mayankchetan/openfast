@@ -57,7 +57,7 @@ RUN make -j${BUILD_CORES} aerodyn_driver
 
 # Build stage 2: provides built openfast in a small image.
 FROM ${BASE} AS production
-COPY --from=build /openfast/install /openfast/install
+COPY --from=build /openfast/build /openfast/build
 
 ARG TIMEZONE=UTC
 ENV DEBIAN_FRONTEND=noninteractive TZ=${TIMEZONE}
@@ -70,4 +70,4 @@ RUN apt-get update -qq && \
     && rm -rf /var/lib/apt/lists/*
 
 # Make `openfast` command work.
-ENV PATH=/openfast/install/bin:$PATH
+ENV PATH=/openfast/build:$PATH
