@@ -5,6 +5,9 @@
 name: deploy
 
 on:
+  push:
+    branches:
+      - b/docker_build
   workflow_dispatch:
 
   release:
