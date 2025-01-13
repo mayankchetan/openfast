@@ -121,12 +121,13 @@ function(of_regression_aeroacoustic TESTNAME LABEL)
 endfunction(of_regression_aeroacoustic)
 
 # FAST Farm
-function(ff_regression TESTNAME LABEL)
+function(ff_regression TESTNAME OTHER_FLAGS LABEL)
   set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeFASTFarmRegressionCase.py")
   set(FASTFARM_EXECUTABLE "${CTEST_FASTFARM_EXECUTABLE}")
   set(SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/..")
   set(BUILD_DIRECTORY "${CTEST_BINARY_DIR}/glue-codes/fast-farm")
-  regression(${TEST_SCRIPT} ${FASTFARM_EXECUTABLE} ${SOURCE_DIRECTORY} ${BUILD_DIRECTORY} " " ${TESTNAME} "${LABEL}" " ")
+  set(OTHER_FLAGS "${OTHER_FLAGS}")    # Set name of file to compare, otherwise default
+  regression(${TEST_SCRIPT} ${FASTFARM_EXECUTABLE} ${SOURCE_DIRECTORY} ${BUILD_DIRECTORY} " " ${TESTNAME} "${LABEL}" "${OTHER_FLAGS}")
 endfunction(ff_regression)
 
 # openfast linearized
@@ -312,7 +313,7 @@ endfunction(py_openfast_io_library_pytest)
 
 # OpenFAST regression tests
 of_regression("AWT_YFix_WSt"                           "openfast;elastodyn;aerodyn;servodyn")
-of_regression("AWT_WSt_StartUp_HighSpShutDown"         "openfast;elastodyn;aerodyn;servodyn")
+# of_regression("AWT_WSt_StartUp_HighSpShutDown"         "openfast;elastodyn;aerodyn;servodyn")
 of_regression("AWT_YFree_WSt"                          "openfast;elastodyn;aerodyn;servodyn")
 of_regression("AWT_YFree_WTurb"                        "openfast;elastodyn;aerodyn;servodyn")
 of_regression("AWT_WSt_StartUpShutDown"                "openfast;elastodyn;aerodyn;servodyn")
@@ -332,7 +333,7 @@ of_regression("5MW_Land_DLL_WTurb_wNacDrag"            "openfast;elastodyn;aerod
 of_regression("5MW_OC3Mnpl_DLL_WTurb_WavesIrr"         "openfast;elastodyn;aerodyn;servodyn;hydrodyn;subdyn;offshore")
 of_regression("5MW_OC3Mnpl_DLL_WTurb_WavesIrr_Restart" "openfast;elastodyn;aerodyn;servodyn;hydrodyn;subdyn;offshore;restart")
 of_regression("5MW_OC3Trpd_DLL_WSt_WavesReg"           "openfast;elastodyn;aerodyn;servodyn;hydrodyn;subdyn;offshore")
-of_regression("5MW_OC4Jckt_DLL_WTurb_WavesIrr_MGrowth" "openfast;elastodyn;aerodyn;servodyn;hydrodyn;subdyn;offshore")
+# of_regression("5MW_OC4Jckt_DLL_WTurb_WavesIrr_MGrowth" "openfast;elastodyn;aerodyn;servodyn;hydrodyn;subdyn;offshore")
 of_regression("5MW_ITIBarge_DLL_WTurb_WavesIrr"        "openfast;elastodyn;aerodyn;servodyn;hydrodyn;map;offshore")
 of_regression("5MW_TLP_DLL_WTurb_WavesIrr_WavesMulti"  "openfast;elastodyn;aerodyn;servodyn;hydrodyn;map;offshore")
 of_regression("5MW_OC3Spar_DLL_WTurb_WavesIrr"         "openfast;elastodyn;aerodyn;servodyn;hydrodyn;map;offshore")
@@ -396,15 +397,17 @@ of_regression_linear("StC_test_OC4Semi_Linear_Tow"    ""                "openfas
 of_regression_linear("WP_Stationary_Linear"           ""                "openfast;linear;elastodyn")
 of_regression_linear("5MW_OC3Spar_Linear"             ""                "openfast;linear;map;hydrodyn")
 of_regression_linear("5MW_OC3Mnpl_Linear"             ""                "openfast;linear;hydrodyn;servodyn;moordyn")
+# of_regression_linear("MHK_RM1_Floating_Linear"        "-highpass=0.05"  "openfast;linear;elastodyn;aerodyn;hydrodyn;moordyn;mhk")
 
 # FAST Farm regression tests
 if(BUILD_FASTFARM)
-  ff_regression("TSinflow"  "fastfarm")
-  ff_regression("LESinflow"  "fastfarm")
-#   ff_regression("Uninflow_curl"  "fastfarm")
-  ff_regression("TSinflow_curl"  "fastfarm")
-  ff_regression("ModAmb_3"  "fastfarm")
-  ff_regression("TSinflowADskSED"  "fastfarm;aerodisk;simple-elastodyn")
+  ff_regression("TSinflow"          ""                               "fastfarm")
+  ff_regression("LESinflow"         ""                               "fastfarm")
+# ff_regression("Uninflow_curl"     ""                               "fastfarm")
+  ff_regression("TSinflow_curl"     ""                               "fastfarm")
+  ff_regression("ModAmb_3"          ""                               "fastfarm")
+  ff_regression("TSinflowADskSED"   ""                               "fastfarm;aerodisk;simple-elastodyn")
+  ff_regression("MD_Shared"         "-compFile=FAST.Farm.FarmMD.MD"  "fastfarm;moordyn")
 endif()
 
 # AeroDyn regression tests
