@@ -2,7 +2,7 @@ import os
 import copy
 import operator
 import numpy as np
-import yaml
+# import yaml
 import sys
 from functools import reduce
 from deepdiff import DeepDiff
