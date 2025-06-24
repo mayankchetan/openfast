@@ -1,0 +1,54 @@
+name: Trigger Internal Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Specific commit SHA to test (default: current HEAD)'
+        required: false
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      - dev*
+    tags:
+      - 'v*'
+
+jobs:
+  trigger-internal-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Get commit SHA
+      id: get-sha
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.sha }}" ]]; then
+          echo "SHA=${{ github.event.inputs.sha }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "SHA=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+        else
+          echo "SHA=${{ github.sha }}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Show test status message
+      run: |
+        echo "Internal RAAW model tests will run automatically on this commit (${{ steps.get-sha.outputs.SHA }})"
+        echo "Tests are scheduled to run within 10 minutes on internal servers"
+        echo "Test status will be reported back to this commit when complete"
+        
+    - name: Set initial pending status
+      if: github.repository == 'OpenFAST/openfast'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Set initial pending status if we're running in the fork repo
+        SHA="${{ steps.get-sha.outputs.SHA }}"
+        
+        curl -s -X POST \
+          -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/${{ github.repository }}/statuses/$SHA" \
+          -d '{"state":"pending","context":"internal-model-tests","description":"Tests scheduled - waiting for internal CI"}'
