@@ -1617,9 +1617,9 @@ subroutine WrLinFile_txt_Table(VarAry, FlagFilter, p_FAST, Un, RowCol, op, IsDer
                rv = quat_to_rvec(op(i_op:i_op + 2))
 
                ! Write all components of WM parameters
-               write (Un, Fmt) RowColIdx, rv(1), VarRotFrame, VarDerivOrder, trim(Var%LinNames(j + 0))
-               write (Un, Fmt) RowColIdx, rv(2), VarRotFrame, VarDerivOrder, trim(Var%LinNames(j + 1))
-               write (Un, Fmt) RowColIdx, rv(3), VarRotFrame, VarDerivOrder, trim(Var%LinNames(j + 2))
+               write (Un, Fmt) RowColIdx + 0, rv(1), VarRotFrame, VarDerivOrder, trim(Var%LinNames(j + 0))
+               write (Un, Fmt) RowColIdx + 1, rv(2), VarRotFrame, VarDerivOrder, trim(Var%LinNames(j + 1))
+               write (Un, Fmt) RowColIdx + 2, rv(3), VarRotFrame, VarDerivOrder, trim(Var%LinNames(j + 2))
 
             else
 
