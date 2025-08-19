@@ -33,6 +33,11 @@ MODULE StrucCtrl_Types
 !---------------------------------------------------------------------------------------------------------------------------------
 USE NWTC_Library
 IMPLICIT NONE
+! =========  StC_PrescrFrcTseries  =======
+  TYPE, PUBLIC :: StC_PrescrFrcTseries
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: data      !< StC prescribed force time-series info [(s,N,N-m)]
+  END TYPE StC_PrescrFrcTseries
+! =======================
 ! =========  StC_InputFile  =======
   TYPE, PUBLIC :: StC_InputFile
     CHARACTER(1024)  :: StCFileName      !< Name of the input file; remove if there is no file [-]
@@ -98,8 +103,8 @@ IMPLICIT NONE
     CHARACTER(1024)  :: StC_F_TBL_FILE      !< user-defined spring table filename [-]
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: F_TBL      !< user-defined spring force [N]
     INTEGER(IntKi)  :: PrescribedForcesCoordSys = 0_IntKi      !< Prescribed forces coordinate system {0: global; 1: local} [-]
-    CHARACTER(1024)  :: PrescribedForcesFile      !< Prescribed force time-series filename [-]
-    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: StC_PrescribedForce      !< StC prescribed force time-series info [(s,N,N-m)]
+    CHARACTER(1024) , DIMENSION(:), ALLOCATABLE  :: PrescribedForcesFile      !< Prescribed force time-series filename [-]
+    TYPE(StC_PrescrFrcTseries) , DIMENSION(:), ALLOCATABLE  :: StC_PrescribedForce      !< StC prescribed force time-series info [(s,N,N-m)]
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: StC_CChan      !< StC control chan to use -- one per instance [-]
   END TYPE StC_InputFile
 ! =======================
@@ -228,7 +233,7 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: F_TBL      !< user-defined spring force [N]
     INTEGER(IntKi)  :: NumMeshPts = 0_IntKi      !< Number of mesh points [-]
     INTEGER(IntKi)  :: PrescribedForcesCoordSys = 0_IntKi      !< Prescribed forces coordinate system {0: global; 1: local} [-]
-    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: StC_PrescribedForce      !< StC prescribed force time-series info [(s,N,N-m)]
+    TYPE(StC_PrescrFrcTseries) , DIMENSION(:), ALLOCATABLE  :: StC_PrescribedForce      !< StC prescribed force time-series info [(s,N,N-m)]
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: StC_CChan      !< StC control chan to use [-]
   END TYPE StC_ParameterType
 ! =======================
@@ -260,14 +265,73 @@ IMPLICIT NONE
 
 contains
 
+subroutine StC_CopyPrescrFrcTseries(SrcPrescrFrcTseriesData, DstPrescrFrcTseriesData, CtrlCode, ErrStat, ErrMsg)
+   type(StC_PrescrFrcTseries), intent(in) :: SrcPrescrFrcTseriesData
+   type(StC_PrescrFrcTseries), intent(inout) :: DstPrescrFrcTseriesData
+   integer(IntKi),  intent(in   ) :: CtrlCode
+   integer(IntKi),  intent(  out) :: ErrStat
+   character(*),    intent(  out) :: ErrMsg
+   integer(B4Ki)                  :: LB(2), UB(2)
+   integer(IntKi)                 :: ErrStat2
+   character(*), parameter        :: RoutineName = 'StC_CopyPrescrFrcTseries'
+   ErrStat = ErrID_None
+   ErrMsg  = ''
+   if (allocated(SrcPrescrFrcTseriesData%data)) then
+      LB(1:2) = lbound(SrcPrescrFrcTseriesData%data)
+      UB(1:2) = ubound(SrcPrescrFrcTseriesData%data)
+      if (.not. allocated(DstPrescrFrcTseriesData%data)) then
+         allocate(DstPrescrFrcTseriesData%data(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstPrescrFrcTseriesData%data.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstPrescrFrcTseriesData%data = SrcPrescrFrcTseriesData%data
+   end if
+end subroutine
+
+subroutine StC_DestroyPrescrFrcTseries(PrescrFrcTseriesData, ErrStat, ErrMsg)
+   type(StC_PrescrFrcTseries), intent(inout) :: PrescrFrcTseriesData
+   integer(IntKi),  intent(  out) :: ErrStat
+   character(*),    intent(  out) :: ErrMsg
+   character(*), parameter        :: RoutineName = 'StC_DestroyPrescrFrcTseries'
+   ErrStat = ErrID_None
+   ErrMsg  = ''
+   if (allocated(PrescrFrcTseriesData%data)) then
+      deallocate(PrescrFrcTseriesData%data)
+   end if
+end subroutine
+
+subroutine StC_PackPrescrFrcTseries(RF, Indata)
+   type(RegFile), intent(inout) :: RF
+   type(StC_PrescrFrcTseries), intent(in) :: InData
+   character(*), parameter         :: RoutineName = 'StC_PackPrescrFrcTseries'
+   if (RF%ErrStat >= AbortErrLev) return
+   call RegPackAlloc(RF, InData%data)
+   if (RegCheckErr(RF, RoutineName)) return
+end subroutine
+
+subroutine StC_UnPackPrescrFrcTseries(RF, OutData)
+   type(RegFile), intent(inout)    :: RF
+   type(StC_PrescrFrcTseries), intent(inout) :: OutData
+   character(*), parameter            :: RoutineName = 'StC_UnPackPrescrFrcTseries'
+   integer(B4Ki)   :: LB(2), UB(2)
+   integer(IntKi)  :: stat
+   logical         :: IsAllocAssoc
+   if (RF%ErrStat /= ErrID_None) return
+   call RegUnpackAlloc(RF, OutData%data); if (RegCheckErr(RF, RoutineName)) return
+end subroutine
+
 subroutine StC_CopyInputFile(SrcInputFileData, DstInputFileData, CtrlCode, ErrStat, ErrMsg)
    type(StC_InputFile), intent(in) :: SrcInputFileData
    type(StC_InputFile), intent(inout) :: DstInputFileData
    integer(IntKi),  intent(in   ) :: CtrlCode
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(B4Ki)   :: i1, i2
    integer(B4Ki)                  :: LB(2), UB(2)
    integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'StC_CopyInputFile'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -345,18 +409,33 @@ subroutine StC_CopyInputFile(SrcInputFileData, DstInputFileData, CtrlCode, ErrSt
       DstInputFileData%F_TBL = SrcInputFileData%F_TBL
    end if
    DstInputFileData%PrescribedForcesCoordSys = SrcInputFileData%PrescribedForcesCoordSys
-   DstInputFileData%PrescribedForcesFile = SrcInputFileData%PrescribedForcesFile
+   if (allocated(SrcInputFileData%PrescribedForcesFile)) then
+      LB(1:1) = lbound(SrcInputFileData%PrescribedForcesFile)
+      UB(1:1) = ubound(SrcInputFileData%PrescribedForcesFile)
+      if (.not. allocated(DstInputFileData%PrescribedForcesFile)) then
+         allocate(DstInputFileData%PrescribedForcesFile(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstInputFileData%PrescribedForcesFile.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstInputFileData%PrescribedForcesFile = SrcInputFileData%PrescribedForcesFile
+   end if
    if (allocated(SrcInputFileData%StC_PrescribedForce)) then
-      LB(1:2) = lbound(SrcInputFileData%StC_PrescribedForce)
-      UB(1:2) = ubound(SrcInputFileData%StC_PrescribedForce)
+      LB(1:1) = lbound(SrcInputFileData%StC_PrescribedForce)
+      UB(1:1) = ubound(SrcInputFileData%StC_PrescribedForce)
       if (.not. allocated(DstInputFileData%StC_PrescribedForce)) then
-         allocate(DstInputFileData%StC_PrescribedForce(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         allocate(DstInputFileData%StC_PrescribedForce(LB(1):UB(1)), stat=ErrStat2)
          if (ErrStat2 /= 0) then
             call SetErrStat(ErrID_Fatal, 'Error allocating DstInputFileData%StC_PrescribedForce.', ErrStat, ErrMsg, RoutineName)
             return
          end if
       end if
-      DstInputFileData%StC_PrescribedForce = SrcInputFileData%StC_PrescribedForce
+      do i1 = LB(1), UB(1)
+         call StC_CopyPrescrFrcTseries(SrcInputFileData%StC_PrescribedForce(i1), DstInputFileData%StC_PrescribedForce(i1), CtrlCode, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat >= AbortErrLev) return
+      end do
    end if
    if (allocated(SrcInputFileData%StC_CChan)) then
       LB(1:1) = lbound(SrcInputFileData%StC_CChan)
@@ -376,13 +455,26 @@ subroutine StC_DestroyInputFile(InputFileData, ErrStat, ErrMsg)
    type(StC_InputFile), intent(inout) :: InputFileData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(B4Ki)   :: i1, i2
+   integer(B4Ki)   :: LB(2), UB(2)
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'StC_DestroyInputFile'
    ErrStat = ErrID_None
    ErrMsg  = ''
    if (allocated(InputFileData%F_TBL)) then
       deallocate(InputFileData%F_TBL)
    end if
+   if (allocated(InputFileData%PrescribedForcesFile)) then
+      deallocate(InputFileData%PrescribedForcesFile)
+   end if
    if (allocated(InputFileData%StC_PrescribedForce)) then
+      LB(1:1) = lbound(InputFileData%StC_PrescribedForce)
+      UB(1:1) = ubound(InputFileData%StC_PrescribedForce)
+      do i1 = LB(1), UB(1)
+         call StC_DestroyPrescrFrcTseries(InputFileData%StC_PrescribedForce(i1), ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+      end do
       deallocate(InputFileData%StC_PrescribedForce)
    end if
    if (allocated(InputFileData%StC_CChan)) then
@@ -394,6 +486,8 @@ subroutine StC_PackInputFile(RF, Indata)
    type(RegFile), intent(inout) :: RF
    type(StC_InputFile), intent(in) :: InData
    character(*), parameter         :: RoutineName = 'StC_PackInputFile'
+   integer(B4Ki)   :: i1, i2
+   integer(B4Ki)   :: LB(2), UB(2)
    if (RF%ErrStat >= AbortErrLev) return
    call RegPack(RF, InData%StCFileName)
    call RegPack(RF, InData%Echo)
@@ -458,8 +552,16 @@ subroutine StC_PackInputFile(RF, Indata)
    call RegPack(RF, InData%StC_F_TBL_FILE)
    call RegPackAlloc(RF, InData%F_TBL)
    call RegPack(RF, InData%PrescribedForcesCoordSys)
-   call RegPack(RF, InData%PrescribedForcesFile)
-   call RegPackAlloc(RF, InData%StC_PrescribedForce)
+   call RegPackAlloc(RF, InData%PrescribedForcesFile)
+   call RegPack(RF, allocated(InData%StC_PrescribedForce))
+   if (allocated(InData%StC_PrescribedForce)) then
+      call RegPackBounds(RF, 1, lbound(InData%StC_PrescribedForce), ubound(InData%StC_PrescribedForce))
+      LB(1:1) = lbound(InData%StC_PrescribedForce)
+      UB(1:1) = ubound(InData%StC_PrescribedForce)
+      do i1 = LB(1), UB(1)
+         call StC_PackPrescrFrcTseries(RF, InData%StC_PrescribedForce(i1)) 
+      end do
+   end if
    call RegPackAlloc(RF, InData%StC_CChan)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
@@ -468,6 +570,7 @@ subroutine StC_UnPackInputFile(RF, OutData)
    type(RegFile), intent(inout)    :: RF
    type(StC_InputFile), intent(inout) :: OutData
    character(*), parameter            :: RoutineName = 'StC_UnPackInputFile'
+   integer(B4Ki)   :: i1, i2
    integer(B4Ki)   :: LB(2), UB(2)
    integer(IntKi)  :: stat
    logical         :: IsAllocAssoc
@@ -535,8 +638,20 @@ subroutine StC_UnPackInputFile(RF, OutData)
    call RegUnpack(RF, OutData%StC_F_TBL_FILE); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%F_TBL); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%PrescribedForcesCoordSys); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%PrescribedForcesFile); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpackAlloc(RF, OutData%StC_PrescribedForce); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PrescribedForcesFile); if (RegCheckErr(RF, RoutineName)) return
+   if (allocated(OutData%StC_PrescribedForce)) deallocate(OutData%StC_PrescribedForce)
+   call RegUnpack(RF, IsAllocAssoc); if (RegCheckErr(RF, RoutineName)) return
+   if (IsAllocAssoc) then
+      call RegUnpackBounds(RF, 1, LB, UB); if (RegCheckErr(RF, RoutineName)) return
+      allocate(OutData%StC_PrescribedForce(LB(1):UB(1)),stat=stat)
+      if (stat /= 0) then 
+         call SetErrStat(ErrID_Fatal, 'Error allocating OutData%StC_PrescribedForce.', RF%ErrStat, RF%ErrMsg, RoutineName)
+         return
+      end if
+      do i1 = LB(1), UB(1)
+         call StC_UnpackPrescrFrcTseries(RF, OutData%StC_PrescribedForce(i1)) ! StC_PrescribedForce 
+      end do
+   end if
    call RegUnpackAlloc(RF, OutData%StC_CChan); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -1408,8 +1523,10 @@ subroutine StC_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
    integer(IntKi),  intent(in   ) :: CtrlCode
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(B4Ki)   :: i1, i2
    integer(B4Ki)                  :: LB(2), UB(2)
    integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'StC_CopyParam'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -1474,16 +1591,20 @@ subroutine StC_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
    DstParamData%NumMeshPts = SrcParamData%NumMeshPts
    DstParamData%PrescribedForcesCoordSys = SrcParamData%PrescribedForcesCoordSys
    if (allocated(SrcParamData%StC_PrescribedForce)) then
-      LB(1:2) = lbound(SrcParamData%StC_PrescribedForce)
-      UB(1:2) = ubound(SrcParamData%StC_PrescribedForce)
+      LB(1:1) = lbound(SrcParamData%StC_PrescribedForce)
+      UB(1:1) = ubound(SrcParamData%StC_PrescribedForce)
       if (.not. allocated(DstParamData%StC_PrescribedForce)) then
-         allocate(DstParamData%StC_PrescribedForce(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         allocate(DstParamData%StC_PrescribedForce(LB(1):UB(1)), stat=ErrStat2)
          if (ErrStat2 /= 0) then
             call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%StC_PrescribedForce.', ErrStat, ErrMsg, RoutineName)
             return
          end if
       end if
-      DstParamData%StC_PrescribedForce = SrcParamData%StC_PrescribedForce
+      do i1 = LB(1), UB(1)
+         call StC_CopyPrescrFrcTseries(SrcParamData%StC_PrescribedForce(i1), DstParamData%StC_PrescribedForce(i1), CtrlCode, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat >= AbortErrLev) return
+      end do
    end if
    if (allocated(SrcParamData%StC_CChan)) then
       LB(1:1) = lbound(SrcParamData%StC_CChan)
@@ -1503,6 +1624,10 @@ subroutine StC_DestroyParam(ParamData, ErrStat, ErrMsg)
    type(StC_ParameterType), intent(inout) :: ParamData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(B4Ki)   :: i1, i2
+   integer(B4Ki)   :: LB(2), UB(2)
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'StC_DestroyParam'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -1510,6 +1635,12 @@ subroutine StC_DestroyParam(ParamData, ErrStat, ErrMsg)
       deallocate(ParamData%F_TBL)
    end if
    if (allocated(ParamData%StC_PrescribedForce)) then
+      LB(1:1) = lbound(ParamData%StC_PrescribedForce)
+      UB(1:1) = ubound(ParamData%StC_PrescribedForce)
+      do i1 = LB(1), UB(1)
+         call StC_DestroyPrescrFrcTseries(ParamData%StC_PrescribedForce(i1), ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+      end do
       deallocate(ParamData%StC_PrescribedForce)
    end if
    if (allocated(ParamData%StC_CChan)) then
@@ -1521,6 +1652,8 @@ subroutine StC_PackParam(RF, Indata)
    type(RegFile), intent(inout) :: RF
    type(StC_ParameterType), intent(in) :: InData
    character(*), parameter         :: RoutineName = 'StC_PackParam'
+   integer(B4Ki)   :: i1, i2
+   integer(B4Ki)   :: LB(2), UB(2)
    if (RF%ErrStat >= AbortErrLev) return
    call RegPack(RF, InData%DT)
    call RegPack(RF, InData%RootName)
@@ -1571,7 +1704,15 @@ subroutine StC_PackParam(RF, Indata)
    call RegPackAlloc(RF, InData%F_TBL)
    call RegPack(RF, InData%NumMeshPts)
    call RegPack(RF, InData%PrescribedForcesCoordSys)
-   call RegPackAlloc(RF, InData%StC_PrescribedForce)
+   call RegPack(RF, allocated(InData%StC_PrescribedForce))
+   if (allocated(InData%StC_PrescribedForce)) then
+      call RegPackBounds(RF, 1, lbound(InData%StC_PrescribedForce), ubound(InData%StC_PrescribedForce))
+      LB(1:1) = lbound(InData%StC_PrescribedForce)
+      UB(1:1) = ubound(InData%StC_PrescribedForce)
+      do i1 = LB(1), UB(1)
+         call StC_PackPrescrFrcTseries(RF, InData%StC_PrescribedForce(i1)) 
+      end do
+   end if
    call RegPackAlloc(RF, InData%StC_CChan)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
@@ -1580,6 +1721,7 @@ subroutine StC_UnPackParam(RF, OutData)
    type(RegFile), intent(inout)    :: RF
    type(StC_ParameterType), intent(inout) :: OutData
    character(*), parameter            :: RoutineName = 'StC_UnPackParam'
+   integer(B4Ki)   :: i1, i2
    integer(B4Ki)   :: LB(2), UB(2)
    integer(IntKi)  :: stat
    logical         :: IsAllocAssoc
@@ -1633,7 +1775,19 @@ subroutine StC_UnPackParam(RF, OutData)
    call RegUnpackAlloc(RF, OutData%F_TBL); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%NumMeshPts); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%PrescribedForcesCoordSys); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpackAlloc(RF, OutData%StC_PrescribedForce); if (RegCheckErr(RF, RoutineName)) return
+   if (allocated(OutData%StC_PrescribedForce)) deallocate(OutData%StC_PrescribedForce)
+   call RegUnpack(RF, IsAllocAssoc); if (RegCheckErr(RF, RoutineName)) return
+   if (IsAllocAssoc) then
+      call RegUnpackBounds(RF, 1, LB, UB); if (RegCheckErr(RF, RoutineName)) return
+      allocate(OutData%StC_PrescribedForce(LB(1):UB(1)),stat=stat)
+      if (stat /= 0) then 
+         call SetErrStat(ErrID_Fatal, 'Error allocating OutData%StC_PrescribedForce.', RF%ErrStat, RF%ErrMsg, RoutineName)
+         return
+      end if
+      do i1 = LB(1), UB(1)
+         call StC_UnpackPrescrFrcTseries(RF, OutData%StC_PrescribedForce(i1)) ! StC_PrescribedForce 
+      end do
+   end if
    call RegUnpackAlloc(RF, OutData%StC_CChan); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 

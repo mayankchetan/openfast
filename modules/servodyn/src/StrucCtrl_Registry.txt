@@ -9,6 +9,8 @@
 ###################################################################################################################################
 include	Registry_NWTC_Library.txt
 
+typedef	StrucCtrl/StC	StC_PrescrFrcTseries	ReKi			data	{:}{:}	-	-	"StC prescribed force time-series info"	"(s,N,N-m)"
+
 # ..... Input File data .......................................................................................................
 typedef StrucCtrl/StC StC_InputFile CHARACTER(1024) StCFileName - - - "Name of the input file; remove if there is no file" -
 typedef	^		^				LOGICAL			Echo	-	-	-	"Echo input file to echo file"	-
@@ -73,8 +75,8 @@ typedef	^		^				IntKi			NKInpSt	-	-	-	"Number of input spring force rows in tabl
 typedef	^		^				CHARACTER(1024)			StC_F_TBL_FILE	-	-	-	"user-defined spring table filename"	-
 typedef	^		^				ReKi			F_TBL		{:}{:}	-	-	"user-defined spring force"	"N"
 typedef	^		^				IntKi			PrescribedForcesCoordSys	-	-	-	"Prescribed forces coordinate system {0: global; 1: local}"	-
-typedef	^		^				CHARACTER(1024)	PrescribedForcesFile	-	-	-	"Prescribed force time-series filename"	-
-typedef	^		^				ReKi			StC_PrescribedForce	{:}{:}	-	-	"StC prescribed force time-series info"	"(s,N,N-m)"
+typedef	^		^				CHARACTER(1024)	PrescribedForcesFile	:	-	-	"Prescribed force time-series filename"	-
+typedef	^		^				StC_PrescrFrcTseries			StC_PrescribedForce	{:}	-	-	"StC prescribed force time-series info"	"(s,N,N-m)"
 typedef	^		^				IntKi			StC_CChan	{:}	-	-	"StC control chan to use -- one per instance"	-
 # ..... Initialization data .......................................................................................................
 # Define inputs that the initialization routine may need here:
@@ -194,7 +196,7 @@ typedef	^		^				LOGICAL			Use_F_TBL	-	-	-	"use spring force from user-defined ta
 typedef	^		^				ReKi			F_TBL	{:}{:} - -	"user-defined spring force"	"N"
 typedef	^	ParameterType	IntKi	NumMeshPts	-	-	-	"Number of mesh points"	-
 typedef	^		^				IntKi			PrescribedForcesCoordSys	-	-	-	"Prescribed forces coordinate system {0: global; 1: local}"	-
-typedef	^		^				ReKi			StC_PrescribedForce	{:}{:}	-	-	"StC prescribed force time-series info"	"(s,N,N-m)"
+typedef	^		^				StC_PrescrFrcTseries			StC_PrescribedForce	{:}	-	-	"StC prescribed force time-series info"	"(s,N,N-m)"
 typedef	^		^				IntKi			StC_CChan	{:}	-	-	"StC control chan to use"	-
 # ..... Inputs ....................................................................................................................
 # Define inputs that are contained on the mesh here:
