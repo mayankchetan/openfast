@@ -820,7 +820,7 @@ subroutine Set_NStC_Outs_Instance( i, x, m, y, AllOuts )     ! Nacelle single St
    real(ReKi),                      intent(inout)  :: AllOuts(0:MaxOutPts) ! All the available output channels
    integer  :: j
    j=1
-   if (i < MaxStC) then
+   if (i <= MaxStC) then
       AllOuts(NStC_XQ( i)) = x%StC_x(1,1)                ! x
       AllOuts(NStC_XQD(i)) = x%StC_x(2,1)                ! x-dot
       AllOuts(NStC_YQ( i)) = x%StC_x(3,1)                ! y
@@ -864,7 +864,7 @@ subroutine Set_TStC_Outs_Instance( i, x, m, y, AllOuts )     ! Tower single StC 
    real(ReKi),                      intent(inout)  :: AllOuts(0:MaxOutPts) ! All the available output channels
    integer  :: j
    j=1
-   if (i < MaxStC) then
+   if (i <= MaxStC) then
       AllOuts(TStC_XQ( i)) = x%StC_x(1,1)                ! x
       AllOuts(TStC_XQD(i)) = x%StC_x(2,1)                ! x-dot
       AllOuts(TStC_YQ( i)) = x%StC_x(3,1)                ! y
@@ -908,7 +908,7 @@ subroutine Set_BStC_Outs_Instance( i, numBl, x, m, y, AllOuts )        ! Single 
    type(StC_OutputType),            intent(in   )  :: y                    !< Outputs computed at Time
    real(ReKi),                      intent(inout)  :: AllOuts(0:MaxOutPts) ! All the available output channels
    integer  :: j
-   if (i < MaxStC) then
+   if (i <= MaxStC) then
       do j=1,min(NumBl,MaxBlOuts)
          AllOuts(BStC_XQ( i,j)) = x%StC_x(1,j)                ! x
          AllOuts(BStC_XQD(i,j)) = x%StC_x(2,j)                ! x-dot
@@ -954,7 +954,7 @@ subroutine Set_SStC_Outs_Instance( i, x, m, y, AllOuts )     ! Platform
    real(ReKi),                      intent(inout)  :: AllOuts(0:MaxOutPts) ! All the available output channels
    integer  :: j
    j=1
-   if (i < MaxStC) then
+   if (i <= MaxStC) then
       AllOuts(SStC_XQ( i)) = x%StC_x(1,1)                ! x
       AllOuts(SStC_XQD(i)) = x%StC_x(2,1)                ! x-dot
       AllOuts(SStC_YQ( i)) = x%StC_x(3,1)                ! y
