@@ -369,8 +369,8 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
    real(ReKi), dimension(3), intent(out) :: Ui          !< no side effects
    real(ReKi), dimension(3), intent(in)  :: DeltaP      !< CP-PP "control point - particle point"
    real(ReKi), dimension(3), intent(in)  :: Alpha       !< Particle intensity [m^2/s] alpha=om.dV
-   integer(IntKi),           intent(in)  :: RegFunction !< 
-   real(ReKi),               intent(in)  :: RegParam    !< 
+   integer(IntKi), value,    intent(in)  :: RegFunction !<
+   real(ReKi),     value,    intent(in)  :: RegParam    !<
    real(ReKi),dimension(3) :: C          !< Cross product of Alpha and r
    real(ReKi)              :: E          !< Exponential poart for the mollifider
    real(ReKi)              :: r3_inv     !< 
