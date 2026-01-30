@@ -350,7 +350,7 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
-   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO MAP(TO: CPs(1:3,1:nCPs), Part(1:3,1:nPart), Alpha(1:3,1:nPart), RegParam(1:nPart)) &
+   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO MAP(TO: CPs(1:3,1:nCPs), Part(1:3,1:nPart), Alpha(1:3,1:nPart), RegParam(1:nPart), RegFunction) &
    !$OMP MAP(TOFROM: UIout(1:3,1:nCPs)) PRIVATE(icp,ip, DP, UItmp)
    do icp=1,nCPs ! loop on CPs 
       do ip=1,nPart ! loop on particles
