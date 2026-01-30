@@ -350,8 +350,8 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp,ip, DP, UItmp) schedule(runtime)
+   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO MAP(TO: CPs(1:3,1:nCPs), Part(1:3,1:nPart), Alpha(1:3,1:nPart), RegParam(1:nPart), RegFunction) &
+   !$OMP MAP(TOFROM: UIout(1:3,1:nCPs)) PRIVATE(icp,ip, DP, UItmp)
    do icp=1,nCPs ! loop on CPs 
       do ip=1,nPart ! loop on particles
          UItmp(1:3) = 0.0_ReKi
@@ -360,17 +360,17 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
          UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
       enddo! loop on particles
    enddo ! loop CPs
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
 subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
+   !$omp declare target
    real(ReKi), dimension(3), intent(out) :: Ui          !< no side effects
    real(ReKi), dimension(3), intent(in)  :: DeltaP      !< CP-PP "control point - particle point"
    real(ReKi), dimension(3), intent(in)  :: Alpha       !< Particle intensity [m^2/s] alpha=om.dV
-   integer(IntKi),           intent(in)  :: RegFunction !< 
-   real(ReKi),               intent(in)  :: RegParam    !< 
+   integer(IntKi), value,    intent(in)  :: RegFunction !<
+   real(ReKi),     value,    intent(in)  :: RegParam    !<
    real(ReKi),dimension(3) :: C          !< Cross product of Alpha and r
    real(ReKi)              :: E          !< Exponential poart for the mollifider
    real(ReKi)              :: r3_inv     !< 
