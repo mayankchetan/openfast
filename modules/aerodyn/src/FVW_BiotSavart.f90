@@ -366,7 +366,7 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
          UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
       enddo! loop on particles
    enddo ! loop CPs
-   !$OMP END TEAMS DISTRIBUTE PARALLEL DO
+   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
