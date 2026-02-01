@@ -352,19 +352,35 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
-   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-   !$OMP MAP(TO: CPs(:,1:nCPs), Part(:,1:nPart), Alpha(:,1:nPart), RegParam(1:nPart)) &
-   !$OMP MAP(TOFROM: UIout(:,1:nCPs)) &
-   !$OMP PRIVATE(icp,ip, DP, UItmp)
-   do icp=1,nCPs ! loop on CPs 
-      do ip=1,nPart ! loop on particles
-         UItmp(1:3) = 0.0_ReKi
-         DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
-         call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
-         UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
-      enddo! loop on particles
-   enddo ! loop CPs
-   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   if (RegFunction == idRegNone) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(TO: CPs(:,1:nCPs), Part(:,1:nPart), Alpha(:,1:nPart)) &
+      !$OMP MAP(TOFROM: UIout(:,1:nCPs)) &
+      !$OMP PRIVATE(icp,ip, DP, UItmp)
+      do icp=1,nCPs ! loop on CPs
+         do ip=1,nPart ! loop on particles
+            UItmp(1:3) = 0.0_ReKi
+            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , 0.0_ReKi, UItmp)
+            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+         enddo! loop on particles
+      enddo ! loop CPs
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   else
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(TO: CPs(:,1:nCPs), Part(:,1:nPart), Alpha(:,1:nPart), RegParam(1:nPart)) &
+      !$OMP MAP(TOFROM: UIout(:,1:nCPs)) &
+      !$OMP PRIVATE(icp,ip, DP, UItmp)
+      do icp=1,nCPs ! loop on CPs
+         do ip=1,nPart ! loop on particles
+            UItmp(1:3) = 0.0_ReKi
+            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
+            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+         enddo! loop on particles
+      enddo ! loop CPs
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
