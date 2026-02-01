@@ -27,6 +27,8 @@ module FVW_BiotSavart
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
 
+   !$OMP DECLARE TARGET(MINNORM, fourpi_inv, idRegNone, idRegExp, idRegCompact)
+
 contains
 
 
@@ -340,28 +342,46 @@ end subroutine ui_seg
 subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, UIout)
    integer(IntKi),               intent(in)    :: nCPs        !< Number of control points to use (nCPs<=size(CPs,2))
    integer(IntKi),               intent(in)    :: nPart       !< Number of particles to use (nPart<=size(Part,2))
-   real(ReKi), dimension(:,:),   intent(in)    :: CPs         !< Control points (3 x nCPs+)
-   real(ReKi), dimension(:,:),   intent(inout) :: UIout       !< Induced velocity, with side effects! (3 x nCPs+)
-   real(ReKi), dimension(:,:),   intent(in)    :: Part        !< Particle positions (3 x nPart+)
-   real(ReKi), dimension(:,:),   intent(in)    :: Alpha       !< Particle intensity [m^3/s] (3 x nPart+) omega dV= alpha
+   real(ReKi), dimension(3,nCPs),intent(in)    :: CPs         !< Control points (3 x nCPs+)
+   real(ReKi), dimension(3,nCPs),intent(inout) :: UIout       !< Induced velocity, with side effects! (3 x nCPs+)
+   real(ReKi), dimension(3,nPart),intent(in)   :: Part        !< Particle positions (3 x nPart+)
+   real(ReKi), dimension(3,nPart),intent(in)   :: Alpha       !< Particle intensity [m^3/s] (3 x nPart+) omega dV= alpha
    integer(IntKi),               intent(in)    :: RegFunction !< Regularization function 
-   real(ReKi), dimension(:),     intent(in)    :: RegParam    !< Regularization parameter (nPart+)
+   real(ReKi), dimension(nPart), intent(in)    :: RegParam    !< Regularization parameter (nPart+)
    real(ReKi), dimension(3) :: UItmp   !< 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
+   if (nPart <= 0 .or. nCPs <= 0) return
    ! TODO: inlining of regularization
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp,ip, DP, UItmp) schedule(runtime)
-   do icp=1,nCPs ! loop on CPs 
-      do ip=1,nPart ! loop on particles
-         UItmp(1:3) = 0.0_ReKi
-         DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
-         call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
-         UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
-      enddo! loop on particles
-   enddo ! loop CPs
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (RegFunction == idRegNone) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(TO: CPs(:,1:nCPs), Part(:,1:nPart), Alpha(:,1:nPart)) &
+      !$OMP MAP(TOFROM: UIout(:,1:nCPs)) &
+      !$OMP PRIVATE(icp,ip, DP, UItmp)
+      do icp=1,nCPs ! loop on CPs
+         do ip=1,nPart ! loop on particles
+            UItmp(1:3) = 0.0_ReKi
+            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , 0.0_ReKi, UItmp)
+            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+         enddo! loop on particles
+      enddo ! loop CPs
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   else
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(TO: CPs(:,1:nCPs), Part(:,1:nPart), Alpha(:,1:nPart), RegParam(1:nPart)) &
+      !$OMP MAP(TOFROM: UIout(:,1:nCPs)) &
+      !$OMP PRIVATE(icp,ip, DP, UItmp)
+      do icp=1,nCPs ! loop on CPs
+         do ip=1,nPart ! loop on particles
+            UItmp(1:3) = 0.0_ReKi
+            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
+            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+         enddo! loop on particles
+      enddo ! loop CPs
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
@@ -369,15 +389,16 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
    real(ReKi), dimension(3), intent(out) :: Ui          !< no side effects
    real(ReKi), dimension(3), intent(in)  :: DeltaP      !< CP-PP "control point - particle point"
    real(ReKi), dimension(3), intent(in)  :: Alpha       !< Particle intensity [m^2/s] alpha=om.dV
-   integer(IntKi),           intent(in)  :: RegFunction !< 
-   real(ReKi),               intent(in)  :: RegParam    !< 
+   integer(IntKi), value,    intent(in)  :: RegFunction !<
+   real(ReKi),     value,    intent(in)  :: RegParam    !<
    real(ReKi),dimension(3) :: C          !< Cross product of Alpha and r
    real(ReKi)              :: E          !< Exponential poart for the mollifider
    real(ReKi)              :: r3_inv     !< 
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
+   !$OMP DECLARE TARGET
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity 
+   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity
       Ui(1:3)  = 0.0_ReKi
       return
    else !--- Normal Procedure 
