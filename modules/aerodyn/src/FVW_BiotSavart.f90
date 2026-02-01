@@ -27,7 +27,7 @@ module FVW_BiotSavart
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
 
-   !$OMP DECLARE TARGET(MINNORM, fourpi_inv, idRegNone, idRegExp, idRegCompact, ui_part_nograd_11)
+   !$OMP DECLARE TARGET(MINNORM, fourpi_inv, idRegNone, idRegExp, idRegCompact)
 
 contains
 
@@ -396,8 +396,9 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
    real(ReKi)              :: r3_inv     !< 
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
+   !$OMP DECLARE TARGET
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity 
+   if (rDeltaP<1.0e-4_ReKi) then !--- Exactly on the Singularity (hardcoded MINNORM for safety)
       Ui(1:3)  = 0.0_ReKi
       return
    else !--- Normal Procedure 
