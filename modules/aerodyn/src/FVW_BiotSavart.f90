@@ -351,6 +351,7 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: UItmp   !< 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
+   if (nPart <= 0 .or. nCPs <= 0) return
    ! TODO: inlining of regularization
    if (RegFunction == idRegNone) then
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
