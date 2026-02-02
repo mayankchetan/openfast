@@ -27,6 +27,10 @@ module FVW_BiotSavart
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
 
+   !$OMP DECLARE TARGET(PRECISION_UI, PRECISION_EPS, MIN_EXP_VALUE, MINDENOM, MINNORM)
+   !$OMP DECLARE TARGET(idRegNone, idRegRankine, idRegLambOseen, idRegVatistas, idRegOffset)
+   !$OMP DECLARE TARGET(idRegExp, idRegCompact, fourpi_inv, fourpi)
+
 contains
 
 
@@ -350,34 +354,58 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp,ip, DP, UItmp) schedule(runtime)
-   do icp=1,nCPs ! loop on CPs 
-      do ip=1,nPart ! loop on particles
-         UItmp(1:3) = 0.0_ReKi
-         DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
-         call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
-         UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
-      enddo! loop on particles
-   enddo ! loop CPs
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (nPart > 0 .and. nCPs > 0) then
+      if (RegFunction == idRegNone) then
+         !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+         !$OMP& MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart)) &
+         !$OMP& MAP(TO: RegFunction) &
+         !$OMP& MAP(TOFROM: UIout(1:3, 1:nCPs)) &
+         !$OMP& SHARED(nCPs, nPart) &
+         !$OMP& PRIVATE(icp, ip, DP, UItmp)
+         do icp=1,nCPs ! loop on CPs
+            do ip=1,nPart ! loop on particles
+               UItmp(1:3) = 0.0_ReKi
+               DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+               call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , 0.0_ReKi, UItmp)
+               UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+            enddo! loop on particles
+         enddo ! loop CPs
+         !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      else
+         !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+         !$OMP& MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
+         !$OMP& MAP(TO: RegFunction) &
+         !$OMP& MAP(TOFROM: UIout(1:3, 1:nCPs)) &
+         !$OMP& SHARED(nCPs, nPart) &
+         !$OMP& PRIVATE(icp, ip, DP, UItmp)
+         do icp=1,nCPs ! loop on CPs
+            do ip=1,nPart ! loop on particles
+               UItmp(1:3) = 0.0_ReKi
+               DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+               call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
+               UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+            enddo! loop on particles
+         enddo ! loop CPs
+         !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      endif
+   endif
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
 subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
+   !$OMP DECLARE TARGET
    real(ReKi), dimension(3), intent(out) :: Ui          !< no side effects
    real(ReKi), dimension(3), intent(in)  :: DeltaP      !< CP-PP "control point - particle point"
    real(ReKi), dimension(3), intent(in)  :: Alpha       !< Particle intensity [m^2/s] alpha=om.dV
-   integer(IntKi),           intent(in)  :: RegFunction !< 
-   real(ReKi),               intent(in)  :: RegParam    !< 
+   integer(IntKi), VALUE,    intent(in)  :: RegFunction !<
+   real(ReKi),     VALUE,    intent(in)  :: RegParam    !<
    real(ReKi),dimension(3) :: C          !< Cross product of Alpha and r
    real(ReKi)              :: E          !< Exponential poart for the mollifider
    real(ReKi)              :: r3_inv     !< 
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity 
+   if (rDeltaP<1.0e-4_ReKi) then !--- Exactly on the Singularity
       Ui(1:3)  = 0.0_ReKi
       return
    else !--- Normal Procedure 
