@@ -355,21 +355,39 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    integer :: icp,ip
    ! TODO: inlining of regularization
    if (nPart > 0 .and. nCPs > 0) then
-      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-      !$OMP& MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
-      !$OMP& MAP(TO: RegFunction) &
-      !$OMP& MAP(TOFROM: UIout(1:3, 1:nCPs)) &
-      !$OMP& SHARED(nCPs, nPart) &
-      !$OMP& PRIVATE(icp, ip, DP, UItmp)
-      do icp=1,nCPs ! loop on CPs
-         do ip=1,nPart ! loop on particles
-            UItmp(1:3) = 0.0_ReKi
-            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
-            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
-            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
-         enddo! loop on particles
-      enddo ! loop CPs
-      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      if (RegFunction == idRegNone) then
+         !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+         !$OMP& MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart)) &
+         !$OMP& MAP(TO: RegFunction) &
+         !$OMP& MAP(TOFROM: UIout(1:3, 1:nCPs)) &
+         !$OMP& SHARED(nCPs, nPart) &
+         !$OMP& PRIVATE(icp, ip, DP, UItmp)
+         do icp=1,nCPs ! loop on CPs
+            do ip=1,nPart ! loop on particles
+               UItmp(1:3) = 0.0_ReKi
+               DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+               call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , 0.0_ReKi, UItmp)
+               UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+            enddo! loop on particles
+         enddo ! loop CPs
+         !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      else
+         !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+         !$OMP& MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
+         !$OMP& MAP(TO: RegFunction) &
+         !$OMP& MAP(TOFROM: UIout(1:3, 1:nCPs)) &
+         !$OMP& SHARED(nCPs, nPart) &
+         !$OMP& PRIVATE(icp, ip, DP, UItmp)
+         do icp=1,nCPs ! loop on CPs
+            do ip=1,nPart ! loop on particles
+               UItmp(1:3) = 0.0_ReKi
+               DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+               call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
+               UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+            enddo! loop on particles
+         enddo ! loop CPs
+         !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      endif
    endif
 end subroutine ui_part_nograd
 
