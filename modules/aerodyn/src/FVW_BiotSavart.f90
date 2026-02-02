@@ -405,7 +405,7 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity 
+   if (rDeltaP<1.0e-4_ReKi) then !--- Exactly on the Singularity
       Ui(1:3)  = 0.0_ReKi
       return
    else !--- Normal Procedure 
