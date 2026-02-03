@@ -353,19 +353,36 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    integer :: icp,ip
    ! TODO: inlining of regularization
    if (nCPs > 0 .and. nPart > 0) then
-      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO DEFAULT(SHARED) &
-      !$OMP MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
-      !$OMP MAP(TOFROM: UIout(1:3, 1:nCPs)) &
-      !$OMP PRIVATE(icp, ip, DP, UItmp)
-      do icp=1,nCPs ! loop on CPs
-         do ip=1,nPart ! loop on particles
-            UItmp(1:3) = 0.0_ReKi
-            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
-            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
-            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
-         enddo! loop on particles
-      enddo ! loop CPs
-      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      if (RegFunction == 0) then ! idRegNone
+         !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO DEFAULT(SHARED) &
+         !$OMP MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart)) &
+         !$OMP MAP(TOFROM: UIout(1:3, 1:nCPs)) &
+         !$OMP PRIVATE(icp, ip, DP, UItmp)
+         do icp=1,nCPs ! loop on CPs
+            do ip=1,nPart ! loop on particles
+               UItmp(1:3) = 0.0_ReKi
+               DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+               ! Pass dummy RegParam (0.0) as it is not used for idRegNone
+               call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction, 0.0_ReKi, UItmp)
+               UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+            enddo! loop on particles
+         enddo ! loop CPs
+         !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      else
+         !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO DEFAULT(SHARED) &
+         !$OMP MAP(TO: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
+         !$OMP MAP(TOFROM: UIout(1:3, 1:nCPs)) &
+         !$OMP PRIVATE(icp, ip, DP, UItmp)
+         do icp=1,nCPs ! loop on CPs
+            do ip=1,nPart ! loop on particles
+               UItmp(1:3) = 0.0_ReKi
+               DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+               call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction, RegParam(ip), UItmp)
+               UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+            enddo! loop on particles
+         enddo ! loop CPs
+         !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+      end if
    end if
 end subroutine ui_part_nograd
 
@@ -383,7 +400,8 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity 
+   ! Use literal for MINNORM (1.0e-4) to avoid potential offloading constant propagation issues
+   if (rDeltaP < 1.0e-4_ReKi) then !--- Exactly on the Singularity
       Ui(1:3)  = 0.0_ReKi
       return
    else !--- Normal Procedure 
@@ -391,16 +409,17 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
       C(2) = Alpha(3) * DeltaP(1) - Alpha(1) * DeltaP(3)
       C(3) = Alpha(1) * DeltaP(2) - Alpha(2) * DeltaP(1)
       select case (RegFunction) !
-      case (idRegNone) ! No mollification
+      case (0) ! idRegNone ! No mollification
          r3_inv     = 1._ReKi/(rDeltaP**3)
-         ScalarPart = r3_inv*fourpi_inv
-      case (idRegExp) ! Exponential mollifier
+         ! Use literal for fourpi_inv (0.25 / pi)
+         ScalarPart = r3_inv * 0.07957747154594766788_ReKi
+      case (1) ! idRegExp ! Exponential mollifier
          r3_inv     = 1._ReKi/(rDeltaP**3)
          E          = exp(-rDeltaP**3/RegParam**3)
-         ScalarPart = (1._ReKi-E)*r3_inv*fourpi_inv
-      case (idRegCompact) ! Compact support
+         ScalarPart = (1._ReKi-E)*r3_inv * 0.07957747154594766788_ReKi
+      case (2) ! idRegCompact ! Compact support
          r3_inv     = 1._ReKi/sqrt(RegParam**6+rDeltaP**6)
-         ScalarPart = r3_inv*fourpi_inv
+         ScalarPart = r3_inv * 0.07957747154594766788_ReKi
       case default 
          print*,'[ERROR] Wrong regularization function for particles',RegFunction
          STOP
