@@ -27,7 +27,7 @@ module FVW_BiotSavart
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
 
-   !$OMP DECLARE TARGET(fourpi_inv, MINNORM, idRegNone, idRegExp, idRegCompact)
+   !$OMP DECLARE TARGET(idRegNone, idRegExp, idRegCompact)
 
 contains
 
@@ -352,6 +352,7 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
+   ! TODO: inlining of regularization
    if (nCPs > 0 .and. nPart > 0) then
       if (RegFunction == 0) then ! idRegNone
          !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO DEFAULT(SHARED) &
@@ -400,7 +401,7 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   ! Use literal for MINNORM (1.0e-4) to avoid potential offloading constant propagation issues
+   ! Use passed value for MINNORM to avoid constant propagation issues and Ensure consistency
    if (rDeltaP < 1.0e-4_ReKi) then !--- Exactly on the Singularity
       Ui(1:3)  = 0.0_ReKi
       return
@@ -411,7 +412,6 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
       select case (RegFunction) !
       case (0) ! idRegNone ! No mollification
          r3_inv     = 1._ReKi/(rDeltaP**3)
-         ! Use literal for fourpi_inv (0.25 / pi)
          ScalarPart = r3_inv * 0.07957747154594766788_ReKi
       case (1) ! idRegExp ! Exponential mollifier
          r3_inv     = 1._ReKi/(rDeltaP**3)
