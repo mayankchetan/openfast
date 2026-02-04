@@ -127,7 +127,7 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
    real(ReKi), dimension(:),       intent(in)    :: RegParam    !< Regularization parameter (nSegTot)
    real(ReKi), dimension(:,:)    , intent(inout) :: Uind_out    !< Induced velocity vector - Side effects!!! (3 x nCPs++)
    ! Variables
-   integer(IntKi) :: icp, is
+   integer(IntKi) :: icp, is, nSegsAll
    real(ReKi), dimension(3) :: Uind           !< 
    real(ReKi), dimension(3) :: P1, P2         !< Extremities of a given segment
    ! Variables declaration 
@@ -153,13 +153,15 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
    ! Check for empty ranges to avoid mapping zero-sized arrays which can cause runtime errors
    if (iCPStart > iCPEnd .or. iSegStart > iSegEnd) return
 
+   nSegsAll = size(SegPoints, 2)
+
    ! Branching based on regularization model
    ! NOTE: copy paste of code is done for optimization!
    !       The only thing changing is the part labelled "regularization"
    select case (RegFunction) 
    case ( idRegNone ) ! No vortex core 
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO default(shared) &
-      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints, SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
+      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints(1:3, 1:nSegsAll), SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
       !$OMP map(tofrom: Uind_out(:, iCPStart:iCPEnd)) &
       !$OMP firstprivate(l_PRECISION_UI, l_MINDENOM, l_fourpi_inv) &
       !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb) schedule(runtime)
@@ -195,7 +197,7 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
       
    case ( idRegRankine )      ! Rankine
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO default(shared) &
-      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints, SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
+      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints(1:3, 1:nSegsAll), SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
       !$OMP map(to: RegParam(iSegStart:iSegEnd)) &
       !$OMP map(tofrom: Uind_out(:, iCPStart:iCPEnd)) &
       !$OMP firstprivate(l_PRECISION_UI, l_MINDENOM, l_fourpi_inv) &
@@ -238,7 +240,7 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
 
    case ( idRegLambOseen )      ! LambOseen
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO default(shared) &
-      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints, SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
+      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints(1:3, 1:nSegsAll), SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
       !$OMP map(to: RegParam(iSegStart:iSegEnd)) &
       !$OMP map(tofrom: Uind_out(:, iCPStart:iCPEnd)) &
       !$OMP firstprivate(l_PRECISION_UI, l_MINDENOM, l_fourpi_inv, l_MIN_EXP_VALUE) &
@@ -282,7 +284,7 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
 
    case ( idRegVatistas )      ! Vatistas n=2
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO default(shared) &
-      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints, SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
+      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints(1:3, 1:nSegsAll), SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
       !$OMP map(to: RegParam(iSegStart:iSegEnd)) &
       !$OMP map(tofrom: Uind_out(:, iCPStart:iCPEnd)) &
       !$OMP firstprivate(l_PRECISION_UI, l_MINDENOM, l_fourpi_inv) &
@@ -321,7 +323,7 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
 
    case ( idRegOffset )      ! Denominator offset
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO default(shared) &
-      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints, SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
+      !$OMP map(to: CPs(:, iCPStart:iCPEnd), SegPoints(1:3, 1:nSegsAll), SegConnct(:, iSegStart:iSegEnd), SegGamma(iSegStart:iSegEnd)) &
       !$OMP map(to: RegParam(iSegStart:iSegEnd)) &
       !$OMP map(tofrom: Uind_out(:, iCPStart:iCPEnd)) &
       !$OMP firstprivate(l_PRECISION_UI, l_MINDENOM, l_fourpi_inv) &
