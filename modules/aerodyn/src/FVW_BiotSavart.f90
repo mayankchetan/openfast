@@ -150,6 +150,9 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
    l_fourpi_inv = fourpi_inv
    l_MIN_EXP_VALUE = MIN_EXP_VALUE
 
+   ! Check for empty ranges to avoid mapping zero-sized arrays which can cause runtime errors
+   if (iCPStart > iCPEnd .or. iSegStart > iSegEnd) return
+
    ! Branching based on regularization model
    ! NOTE: copy paste of code is done for optimization!
    !       The only thing changing is the part labelled "regularization"
