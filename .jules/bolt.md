@@ -4,3 +4,6 @@
 
 **Learning:** Manual inlining in legacy Fortran codes (like `ui_seg`) simplifies GPU offloading by reducing subroutine calls, but requires duplicating directives across `CASE` blocks.
 **Action:** Accept code duplication for performance directives when refactoring is too risky or changes the optimization pattern.
+
+**Learning:** Assumed-shape arrays (dimension(:,:)) in Fortran cause Exit Code 8 (Segfault/SIGFPE) when mapped to OpenMP devices using `gfortran` without explicit bounds.
+**Action:** Always use explicit bounds in map clauses for assumed-shape arrays, e.g., `map(to: Array(1:3, 1:size(Array,2)))`.

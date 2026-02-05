@@ -149,8 +149,8 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
    select case (RegFunction) 
    case ( idRegNone ) ! No vortex core 
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-      !$OMP map(to: CPs, SegPoints, SegConnct, SegGamma) &
-      !$OMP map(tofrom: Uind_out) &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
       !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
@@ -184,8 +184,8 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
       
    case ( idRegRankine )      ! Rankine
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-      !$OMP map(to: CPs, SegPoints, SegConnct, SegGamma, RegParam) &
-      !$OMP map(tofrom: Uind_out) &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
       !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
@@ -225,8 +225,8 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
 
    case ( idRegLambOseen )      ! LambOseen
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-      !$OMP map(to: CPs, SegPoints, SegConnct, SegGamma, RegParam) &
-      !$OMP map(tofrom: Uind_out) &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
       !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb,exp_value)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
@@ -267,8 +267,8 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
 
    case ( idRegVatistas )      ! Vatistas n=2
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-      !$OMP map(to: CPs, SegPoints, SegConnct, SegGamma, RegParam) &
-      !$OMP map(tofrom: Uind_out) &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
       !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
@@ -304,8 +304,8 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
 
    case ( idRegOffset )      ! Denominator offset
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-      !$OMP map(to: CPs, SegPoints, SegConnct, SegGamma, RegParam) &
-      !$OMP map(tofrom: Uind_out) &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
       !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind      = 0.0_ReKi
@@ -357,8 +357,8 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    integer :: icp,ip
    ! TODO: inlining of regularization
    !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-   !$OMP map(to: CPs, Part, Alpha, RegParam) &
-   !$OMP map(tofrom: UIout) &
+   !$OMP map(to: CPs(1:3,1:size(CPs,2)), Part(1:3,1:size(Part,2)), Alpha(1:3,1:size(Alpha,2)), RegParam(1:size(RegParam))) &
+   !$OMP map(tofrom: UIout(1:3,1:size(UIout,2))) &
    !$OMP private(icp,ip, DP, UItmp)
    do icp=1,nCPs ! loop on CPs 
       do ip=1,nPart ! loop on particles
@@ -427,8 +427,8 @@ subroutine ui_quad_n1(CPs, nCPs, P1, P2, P3, P4, Gamm, RegFunction, RegParam, Ui
    integer                :: icp
    ! 
    !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-   !$OMP map(to: CPs, P1, P2, P3, P4) &
-   !$OMP map(tofrom: Uind) &
+   !$OMP map(to: CPs(1:3,1:size(CPs,2)), P1, P2, P3, P4) &
+   !$OMP map(tofrom: Uind(1:3,1:size(Uind,2))) &
    !$OMP private(icp,CP,Uindtmp,DP1,DP2)
    do icp=1,nCPs
       CP(1:3)=CPs(1:3,icp)
