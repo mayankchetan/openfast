@@ -32,6 +32,7 @@ contains
 
 !> Induced velocity from one segment at one control points
 subroutine ui_seg_11(DeltaPa, DeltaPb, SegGamma, RegFunction, RegParam1, Uind)
+   !$OMP DECLARE TARGET
    ! Input/output arguments 
    real(ReKi), dimension(3), intent(in) :: DeltaPa    !< 3 x 1   Pcp-P1  [m]
    real(ReKi), dimension(3), intent(in) :: DeltaPb    !< 3 x 1   Pcp-P2  [m]
@@ -147,8 +148,10 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
    !       The only thing changing is the part labelled "regularization"
    select case (RegFunction) 
    case ( idRegNone ) ! No vortex core 
-      !$OMP PARALLEL default(shared)
-      !$OMP do private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb) schedule(runtime)
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
+      !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
          CPs_icp = CPs(:,icp)
@@ -177,12 +180,13 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
          end do ! Loop on segments
          Uind_out(1:3,icp) = Uind_out(1:3,icp)+Uind(1:3)
       enddo ! Loop on control points
-      !$OMP END DO 
-      !$OMP END PARALLEL
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
       
    case ( idRegRankine )      ! Rankine
-      !$OMP PARALLEL default(shared)
-      !$OMP do private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb) schedule(runtime)
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
+      !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
          CPs_icp = CPs(:,icp)
@@ -217,12 +221,13 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
          end do ! Loop on segments
          Uind_out(1:3,icp) = Uind_out(1:3,icp) + Uind(1:3)
       enddo ! Loop on control points
-      !$OMP END DO 
-      !$OMP END PARALLEL
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 
    case ( idRegLambOseen )      ! LambOseen
-      !$OMP PARALLEL default(shared)
-      !$OMP do private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb,exp_value) schedule(runtime)
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
+      !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb,exp_value)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
          CPs_icp = CPs(:,icp)
@@ -258,12 +263,13 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
          end do ! Loop on segments
          Uind_out(1:3,icp) = Uind_out(1:3,icp) + Uind(1:3)
       enddo ! Loop on control points
-      !$OMP END DO 
-      !$OMP END PARALLEL
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 
    case ( idRegVatistas )      ! Vatistas n=2
-      !$OMP PARALLEL default(shared)
-      !$OMP do private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb) schedule(runtime)
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
+      !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind = 0.0_ReKi
          CPs_icp = CPs(:,icp)
@@ -294,12 +300,13 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
          end do ! Loop on segments
          Uind_out(1:3,icp) = Uind_out(1:3,icp) + Uind(1:3)
       enddo ! Loop on control points
-      !$OMP END DO 
-      !$OMP END PARALLEL
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 
    case ( idRegOffset )      ! Denominator offset
-      !$OMP PARALLEL default(shared)
-      !$OMP do private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb) schedule(runtime)
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:size(CPs,2)), SegPoints(1:3,1:size(SegPoints,2)), SegConnct(1:size(SegConnct,1),1:size(SegConnct,2)), SegGamma(1:size(SegGamma)), RegParam(1:size(RegParam))) &
+      !$OMP map(tofrom: Uind_out(1:3,1:size(Uind_out,2))) &
+      !$OMP private(icp,is,CPs_icp,Uind,P1,P2,crossprod,denominator,r_bar2,Kv,norm_a,norm_b,norm2_r0,norm2_orth,xa,ya,za,xb,yb,zb)
       do icp=iCPStart,iCPEnd ! loop on CPs 
          Uind      = 0.0_ReKi
          CPs_icp = CPs(:,icp)
@@ -328,8 +335,7 @@ subroutine ui_seg(iCPStart, iCPEnd, CPs, &
          end do ! Loop on segments
          Uind_out(1:3,icp) = Uind_out(1:3,icp)+Uind(1:3)
       enddo ! Loop on control points
-      !$OMP END DO 
-      !$OMP END PARALLEL
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
    case default
       print*,'[ERROR] Unknown RegFunction for segment',RegFunction
       STOP
@@ -350,8 +356,10 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp,ip, DP, UItmp) schedule(runtime)
+   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+   !$OMP map(to: CPs(1:3,1:size(CPs,2)), Part(1:3,1:size(Part,2)), Alpha(1:3,1:size(Alpha,2)), RegParam(1:size(RegParam))) &
+   !$OMP map(tofrom: UIout(1:3,1:size(UIout,2))) &
+   !$OMP private(icp,ip, DP, UItmp)
    do icp=1,nCPs ! loop on CPs 
       do ip=1,nPart ! loop on particles
          UItmp(1:3) = 0.0_ReKi
@@ -360,12 +368,12 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
          UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
       enddo! loop on particles
    enddo ! loop CPs
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
 subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
+   !$OMP DECLARE TARGET
    real(ReKi), dimension(3), intent(out) :: Ui          !< no side effects
    real(ReKi), dimension(3), intent(in)  :: DeltaP      !< CP-PP "control point - particle point"
    real(ReKi), dimension(3), intent(in)  :: Alpha       !< Particle intensity [m^2/s] alpha=om.dV
@@ -418,8 +426,10 @@ subroutine ui_quad_n1(CPs, nCPs, P1, P2, P3, P4, Gamm, RegFunction, RegParam, Ui
    real(ReKi), dimension(3) :: DP2     !< 
    integer                :: icp
    ! 
-   !OMP PARALLEL DEFAULT(SHARED)
-   !OMP DO PRIVATE(icp,CP,Uindtmp,DP1,DP2) schedule(runtime)
+   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+   !$OMP map(to: CPs(1:3,1:size(CPs,2)), P1, P2, P3, P4) &
+   !$OMP map(tofrom: Uind(1:3,1:size(Uind,2))) &
+   !$OMP private(icp,CP,Uindtmp,DP1,DP2)
    do icp=1,nCPs
       CP(1:3)=CPs(1:3,icp)
       ! 1-2 segment
@@ -439,12 +449,12 @@ subroutine ui_quad_n1(CPs, nCPs, P1, P2, P3, P4, Gamm, RegFunction, RegParam, Ui
       call ui_seg_11 ( DP1, DP2, Gamm, RegFunction, RegParam, Uindtmp)
       Uind(1:3,icp) = Uind(1:3,icp)+Uindtmp(1:3)
    end do  ! loop on CPs
-   !OMP END DO 
-   !OMP END PARALLEL
+   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 end subroutine  ui_quad_n1
 
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
+   !$OMP DECLARE TARGET
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -591,8 +601,10 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
+   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+   !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+   !$OMP map(tofrom: UI(1:3,1:nCPs)) &
+   !$OMP private(icp, Uind_cum, Uind_tmp, ip)
    do icp=1,nCPs ! loop on Control Points
       Uind_cum = 0.0_ReKi
       do ip=1,nPanels !loop on panels 
@@ -601,11 +613,11 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
       enddo
       UI(1:3,icp) = UI(1:3,icp) + Uind_cum
    end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
+  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
   if ( abs(val)>PRECISION_EPS ) then
