@@ -602,8 +602,8 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
    !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-   !$OMP map(to: CPs(1:3,1:size(CPs,2)), Sigmas(1:size(Sigmas)), xi(1:4,1:size(xi,2)), eta(1:4,1:size(eta,2)), RefPoint(1:3,1:size(RefPoint,2)), R_g2p(1:3,1:3,1:size(R_g2p,3))) &
-   !$OMP map(tofrom: UI(1:3,1:size(UI,2))) &
+   !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+   !$OMP map(tofrom: UI(1:3,1:nCPs)) &
    !$OMP private(icp, Uind_cum, Uind_tmp, ip)
    do icp=1,nCPs ! loop on Control Points
       Uind_cum = 0.0_ReKi
