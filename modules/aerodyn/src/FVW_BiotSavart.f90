@@ -338,46 +338,55 @@ end subroutine ui_seg
 
 !> Induced velocity from `nPart` particles at `nCPs` control points. The velocity gradient is not computed
 subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, UIout)
-   integer(IntKi),               intent(in)    :: nCPs        !< Number of control points to use (nCPs<=size(CPs,2))
-   integer(IntKi),               intent(in)    :: nPart       !< Number of particles to use (nPart<=size(Part,2))
-   real(ReKi), dimension(:,:),   intent(in)    :: CPs         !< Control points (3 x nCPs+)
-   real(ReKi), dimension(:,:),   intent(inout) :: UIout       !< Induced velocity, with side effects! (3 x nCPs+)
-   real(ReKi), dimension(:,:),   intent(in)    :: Part        !< Particle positions (3 x nPart+)
-   real(ReKi), dimension(:,:),   intent(in)    :: Alpha       !< Particle intensity [m^3/s] (3 x nPart+) omega dV= alpha
-   integer(IntKi),               intent(in)    :: RegFunction !< Regularization function 
-   real(ReKi), dimension(:),     intent(in)    :: RegParam    !< Regularization parameter (nPart+)
+   integer(IntKi),                  intent(in)    :: nCPs        !< Number of control points to use (nCPs<=size(CPs,2))
+   integer(IntKi),                  intent(in)    :: nPart       !< Number of particles to use (nPart<=size(Part,2))
+   real(ReKi), dimension(3,nCPs),   intent(in)    :: CPs         !< Control points (3 x nCPs+)
+   real(ReKi), dimension(3,nCPs),   intent(inout) :: UIout       !< Induced velocity, with side effects! (3 x nCPs+)
+   real(ReKi), dimension(3,nPart),  intent(in)    :: Part        !< Particle positions (3 x nPart+)
+   real(ReKi), dimension(3,nPart),  intent(in)    :: Alpha       !< Particle intensity [m^3/s] (3 x nPart+) omega dV= alpha
+   integer(IntKi),                  intent(in)    :: RegFunction !< Regularization function
+   real(ReKi), dimension(nPart),    intent(in)    :: RegParam    !< Regularization parameter (nPart+)
    real(ReKi), dimension(3) :: UItmp   !< 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
    ! TODO: inlining of regularization
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp,ip, DP, UItmp) schedule(runtime)
-   do icp=1,nCPs ! loop on CPs 
-      do ip=1,nPart ! loop on particles
-         UItmp(1:3) = 0.0_ReKi
-         DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
-         call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
-         UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
-      enddo! loop on particles
-   enddo ! loop CPs
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (nCPs > 0 .and. nPart > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP& map(to: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
+      !$OMP& map(tofrom: UIout(1:3, 1:nCPs)) &
+      !$OMP& firstprivate(RegFunction) &
+      !$OMP& PRIVATE(icp,ip, DP, UItmp)
+      do icp=1,nCPs ! loop on CPs
+         do ip=1,nPart ! loop on particles
+            UItmp(1:3) = 0.0_ReKi
+            DP(1:3)    = CPs(1:3,icp)-Part(1:3,ip)
+            call ui_part_nograd_11(DP, Alpha(1:3,ip), RegFunction , RegParam(ip), UItmp)
+            UIout(1:3,icp)=UIout(1:3,icp)+UItmp(1:3)
+         enddo! loop on particles
+      enddo ! loop CPs
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_part_nograd
 
 !> Induced velocity from 1 particle at 1 control point. The velocity gradient is not computed
 subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
+   !$OMP DECLARE TARGET
    real(ReKi), dimension(3), intent(out) :: Ui          !< no side effects
    real(ReKi), dimension(3), intent(in)  :: DeltaP      !< CP-PP "control point - particle point"
    real(ReKi), dimension(3), intent(in)  :: Alpha       !< Particle intensity [m^2/s] alpha=om.dV
-   integer(IntKi),           intent(in)  :: RegFunction !< 
-   real(ReKi),               intent(in)  :: RegParam    !< 
+   integer(IntKi), value,    intent(in)  :: RegFunction !<
+   real(ReKi),     value,    intent(in)  :: RegParam    !<
    real(ReKi),dimension(3) :: C          !< Cross product of Alpha and r
    real(ReKi)              :: E          !< Exponential poart for the mollifider
    real(ReKi)              :: r3_inv     !< 
    real(ReKi)              :: rDeltaP    !< norm , distance between point and particle
    real(ReKi)              :: ScalarPart !< the part containing the inverse of the distance, but not 4pi, Mollifier
+   ! Local copy of module parameters for device offloading
+   real(ReKi), parameter   :: MINNORM_loc    = 1e-4
+   real(ReKi), parameter   :: fourpi_inv_loc = 0.25_ReKi / ACOS(-1.0_Reki )
+
    rDeltaP=sqrt(DeltaP(1)**2+ DeltaP(2)**2+ DeltaP(3)**2)! norm
-   if (rDeltaP<MINNORM) then !--- Exactly on the Singularity 
+   if (rDeltaP<MINNORM_loc) then !--- Exactly on the Singularity
       Ui(1:3)  = 0.0_ReKi
       return
    else !--- Normal Procedure 
@@ -387,14 +396,14 @@ subroutine ui_part_nograd_11(DeltaP, Alpha, RegFunction, RegParam, Ui)
       select case (RegFunction) !
       case (idRegNone) ! No mollification
          r3_inv     = 1._ReKi/(rDeltaP**3)
-         ScalarPart = r3_inv*fourpi_inv
+         ScalarPart = r3_inv*fourpi_inv_loc
       case (idRegExp) ! Exponential mollifier
          r3_inv     = 1._ReKi/(rDeltaP**3)
          E          = exp(-rDeltaP**3/RegParam**3)
-         ScalarPart = (1._ReKi-E)*r3_inv*fourpi_inv
+         ScalarPart = (1._ReKi-E)*r3_inv*fourpi_inv_loc
       case (idRegCompact) ! Compact support
          r3_inv     = 1._ReKi/sqrt(RegParam**6+rDeltaP**6)
-         ScalarPart = r3_inv*fourpi_inv
+         ScalarPart = r3_inv*fourpi_inv_loc
       case default 
          print*,'[ERROR] Wrong regularization function for particles',RegFunction
          STOP
@@ -445,7 +454,8 @@ end subroutine  ui_quad_n1
 
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
-   real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
+   !$OMP DECLARE TARGET
+   real(ReKi), value,          intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
    real(ReKi), dimension(3),   intent(in)  :: RefPoint   !< Coordinate of panel origin in ref coordinates
@@ -453,6 +463,8 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
+   real(ReKi),parameter       :: fourpi_loc     =  4.00_ReKi * ACOS(-1.0_Reki )
+   real(ReKi),parameter       :: Pi_loc         =  ACOS(-1.0_Reki )
    real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
@@ -526,55 +538,58 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    endif
    ! --- Tan term 
    ! 12
-   if (EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_loc(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
+         TAN12=Pi_loc*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
    endif
    ! 23
-   if (EqualRealNos(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_loc(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
+         TAN23=Pi_loc*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
    endif 
    ! 34
-   if (EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_loc(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
+         TAN34=Pi_loc*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
    endif
    ! 41
-   if (EqualRealNos(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_loc(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
+         TAN41=Pi_loc*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
    endif
    ! --- Velocity  in Panel frame
-   Vp(1)= Sigma/(fourpi)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
-   Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
-   Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
+   Vp(1)= Sigma/(fourpi_loc)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
+   Vp(2)= Sigma/(fourpi_loc)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
+   Vp(3)= Sigma/(fourpi_loc)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   ! Manual multiplication to avoid matmul/transpose intrinsics on device
+   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
+   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
+   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
@@ -591,28 +606,49 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP& map(to: CPs(1:3, 1:nCPs), Sigmas(1:nPanels), xi(1:4, 1:nPanels), eta(1:4, 1:nPanels)) &
+      !$OMP& map(to: RefPoint(1:3, 1:nPanels), R_g2p(1:3, 1:3, 1:nPanels)) &
+      !$OMP& map(tofrom: UI(1:3, 1:nCPs)) &
+      !$OMP& PRIVATE(icp, Uind_cum, Uind_tmp, ip)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
+  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>PRECISION_EPS ) then
+  real(ReKi),parameter :: PRECISION_EPS_loc =  epsilon(1.0_ReKi)
+  if ( abs(val)>PRECISION_EPS_loc ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
   endif
 endfunction
+
+elemental logical function EqualRealNos_loc(ReNum1, ReNum2)
+   !$OMP DECLARE TARGET
+   real(ReKi), intent(in) :: ReNum1, ReNum2
+   real(ReKi) :: Fraction
+   real(ReKi), parameter :: Eps = EPSILON(1.0_ReKi)
+   real(ReKi), parameter :: Tol = 100.0_ReKi*Eps / 2.0_ReKi
+
+   Fraction = MAX( ABS(ReNum1+ReNum2), 1.0_ReKi )
+   if ( ABS(ReNum1 - ReNum2) <= Fraction*Tol ) then
+      EqualRealNos_loc = .TRUE.
+   else
+      EqualRealNos_loc = .FALSE.
+   endif
+end function
 
 end module FVW_BiotSavart
