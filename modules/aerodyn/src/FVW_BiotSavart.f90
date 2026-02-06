@@ -338,14 +338,14 @@ end subroutine ui_seg
 
 !> Induced velocity from `nPart` particles at `nCPs` control points. The velocity gradient is not computed
 subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, UIout)
-   integer(IntKi),               intent(in)    :: nCPs        !< Number of control points to use (nCPs<=size(CPs,2))
-   integer(IntKi),               intent(in)    :: nPart       !< Number of particles to use (nPart<=size(Part,2))
-   real(ReKi), dimension(:,:),   intent(in)    :: CPs         !< Control points (3 x nCPs+)
-   real(ReKi), dimension(:,:),   intent(inout) :: UIout       !< Induced velocity, with side effects! (3 x nCPs+)
-   real(ReKi), dimension(:,:),   intent(in)    :: Part        !< Particle positions (3 x nPart+)
-   real(ReKi), dimension(:,:),   intent(in)    :: Alpha       !< Particle intensity [m^3/s] (3 x nPart+) omega dV= alpha
-   integer(IntKi),               intent(in)    :: RegFunction !< Regularization function 
-   real(ReKi), dimension(:),     intent(in)    :: RegParam    !< Regularization parameter (nPart+)
+   integer(IntKi),                  intent(in)    :: nCPs        !< Number of control points to use (nCPs<=size(CPs,2))
+   integer(IntKi),                  intent(in)    :: nPart       !< Number of particles to use (nPart<=size(Part,2))
+   real(ReKi), dimension(3,nCPs),   intent(in)    :: CPs         !< Control points (3 x nCPs+)
+   real(ReKi), dimension(3,nCPs),   intent(inout) :: UIout       !< Induced velocity, with side effects! (3 x nCPs+)
+   real(ReKi), dimension(3,nPart),  intent(in)    :: Part        !< Particle positions (3 x nPart+)
+   real(ReKi), dimension(3,nPart),  intent(in)    :: Alpha       !< Particle intensity [m^3/s] (3 x nPart+) omega dV= alpha
+   integer(IntKi),                  intent(in)    :: RegFunction !< Regularization function
+   real(ReKi), dimension(nPart),    intent(in)    :: RegParam    !< Regularization parameter (nPart+)
    real(ReKi), dimension(3) :: UItmp   !< 
    real(ReKi), dimension(3) :: DP      !< 
    integer :: icp,ip
