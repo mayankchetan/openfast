@@ -4,5 +4,7 @@
 2.  Module-level `PARAMETER`s (constants) should be redefined locally within the device subroutine (or passed as arguments) to avoid implicit mapping issues or runtime SIGFPE errors.
 3.  Assumed-shape arrays (`dimension(:,:)`) must be avoided in subroutines called from target regions, especially with `gfortran`. Explicit-shape arrays (`dimension(3,N)`) passed with integer bounds prevent descriptor mapping failures (Exit Code 8).
 4.  External module procedures cannot be called from device regions unless they are compiled with `!$OMP DECLARE TARGET`. If modifying the external module is not feasible, re-implement the function locally with the directive.
+5.  Avoid Fortran intrinsics like `MATMUL` and `TRANSPOSE` inside `TARGET` regions, as they may call library functions not available on the device. Use manual loops or explicit arithmetic instead.
+6.  Explicitly map scalar variables (e.g., `firstprivate(RegFunction)`) when they are `intent(in)` to the kernel wrapper but used as values inside the parallel region, to prevent implicit mapping errors.
 
-**Action:** Always refactor subroutines to use explicit-shape arrays when enabling OpenMP offloading on existing Fortran codebases.
+**Action:** Always refactor subroutines to use explicit-shape arrays and avoid problematic intrinsics when enabling OpenMP offloading on existing Fortran codebases.

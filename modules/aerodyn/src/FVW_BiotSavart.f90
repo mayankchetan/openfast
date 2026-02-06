@@ -354,6 +354,7 @@ subroutine ui_part_nograd(nCPS, CPs, nPart, Part, Alpha, RegFunction, RegParam, 
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
       !$OMP& map(to: CPs(1:3, 1:nCPs), Part(1:3, 1:nPart), Alpha(1:3, 1:nPart), RegParam(1:nPart)) &
       !$OMP& map(tofrom: UIout(1:3, 1:nCPs)) &
+      !$OMP& firstprivate(RegFunction) &
       !$OMP& PRIVATE(icp,ip, DP, UItmp)
       do icp=1,nCPs ! loop on CPs
          do ip=1,nPart ! loop on particles
@@ -585,7 +586,10 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(2)= Sigma/(fourpi_loc)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
    Vp(3)= Sigma/(fourpi_loc)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   ! Manual multiplication to avoid matmul/transpose intrinsics on device
+   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
+   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
+   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
