@@ -2,7 +2,7 @@
 !! NOTE: these functions should be independent of the framework types
 module FVW_BiotSavart 
 
-   use NWTC_Library, only: ReKi, IntKi, Pi
+   use NWTC_Library, only: ReKi, IntKi, Pi, EqualRealNos
    use OMP_LIB
 
    implicit none
@@ -456,7 +456,8 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
    real(ReKi),parameter       :: Pi_loc = acos(-1.0_ReKi)
    real(ReKi),parameter       :: FourPi_loc = 4.0_ReKi * Pi_loc
-   real(ReKi), dimension(3,3) :: tA                         !< 
+   real(ReKi),parameter       :: Eps_loc = epsilon(1.0_ReKi)
+   real(ReKi),parameter       :: Tol_Equal = 100.0_ReKi*Eps_loc / 2.0_ReKi
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -532,45 +533,45 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    endif
    ! --- Tan term 
    ! 12
-   if (EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   if (abs(xi2-xi1) <= max(abs(xi2+xi1), 1.0_ReKi) * Tol_Equal) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=Pi_loc*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
+         TAN12=Pi_loc*aint((merge(sign(1.0_ReKi, (m12*e1-h1)), 1.0_ReKi, abs((m12*e1-h1)) > Eps_loc) - merge(sign(1.0_ReKi, (m12*e2-h2)), 1.0_ReKi, abs((m12*e2-h2)) > Eps_loc))/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
    endif
    ! 23
-   if (EqualRealNos(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (abs(xi3-xi2) <= max(abs(xi3+xi2), 1.0_ReKi) * Tol_Equal) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=Pi_loc*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
+         TAN23=Pi_loc*aint((merge(sign(1.0_ReKi, (m23*e2-h2)), 1.0_ReKi, abs((m23*e2-h2)) > Eps_loc) - merge(sign(1.0_ReKi, (m23*e3-h3)), 1.0_ReKi, abs((m23*e3-h3)) > Eps_loc))/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
    endif 
    ! 34
-   if (EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (abs(xi4-xi3) <= max(abs(xi4+xi3), 1.0_ReKi) * Tol_Equal) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=Pi_loc*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
+         TAN34=Pi_loc*aint((merge(sign(1.0_ReKi, (m34*e3-h3)), 1.0_ReKi, abs((m34*e3-h3)) > Eps_loc) - merge(sign(1.0_ReKi, (m34*e4-h4)), 1.0_ReKi, abs((m34*e4-h4)) > Eps_loc))/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
    endif
    ! 41
-   if (EqualRealNos(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (abs(xi1-xi4) <= max(abs(xi1+xi4), 1.0_ReKi) * Tol_Equal) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=Pi_loc*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
+         TAN41=Pi_loc*aint((merge(sign(1.0_ReKi, (m41*e4-h4)), 1.0_ReKi, abs((m41*e4-h4)) > Eps_loc) - merge(sign(1.0_ReKi, (m41*e1-h1)), 1.0_ReKi, abs((m41*e1-h1)) > Eps_loc))/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
@@ -620,33 +621,13 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
-  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  real(ReKi), parameter :: PRECISION_EPS_LOC = epsilon(1.0_ReKi)
-  if ( abs(val)>PRECISION_EPS_LOC ) then
+  if ( abs(val)>PRECISION_EPS ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
   endif
 endfunction
-
-!> This function compares two real numbers and determines if they
-!! are "almost" equal, i.e. within some relative tolerance.
-pure function EqualRealNos(val1, val2)
-   !$OMP DECLARE TARGET
-   real(ReKi), intent(in) :: val1, val2
-   logical :: EqualRealNos
-   real(ReKi) :: Fraction
-   real(ReKi), parameter :: Eps = epsilon(1.0_ReKi)
-   real(ReKi), parameter :: Tol = 100.0_ReKi*Eps / 2.0_ReKi
-
-   Fraction = max( abs(val1+val2), 1.0_ReKi )
-   if ( abs(val1 - val2) <= Fraction*Tol ) then
-      EqualRealNos = .true.
-   else
-      EqualRealNos = .false.
-   end if
-end function EqualRealNos
 
 end module FVW_BiotSavart
