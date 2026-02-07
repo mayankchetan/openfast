@@ -1,0 +1,3 @@
+## 2024-05-23 - Fortran OpenMP Offloading Pitfalls
+**Learning:** `gfortran` OpenMP offloading is extremely sensitive to intrinsics (`matmul`, `transpose`) and external module procedures. Intrinsics often cause runtime crashes (Exit Code 8) due to missing device libraries. External procedures like `EqualRealNos` from libraries must be redefined locally and marked `!$OMP DECLARE TARGET` to work on device. Also, accessing module `PARAMETER`s directly on device can crash; local redefinition is safer.
+**Action:** Always replace `matmul`/`transpose` with manual loops in offloaded kernels. Locally define helper functions and mark them `!$OMP DECLARE TARGET`. Redefine critical parameters locally within device subroutines.

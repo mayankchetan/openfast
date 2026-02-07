@@ -2,7 +2,7 @@
 !! NOTE: these functions should be independent of the framework types
 module FVW_BiotSavart 
 
-   use NWTC_Library, only: ReKi, IntKi, Pi, EqualRealNos
+   use NWTC_Library, only: ReKi, IntKi, Pi
    use OMP_LIB
 
    implicit none
@@ -445,6 +445,7 @@ end subroutine  ui_quad_n1
 
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
+   !$OMP DECLARE TARGET
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -482,7 +483,10 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
 
    ! transform control points in panel coordinate system using matrix 
    DP(1:3) = CP(1:3)-RefPoint(1:3)
-   DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   !DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   DPp(1) = R_g2p(1,1)*DP(1) + R_g2p(1,2)*DP(2) + R_g2p(1,3)*DP(3)
+   DPp(2) = R_g2p(2,1)*DP(1) + R_g2p(2,2)*DP(2) + R_g2p(2,3)*DP(3)
+   DPp(3) = R_g2p(3,1)*DP(1) + R_g2p(3,2)*DP(2) + R_g2p(3,3)*DP(3)
    ! scalars
    r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
    r2 = sqrt((DPp(1)-xi2)**2 + (DPp(2)-eta2)**2 + DPp(3)**2)
@@ -574,7 +578,10 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
    Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   !UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
+   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
+   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
@@ -591,28 +598,53 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), RefPoint(1:3,1:nPanels), &
+      !$OMP         xi(1:4,1:nPanels), eta(1:4,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+      !$OMP MAP(tofrom: UI(1:3,1:nCPs)) &
+      !$OMP FIRSTPRIVATE(nCPs, nPanels) &
+      !$OMP PRIVATE(icp, ip, Uind_cum, Uind_tmp)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   end if
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
+  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>PRECISION_EPS ) then
+  real(ReKi), parameter :: PRECISION_EPS_LOC = epsilon(1.0_ReKi)
+  if ( abs(val)>PRECISION_EPS_LOC ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
   endif
 endfunction
+
+!> This function compares two real numbers and determines if they
+!! are "almost" equal, i.e. within some relative tolerance.
+pure function EqualRealNos(val1, val2)
+   !$OMP DECLARE TARGET
+   real(ReKi), intent(in) :: val1, val2
+   logical :: EqualRealNos
+   real(ReKi) :: Fraction
+   real(ReKi), parameter :: Eps = epsilon(1.0_ReKi)
+   real(ReKi), parameter :: Tol = 100.0_ReKi*Eps / 2.0_ReKi
+
+   Fraction = max( abs(val1+val2), 1.0_ReKi )
+   if ( abs(val1 - val2) <= Fraction*Tol ) then
+      EqualRealNos = .true.
+   else
+      EqualRealNos = .false.
+   end if
+end function EqualRealNos
 
 end module FVW_BiotSavart
