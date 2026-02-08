@@ -454,7 +454,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -614,6 +613,7 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
       !$OMP MAP(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
       !$OMP MAP(tofrom: UI(1:3,1:nCPs)) &
+      !$OMP FIRSTPRIVATE(nCPs, nPanels) &
       !$OMP PRIVATE(icp, Uind_cum, Uind_tmp, ip)
       do icp=1,nCPs ! loop on Control Points
          Uind_cum = 0.0_ReKi
