@@ -445,6 +445,7 @@ end subroutine  ui_quad_n1
 
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
+   !$OMP DECLARE TARGET
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -453,7 +454,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -466,6 +466,12 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: Vp                         !< 
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
+   real(ReKi), parameter      :: local_Pi = 3.141592653589793238462643383279502884197_ReKi !<
+   real(ReKi), parameter      :: Local_EPS = epsilon(1.0_ReKi) !<
+   real(ReKi), parameter      :: Tol       = 100.0_ReKi*Local_EPS / 2.0_ReKi !<
+   real(ReKi)                 :: val_signit
+   integer                    :: i, j
+   ! local_Pi = ACOS(-1.0_ReKi) ! Replaced with parameter to avoid intrinsic call on device
    xi1=xi(1)
    xi2=xi(2)
    xi3=xi(3)
@@ -482,7 +488,15 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
 
    ! transform control points in panel coordinate system using matrix 
    DP(1:3) = CP(1:3)-RefPoint(1:3)
-   DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   ! DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   ! Manual multiplication for OpenMP offload compatibility
+   do i = 1, 3
+      DPp(i) = 0.0_ReKi
+      do j = 1, 3
+         DPp(i) = DPp(i) + R_g2p(i,j) * DP(j)
+      end do
+   end do
+
    ! scalars
    r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
    r2 = sqrt((DPp(1)-xi2)**2 + (DPp(2)-eta2)**2 + DPp(3)**2)
@@ -526,45 +540,74 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    endif
    ! --- Tan term 
    ! 12
-   if (EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   ! Inline EqualRealNos: ABS(ReNum1 - ReNum2) <= MAX( ABS(ReNum1+ReNum2), 1.0_ReKi ) * Tol
+   if (ABS(xi2 - xi1) <= MAX(ABS(xi2+xi1), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m12*e1-h1
+         val_signit = m12*e1-h1
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN12 = val_signit
+         ! Inline signit for m12*e2-h2
+         val_signit = m12*e2-h2
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN12=local_Pi*aint((TAN12 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
    endif
    ! 23
-   if (EqualRealNos(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (ABS(xi3 - xi2) <= MAX(ABS(xi3+xi2), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m23*e2-h2
+         val_signit = m23*e2-h2
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN23 = val_signit
+         ! Inline signit for m23*e3-h3
+         val_signit = m23*e3-h3
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN23=local_Pi*aint((TAN23 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
    endif 
    ! 34
-   if (EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (ABS(xi4 - xi3) <= MAX(ABS(xi4+xi3), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m34*e3-h3
+         val_signit = m34*e3-h3
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN34 = val_signit
+         ! Inline signit for m34*e4-h4
+         val_signit = m34*e4-h4
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN34=local_Pi*aint((TAN34 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
    endif
    ! 41
-   if (EqualRealNos(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (ABS(xi1 - xi4) <= MAX(ABS(xi1+xi4), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m41*e4-h4
+         val_signit = m41*e4-h4
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN41 = val_signit
+         ! Inline signit for m41*e1-h1
+         val_signit = m41*e1-h1
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN41=local_Pi*aint((TAN41 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
@@ -574,7 +617,14 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
    Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   ! UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   ! Manual multiplication for OpenMP offload compatibility: UI = transpose(R_g2p) * Vp
+   do i = 1, 3
+      UI(i) = 0.0_ReKi
+      do j = 1, 3
+         UI(i) = UI(i) + R_g2p(j,i) * Vp(j)
+      end do
+   end do
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
@@ -591,18 +641,22 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+      !$OMP MAP(tofrom: UI(1:3,1:nCPs)) &
+      !$OMP FIRSTPRIVATE(nCPs, nPanels) &
+      !$OMP PRIVATE(icp, Uind_cum, Uind_tmp, ip)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
