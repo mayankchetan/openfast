@@ -467,9 +467,9 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: Vp                         !< 
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
-   real(ReKi)                 :: local_Pi                   !<
+   real(ReKi), parameter      :: local_Pi = 3.141592653589793238462643383279502884197_ReKi !<
    integer                    :: i, j
-   local_Pi = ACOS(-1.0_ReKi)
+   ! local_Pi = ACOS(-1.0_ReKi) ! Replaced with parameter to avoid intrinsic call on device
    xi1=xi(1)
    xi2=xi(2)
    xi3=xi(3)
@@ -644,7 +644,7 @@ PURE FUNCTION local_EqualRealNos ( ReNum1, ReNum2 )
    REAL(ReKi), INTENT(IN )         :: ReNum1
    REAL(ReKi), INTENT(IN )         :: ReNum2
    LOGICAL                         :: local_EqualRealNos
-   REAL(ReKi), PARAMETER           :: Eps = EPSILON(ReNum1)
+   REAL(ReKi), PARAMETER           :: Eps = EPSILON(1.0_ReKi)
    REAL(ReKi), PARAMETER           :: Tol = 100.0_ReKi*Eps / 2.0_ReKi
    REAL(ReKi)                      :: Fraction
 
