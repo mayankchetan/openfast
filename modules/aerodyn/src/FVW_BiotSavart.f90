@@ -467,6 +467,9 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
    real(ReKi), parameter      :: local_Pi = 3.141592653589793238462643383279502884197_ReKi !<
+   real(ReKi), parameter      :: Local_EPS = epsilon(1.0_ReKi) !<
+   real(ReKi), parameter      :: Tol       = 100.0_ReKi*Local_EPS / 2.0_ReKi !<
+   real(ReKi)                 :: val_signit
    integer                    :: i, j
    ! local_Pi = ACOS(-1.0_ReKi) ! Replaced with parameter to avoid intrinsic call on device
    xi1=xi(1)
@@ -537,45 +540,74 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    endif
    ! --- Tan term 
    ! 12
-   if (local_EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   ! Inline EqualRealNos: ABS(ReNum1 - ReNum2) <= MAX( ABS(ReNum1+ReNum2), 1.0_ReKi ) * Tol
+   if (ABS(xi2 - xi1) <= MAX(ABS(xi2+xi1), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=local_Pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m12*e1-h1
+         val_signit = m12*e1-h1
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN12 = val_signit
+         ! Inline signit for m12*e2-h2
+         val_signit = m12*e2-h2
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN12=local_Pi*aint((TAN12 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
    endif
    ! 23
-   if (local_EqualRealNos(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (ABS(xi3 - xi2) <= MAX(ABS(xi3+xi2), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=local_Pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m23*e2-h2
+         val_signit = m23*e2-h2
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN23 = val_signit
+         ! Inline signit for m23*e3-h3
+         val_signit = m23*e3-h3
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN23=local_Pi*aint((TAN23 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
    endif 
    ! 34
-   if (local_EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (ABS(xi4 - xi3) <= MAX(ABS(xi4+xi3), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=local_Pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m34*e3-h3
+         val_signit = m34*e3-h3
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN34 = val_signit
+         ! Inline signit for m34*e4-h4
+         val_signit = m34*e4-h4
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN34=local_Pi*aint((TAN34 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
    endif
    ! 41
-   if (local_EqualRealNos(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (ABS(xi1 - xi4) <= MAX(ABS(xi1+xi4), 1.0_ReKi) * Tol) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=local_Pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
+         ! Inline signit for m41*e4-h4
+         val_signit = m41*e4-h4
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN41 = val_signit
+         ! Inline signit for m41*e1-h1
+         val_signit = m41*e1-h1
+         if (abs(val_signit) > Local_EPS) then; val_signit = sign(1.0_ReKi, val_signit); else; val_signit = 1.0_ReKi; endif
+         TAN41=local_Pi*aint((TAN41 - val_signit)/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
@@ -628,32 +660,13 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
-  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  real(ReKi), parameter :: Local_EPS = epsilon(1.0_ReKi)
-  if ( abs(val)>Local_EPS ) then
+  if ( abs(val)>PRECISION_EPS ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
   endif
 endfunction
-
-PURE FUNCTION local_EqualRealNos ( ReNum1, ReNum2 )
-   !$OMP DECLARE TARGET
-   REAL(ReKi), INTENT(IN )         :: ReNum1
-   REAL(ReKi), INTENT(IN )         :: ReNum2
-   LOGICAL                         :: local_EqualRealNos
-   REAL(ReKi), PARAMETER           :: Eps = EPSILON(1.0_ReKi)
-   REAL(ReKi), PARAMETER           :: Tol = 100.0_ReKi*Eps / 2.0_ReKi
-   REAL(ReKi)                      :: Fraction
-
-   Fraction = MAX( ABS(ReNum1+ReNum2), 1.0_ReKi )
-   IF ( ABS(ReNum1 - ReNum2) <= Fraction*Tol ) THEN
-      local_EqualRealNos = .TRUE.
-   ELSE
-      local_EqualRealNos = .FALSE.
-   ENDIF
-END FUNCTION local_EqualRealNos
 
 end module FVW_BiotSavart
