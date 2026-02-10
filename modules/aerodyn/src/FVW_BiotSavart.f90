@@ -446,7 +446,7 @@ end subroutine  ui_quad_n1
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    !$OMP DECLARE TARGET
-   real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
+   real(ReKi), value,          intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
    real(ReKi), dimension(3),   intent(in)  :: RefPoint   !< Coordinate of panel origin in ref coordinates
@@ -466,7 +466,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: Vp                         !< 
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
-   real(ReKi), parameter      :: local_Pi = 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679_ReKi
+   real(ReKi), parameter      :: local_Pi = ACOS(-1.0_ReKi)
    real(ReKi), parameter      :: local_EPS = epsilon(1.0_ReKi)
 
    xi1=xi(1)
@@ -540,7 +540,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=local_Pi*aint((merge(sign(1.0_ReKi, (m12*e1-h1)), 1.0_ReKi, abs(m12*e1-h1)>local_EPS) - merge(sign(1.0_ReKi, (m12*e2-h2)), 1.0_ReKi, abs(m12*e2-h2)>local_EPS))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN12=local_Pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
@@ -552,7 +552,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=local_Pi*aint((merge(sign(1.0_ReKi, (m23*e2-h2)), 1.0_ReKi, abs(m23*e2-h2)>local_EPS) - merge(sign(1.0_ReKi, (m23*e3-h3)), 1.0_ReKi, abs(m23*e3-h3)>local_EPS))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN23=local_Pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
@@ -564,7 +564,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=local_Pi*aint((merge(sign(1.0_ReKi, (m34*e3-h3)), 1.0_ReKi, abs(m34*e3-h3)>local_EPS) - merge(sign(1.0_ReKi, (m34*e4-h4)), 1.0_ReKi, abs(m34*e4-h4)>local_EPS))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN34=local_Pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
@@ -576,7 +576,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=local_Pi*aint((merge(sign(1.0_ReKi, (m41*e4-h4)), 1.0_ReKi, abs(m41*e4-h4)>local_EPS) - merge(sign(1.0_ReKi, (m41*e1-h1)), 1.0_ReKi, abs(m41*e1-h1)>local_EPS))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN41=local_Pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
@@ -625,5 +625,17 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    endif
 end subroutine ui_quad_src_nn
 
+
+elemental real(ReKi) function signit(ref, val)
+   !$OMP DECLARE TARGET
+   real(ReKi), value, intent(in) ::ref
+   real(ReKi), value, intent(in) ::val
+   real(ReKi),parameter  :: PRECISION_EPS = epsilon(1.0_ReKi)
+   if ( abs(val)>PRECISION_EPS ) then
+       signit = sign(ref, val)
+   else
+       signit = 1.0_ReKi
+   endif
+endfunction
 
 end module FVW_BiotSavart
