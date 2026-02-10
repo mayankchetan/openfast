@@ -446,7 +446,7 @@ end subroutine  ui_quad_n1
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    !$OMP DECLARE TARGET
-   real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
+   real(ReKi), value,          intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
    real(ReKi), dimension(3),   intent(in)  :: RefPoint   !< Coordinate of panel origin in ref coordinates
@@ -454,7 +454,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -628,8 +627,8 @@ end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
   !$OMP DECLARE TARGET
-  real(ReKi),intent(in) ::ref
-  real(ReKi),intent(in) ::val
+  real(ReKi), value, intent(in) ::ref
+  real(ReKi), value, intent(in) ::val
   real(ReKi),parameter  :: PRECISION_EPS = epsilon(1.0_ReKi)
   if ( abs(val)>PRECISION_EPS ) then
       signit = sign(ref, val)
