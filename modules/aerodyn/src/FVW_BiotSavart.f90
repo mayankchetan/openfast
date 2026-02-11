@@ -599,17 +599,19 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO MAP(to: CPs, Sigmas, RefPoint, xi, eta, R_g2p) MAP(tofrom: UI) &
-   !$OMP PRIVATE(icp, Uind_cum, Uind_tmp, ip)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO MAP(to: CPs, Sigmas, RefPoint, xi, eta, R_g2p) MAP(tofrom: UI) &
+      !$OMP PRIVATE(icp, Uind_cum, Uind_tmp, ip)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
