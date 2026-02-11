@@ -454,7 +454,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi),parameter       :: local_Pi = acos(-1.0_ReKi)
+   real(ReKi),parameter       :: local_Pi = 3.141592653589793238462643383279502884197_ReKi
    real(ReKi),parameter       :: local_fourpi = 4.0_ReKi * local_Pi
    real(ReKi),parameter       :: local_PRECISION_EPS = epsilon(1.0_ReKi)
    real(ReKi),parameter       :: local_Tol = 100.0_ReKi * local_PRECISION_EPS / 2.0_ReKi
