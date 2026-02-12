@@ -774,7 +774,7 @@ end subroutine ui_quad_src_nn
 logical function EqualRealNos_local(ReNum1, ReNum2)
    !$OMP DECLARE TARGET
    real(ReKi), intent(in) :: ReNum1, ReNum2
-   real(ReKi), parameter :: Eps = epsilon(1.0_ReKi)
+   real(ReKi), parameter :: Eps = EPSILON(1.0_ReKi)
    real(ReKi), parameter :: Tol = 100.0_ReKi*Eps / 2.0_ReKi
    real(ReKi) :: Fraction
    Fraction = MAX( ABS(ReNum1+ReNum2), 1.0_ReKi )
@@ -789,7 +789,7 @@ elemental real(ReKi) function signit(ref, val)
    !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  real(ReKi),parameter  :: eps_local = epsilon(1.0_ReKi)
+  real(ReKi),parameter  :: eps_local = EPSILON(1.0_ReKi)
   if ( abs(val)>eps_local ) then
       signit = sign(ref, val)
   else
