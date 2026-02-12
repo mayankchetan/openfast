@@ -610,7 +610,7 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
 
    ! Local variables inlined from ui_quad_src_11
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi
-   real(ReKi),parameter       :: pi=3.1415926535897932384626433832795028841971_ReKi
+   real(ReKi),parameter       :: pi=ACOS(-1.0_ReKi)
    real(ReKi),parameter       :: fourpi=4.0_ReKi*pi
    real(ReKi)                 :: d12, d23, d34, d41
    real(ReKi)                 :: m12, m23, m34, m41
