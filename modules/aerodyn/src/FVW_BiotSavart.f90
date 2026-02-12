@@ -456,7 +456,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
    real(ReKi),parameter       :: pi=3.1415926535897932384626433832795028841971_ReKi
    real(ReKi),parameter       :: fourpi=4.0_ReKi*pi
-   real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -610,9 +609,9 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    integer    :: ip, icp     !< loop index
 
    if (nCPs > 0 .and. nPanels > 0) then
-      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO SIMD &
-      !$OMP MAP(to: CPs, Sigmas, RefPoint, xi, eta, R_g2p) &
-      !$OMP MAP(tofrom: UI) &
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), RefPoint(1:3,1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+      !$OMP MAP(tofrom: UI(1:3,1:nCPs)) &
       !$OMP FIRSTPRIVATE(nCPs, nPanels) &
       !$OMP PRIVATE(icp, ip, Uind_cum, Uind_tmp)
       do icp=1,nCPs ! loop on Control Points
@@ -623,7 +622,7 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
          enddo
          UI(1:3,icp) = UI(1:3,icp) + Uind_cum
       end do ! control points
-      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO SIMD
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
    end if
 end subroutine ui_quad_src_nn
 
@@ -645,7 +644,8 @@ elemental real(ReKi) function signit(ref, val)
    !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>PRECISION_EPS ) then
+  real(ReKi),parameter  :: eps_local = epsilon(1.0_ReKi)
+  if ( abs(val)>eps_local ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
