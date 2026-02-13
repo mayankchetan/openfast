@@ -484,7 +484,11 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
 
    ! transform control points in panel coordinate system using matrix 
    DP(1:3) = CP(1:3)-RefPoint(1:3)
-   DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   ! Transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   ! Manual inlining of matmul(R_g2p, DP) to avoid intrinsic issues on device
+   DPp(1) = R_g2p(1,1)*DP(1) + R_g2p(1,2)*DP(2) + R_g2p(1,3)*DP(3)
+   DPp(2) = R_g2p(2,1)*DP(1) + R_g2p(2,2)*DP(2) + R_g2p(2,3)*DP(3)
+   DPp(3) = R_g2p(3,1)*DP(1) + R_g2p(3,2)*DP(2) + R_g2p(3,3)*DP(3)
    ! scalars
    r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
    r2 = sqrt((DPp(1)-xi2)**2 + (DPp(2)-eta2)**2 + DPp(3)**2)
@@ -576,7 +580,10 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(2)= Sigma/(fourpi_local)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
    Vp(3)= Sigma/(fourpi_local)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   ! Manual inlining of matmul(transpose(R_g2p), Vp) to avoid intrinsic issues on device
+   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
+   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
+   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
