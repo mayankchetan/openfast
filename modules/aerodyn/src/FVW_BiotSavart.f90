@@ -445,6 +445,7 @@ end subroutine  ui_quad_n1
 
 
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
+   !$OMP DECLARE TARGET
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -466,6 +467,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: Vp                         !< 
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
+   real(ReKi), parameter      :: pi_local = 3.141592653589793238462643383279502884197_ReKi
    xi1=xi(1)
    xi2=xi(2)
    xi3=xi(3)
@@ -526,45 +528,45 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    endif
    ! --- Tan term 
    ! 12
-   if (EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_local(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
+         TAN12=pi_local*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
    endif
    ! 23
-   if (EqualRealNos(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_local(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
+         TAN23=pi_local*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
    endif 
    ! 34
-   if (EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_local(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
+         TAN34=pi_local*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
    endif
    ! 41
-   if (EqualRealNos(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_local(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
+         TAN41=pi_local*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
@@ -591,8 +593,11 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
+   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+   !$OMP MAP(TO: CPs, Sigmas, xi, eta, RefPoint, R_g2p) &
+   !$OMP MAP(TOFROM: UI) &
+   !$OMP FIRSTPRIVATE(nCPs, nPanels) &
+   !$OMP PRIVATE(icp, ip, Uind_tmp, Uind_cum)
    do icp=1,nCPs ! loop on Control Points
       Uind_cum = 0.0_ReKi
       do ip=1,nPanels !loop on panels 
@@ -601,11 +606,11 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
       enddo
       UI(1:3,icp) = UI(1:3,icp) + Uind_cum
    end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
+  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
   if ( abs(val)>PRECISION_EPS ) then
@@ -614,5 +619,21 @@ elemental real(ReKi) function signit(ref, val)
       signit = 1.0_ReKi
   endif
 endfunction
+
+   !> Adapted from NWTC_Num:EqualRealNos
+   pure function EqualRealNos_local(ReNum1, ReNum2) result(isEqual)
+      !$OMP DECLARE TARGET
+      real(ReKi), intent(in) :: ReNum1, ReNum2
+      logical :: isEqual
+      real(ReKi), parameter :: Tol = 100.0_ReKi * PRECISION_EPS / 2.0_ReKi
+      real(ReKi) :: Fraction
+
+      Fraction = max(abs(ReNum1+ReNum2), 1.0_ReKi)
+      if (abs(ReNum1 - ReNum2) <= Fraction*Tol) then
+         isEqual = .true.
+      else
+         isEqual = .false.
+      endif
+   end function EqualRealNos_local
 
 end module FVW_BiotSavart
