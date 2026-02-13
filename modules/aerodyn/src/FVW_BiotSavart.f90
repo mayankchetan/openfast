@@ -454,7 +454,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -468,6 +467,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
    real(ReKi), parameter      :: pi_local = 3.141592653589793238462643383279502884197_ReKi
+   real(ReKi), parameter      :: fourpi_local = 4.0_ReKi * pi_local
    xi1=xi(1)
    xi2=xi(2)
    xi3=xi(3)
@@ -572,9 +572,9 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       endif
    endif
    ! --- Velocity  in Panel frame
-   Vp(1)= Sigma/(fourpi)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
-   Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
-   Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
+   Vp(1)= Sigma/(fourpi_local)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
+   Vp(2)= Sigma/(fourpi_local)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
+   Vp(3)= Sigma/(fourpi_local)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
    UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
 end subroutine  ui_quad_src_11
@@ -593,27 +593,30 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
-   !$OMP MAP(TO: CPs, Sigmas, xi, eta, RefPoint, R_g2p) &
-   !$OMP MAP(TOFROM: UI) &
-   !$OMP FIRSTPRIVATE(nCPs, nPanels) &
-   !$OMP PRIVATE(icp, ip, Uind_tmp, Uind_cum)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP MAP(TO: CPs, Sigmas, xi, eta, RefPoint, R_g2p) &
+      !$OMP MAP(TOFROM: UI) &
+      !$OMP FIRSTPRIVATE(nCPs, nPanels) &
+      !$OMP PRIVATE(icp, ip, Uind_tmp, Uind_cum)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
   !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>PRECISION_EPS ) then
+  if ( abs(val) > epsilon(1.0_ReKi) ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
@@ -625,7 +628,7 @@ endfunction
       !$OMP DECLARE TARGET
       real(ReKi), intent(in) :: ReNum1, ReNum2
       logical :: isEqual
-      real(ReKi), parameter :: Tol = 100.0_ReKi * PRECISION_EPS / 2.0_ReKi
+      real(ReKi), parameter :: Tol = 100.0_ReKi * epsilon(1.0_ReKi) / 2.0_ReKi
       real(ReKi) :: Fraction
 
       Fraction = max(abs(ReNum1+ReNum2), 1.0_ReKi)
