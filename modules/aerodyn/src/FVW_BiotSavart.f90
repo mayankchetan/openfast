@@ -444,8 +444,8 @@ subroutine ui_quad_n1(CPs, nCPs, P1, P2, P3, P4, Gamm, RegFunction, RegParam, Ui
 end subroutine  ui_quad_n1
 
 
-   !$OMP DECLARE TARGET
 subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
+   !$OMP DECLARE TARGET
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -617,8 +617,8 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    endif
 end subroutine ui_quad_src_nn
 
-!$OMP DECLARE TARGET
 elemental real(ReKi) function signit(ref, val)
+  !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
   real(ReKi),parameter :: PRECISION_EPS_LOC = epsilon(1.0_ReKi)
@@ -629,8 +629,8 @@ elemental real(ReKi) function signit(ref, val)
   endif
 endfunction
 
-!$OMP DECLARE TARGET
 PURE FUNCTION EqualRealNos_Target ( ReNum1, ReNum2 )
+   !$OMP DECLARE TARGET
    REAL(ReKi), INTENT(IN )         :: ReNum1
    REAL(ReKi), INTENT(IN )         :: ReNum2
    LOGICAL                         :: EqualRealNos_Target
