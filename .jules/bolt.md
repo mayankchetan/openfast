@@ -1,11 +1,7 @@
-## 2024-05-24 - [Fortran OpenMP Offloading - Intrinsic and External Function Dependencies]
-**Learning:** When offloading Fortran code to GPUs using OpenMP `TARGET` directives, accessing host module `PARAMETER`s (even scalars) or calling external functions (like `EqualRealNos` from a library not marked `DECLARE TARGET`) inside the device kernel can cause compilation or runtime errors (Exit Code 8/SIGFPE with `gfortran`). Additionally, intrinsics like `matmul` and `transpose` can be problematic on some device backends.
-**Action:**
-1. Define local `PARAMETER`s within the device subroutine (e.g., `pi_local`) instead of using module-level constants.
-2. Implement local helper functions marked with `!$OMP DECLARE TARGET` (e.g., `EqualRealNos_Target`) instead of calling external library functions.
-3. Replace matrix intrinsics with manual loops or explicit element-wise calculations for small matrices.
-4. Always verify variable scope in `TARGET` regions: explicitly map arrays with bounds (e.g., `map(to: A(1:N))`) and use `PRIVATE` clauses for thread-local variables.
-
 ## 2024-05-24 - [Fortran OpenMP Offloading - Internal Procedures]
-**Learning:** In Fortran, when marking an internal subroutine (one inside a `CONTAINS` block) for OpenMP offloading, the `!$OMP DECLARE TARGET` directive must be placed **inside** the subroutine body (e.g., after the `SUBROUTINE` statement) rather than before it. Placing it before the `SUBROUTINE` statement in the `CONTAINS` section causes a compilation error ("Unexpected !$OMP DECLARE TARGET statement in CONTAINS section") with `gfortran`.
-**Action:** Always verify the placement of `!$OMP DECLARE TARGET` for internal procedures.
+**Learning:** In Fortran, when marking an internal subroutine (one inside a `CONTAINS` block) for OpenMP offloading, the `!$OMP DECLARE TARGET` directive must be placed in the module specification part (e.g., `!$OMP DECLARE TARGET(proc_name)`) rather than inside the subroutine body. Placing it inside (or before) the subroutine in the `CONTAINS` section causes a compilation error ("Unexpected directive") with some `gfortran` versions.
+**Action:** Use the list form of `!$OMP DECLARE TARGET` in the module header for module procedures.
+
+## 2024-05-24 - [Fortran Intrinsic Precision vs Manual Loops]
+**Learning:** Replacing intrinsic functions like `matmul` and `transpose` with manual loops (to support GPU offloading) can introduce small numerical differences (around 0.5%) in sensitive calculations (like linearization matrices), likely due to differences in instruction ordering or accumulator precision between the intrinsic implementation and standard floating-point arithmetic.
+**Action:** Be aware of potential regression failures when refactoring core math kernels for GPU offloading. Ensure consistent implementation across CPU/GPU paths if possible, or update baselines if the new implementation is validated as correct.
