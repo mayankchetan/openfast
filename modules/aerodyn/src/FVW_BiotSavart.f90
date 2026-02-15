@@ -454,6 +454,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
+   real(ReKi), parameter      :: PRECISION_UI_Local  = epsilon(1.0_ReKi)/100.0_ReKi
    real(ReKi), parameter      :: pi_local = 3.141592653589793238462643383279502884197_ReKi
    real(ReKi), parameter      :: fourpi_local = 4.0_ReKi * pi_local
    real(ReKi)                 :: d12, d23, d34, d41         !< 
@@ -511,25 +512,25 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    ! Velocities in element frame 
    ! --- Log term 
    ! Security - Katz Plotkin page 608 appendix D Code 11 
-   if ( r1+r2-d12<=0.0_ReKi .or. d12 <=0.0_ReKi ) then
+   if ( r1+r2-d12<=PRECISION_UI_Local .or. d12 <=PRECISION_UI_Local ) then
       RJ12=0._ReKi
    else
       RJ12=1/d12 * log((r1+r2-d12)/(r1+r2+d12))
    endif
 
-   if ( r2+r3-d23<=0.0_ReKi .or. d23 <=0.0_ReKi ) then
+   if ( r2+r3-d23<=PRECISION_UI_Local .or. d23 <=PRECISION_UI_Local ) then
       RJ23=0._ReKi
    else
       RJ23=1/d23 * log((r2+r3-d23)/(r2+r3+d23))
    endif
 
-   if ( r3+r4-d34<=0.0_ReKi .or. d34 <=0.0_ReKi ) then
+   if ( r3+r4-d34<=PRECISION_UI_Local .or. d34 <=PRECISION_UI_Local ) then
       RJ34=0._ReKi
    else
       RJ34=1/d34 * log((r3+r4-d34)/(r3+r4+d34))
    endif
 
-   if ( r4+r1-d41<=0.0_ReKi .or. d41 <=0.0_ReKi ) then
+   if ( r4+r1-d41<=PRECISION_UI_Local .or. d41 <=PRECISION_UI_Local ) then
       RJ41=0._ReKi
    else
       RJ41=1/d41 * log((r4+r1-d41)/(r4+r1+d41))
@@ -628,7 +629,11 @@ elemental real(ReKi) function signit(ref, val)
 !$OMP DECLARE TARGET
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>epsilon(1.0_ReKi) ) then
+  real(ReKi)            :: PRECISION_EPS_Local
+
+  PRECISION_EPS_Local = epsilon(1.0_ReKi)
+
+  if ( abs(val)>PRECISION_EPS_Local ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
