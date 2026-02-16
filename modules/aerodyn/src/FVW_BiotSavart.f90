@@ -628,9 +628,8 @@ end subroutine ui_quad_src_nn
 
 elemental logical function EqualRealNos_Target( ReNum1, ReNum2 )
   real(ReKi), intent(in) :: ReNum1, ReNum2
+  real(ReKi), parameter :: Eps = epsilon(1.0_ReKi)
   real(ReKi) :: Fraction
-  real(ReKi) :: Eps
-  Eps = epsilon(1.0_ReKi)
   Fraction = max( abs(ReNum1+ReNum2), 1.0_ReKi )
   if ( abs(ReNum1 - ReNum2) <= Fraction * 100.0_ReKi * Eps / 2.0_ReKi ) then
      EqualRealNos_Target = .TRUE.
@@ -642,7 +641,8 @@ end function EqualRealNos_Target
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>epsilon(1.0_ReKi) ) then
+  real(ReKi), parameter :: Eps = epsilon(1.0_ReKi)
+  if ( abs(val)>Eps ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
