@@ -455,7 +455,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), parameter      :: Pi_Target = 3.1415926535897932384626433832795028841971_ReKi
+   real(ReKi), parameter      :: Pi_Target = acos(-1.0_ReKi)
    real(ReKi), parameter      :: fourpi_Target = 4.0_ReKi * Pi_Target
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
@@ -469,7 +469,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: Vp                         !< 
    real(ReKi), dimension(3)   :: DP                         !< 
    real(ReKi), dimension(3)   :: DPp                        !< 
-   integer                    :: i, j
    xi1=xi(1)
    xi2=xi(2)
    xi3=xi(3)
@@ -487,12 +486,9 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    ! transform control points in panel coordinate system using matrix 
    DP(1:3) = CP(1:3)-RefPoint(1:3)
    ! DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
-   do i=1,3
-      DPp(i) = 0.0_ReKi
-      do j=1,3
-         DPp(i) = DPp(i) + R_g2p(i,j) * DP(j)
-      end do
-   end do
+   DPp(1) = R_g2p(1,1)*DP(1) + R_g2p(1,2)*DP(2) + R_g2p(1,3)*DP(3)
+   DPp(2) = R_g2p(2,1)*DP(1) + R_g2p(2,2)*DP(2) + R_g2p(2,3)*DP(3)
+   DPp(3) = R_g2p(3,1)*DP(1) + R_g2p(3,2)*DP(2) + R_g2p(3,3)*DP(3)
    ! scalars
    r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
    r2 = sqrt((DPp(1)-xi2)**2 + (DPp(2)-eta2)**2 + DPp(3)**2)
@@ -585,12 +581,9 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(3)= Sigma/(fourpi_Target)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
    ! UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
-   do i=1,3
-      UI(i) = 0.0_ReKi
-      do j=1,3
-         UI(i) = UI(i) + R_g2p(j,i) * Vp(j)
-      end do
-   end do
+   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
+   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
+   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
