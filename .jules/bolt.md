@@ -1,3 +1,3 @@
-## 2024-10-24 - Offloading ui_quad_src_nn to GPU
-**Learning:** Fortran `matmul` and `transpose` intrinsics may not be supported or optimal on all GPU backends (like `gfortran` offloading), leading to runtime errors or precision issues. Explicit unrolling preserves precision and ensures compatibility. Also, helper functions like `EqualRealNos` and module parameters need to be localized for `DECLARE TARGET` regions to avoid "Exit Code 8" runtime errors.
-**Action:** When porting Fortran kernels to OpenMP offloading, prefer explicit loops over array intrinsics for critical math operations and ensure all dependencies are explicitly marked `DECLARE TARGET` with local constants.
+## 2024-10-24 - Offloading ui_quad_src_nn to GPU (Fix)
+**Learning:** In OpenMP `DECLARE TARGET` functions, initialization of `PARAMETER`s using intrinsics like `ACOS` can cause runtime failures on some device backends (Exit Code 8). It is safer to use literal constants for mathematical constants like Pi. Also, unused local arrays should be removed to minimize stack usage on the device.
+**Action:** When defining constants in device code, prefer literals over intrinsics.
