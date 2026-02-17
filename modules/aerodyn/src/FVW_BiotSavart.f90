@@ -459,7 +459,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
    real(ReKi),parameter       :: Pi = 3.1415926535897932384626433832795028841971_ReKi
    real(ReKi),parameter       :: fourpi = 4.0_ReKi * Pi
-   real(ReKi),parameter       :: MinLen = 1.0e-8_ReKi !< Minimum length to avoid singularities
+   real(ReKi),parameter       :: MinLen = 1.0e-10_ReKi !< Minimum length to avoid singularities
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 

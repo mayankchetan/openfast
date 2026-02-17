@@ -1,3 +1,3 @@
-## 2024-10-24 - Offloading ui_quad_src_nn to GPU (Fix 3)
-**Learning:** Even with literal constants, extremely small denominators in GPU kernels can cause numerical instability or exceptions. Increasing the tolerance for singularity checks (e.g., `MinLen`) to a more robust value (like `1.0e-8`) can prevent these issues.
-**Action:** Use robust tolerances for singularity checks in device code.
+## 2024-10-24 - Offloading ui_quad_src_nn to GPU (Fix 4)
+**Learning:** The previous fix using `1.0e-8` for `MinLen` might have been too aggressive, potentially affecting precision. A value like `1.0e-10` is safer for preventing singularities while minimizing impact on results.
+**Action:** Tune numerical tolerances carefully when porting to GPU.
