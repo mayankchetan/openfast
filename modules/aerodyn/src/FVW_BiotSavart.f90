@@ -459,6 +459,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
    real(ReKi),parameter       :: Pi = 3.1415926535897932384626433832795028841971_ReKi
    real(ReKi),parameter       :: fourpi = 4.0_ReKi * Pi
+   real(ReKi),parameter       :: MinLen = 1.0e-12_ReKi !< Minimum length to avoid singularities
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -510,25 +511,25 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    ! Velocities in element frame 
    ! --- Log term 
    ! Security - Katz Plotkin page 608 appendix D Code 11 
-   if ( r1+r2-d12<=0.0_ReKi .or. d12 <=0.0_ReKi ) then
+   if ( r1+r2-d12<=MinLen .or. d12 <=MinLen ) then
       RJ12=0._ReKi
    else
       RJ12=1/d12 * log((r1+r2-d12)/(r1+r2+d12))
    endif
 
-   if ( r2+r3-d23<=0.0_ReKi .or. d23 <=0.0_ReKi ) then
+   if ( r2+r3-d23<=MinLen .or. d23 <=MinLen ) then
       RJ23=0._ReKi
    else
       RJ23=1/d23 * log((r2+r3-d23)/(r2+r3+d23))
    endif
 
-   if ( r3+r4-d34<=0.0_ReKi .or. d34 <=0.0_ReKi ) then
+   if ( r3+r4-d34<=MinLen .or. d34 <=MinLen ) then
       RJ34=0._ReKi
    else
       RJ34=1/d34 * log((r3+r4-d34)/(r3+r4+d34))
    endif
 
-   if ( r4+r1-d41<=0.0_ReKi .or. d41 <=0.0_ReKi ) then
+   if ( r4+r1-d41<=MinLen .or. d41 <=MinLen ) then
       RJ41=0._ReKi
    else
       RJ41=1/d41 * log((r4+r1-d41)/(r4+r1+d41))
@@ -624,7 +625,7 @@ end subroutine ui_quad_src_nn
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  real(ReKi),parameter  :: Eps = epsilon(1.0_ReKi)
+  real(ReKi),parameter  :: Eps = 2.2204460492503131e-16_ReKi
   if ( abs(val)>Eps ) then
       signit = sign(ref, val)
   else
@@ -635,7 +636,7 @@ endfunction
 elemental logical function EqualRealNos_Target(ReNum1, ReNum2)
    real(ReKi), intent(in) :: ReNum1
    real(ReKi), intent(in) :: ReNum2
-   real(ReKi), parameter  :: Eps = epsilon(1.0_ReKi)
+   real(ReKi), parameter  :: Eps = 2.2204460492503131e-16_ReKi
    real(ReKi), parameter  :: Tol = 100.0_ReKi * Eps / 2.0_ReKi
    real(ReKi)             :: Fraction
 
