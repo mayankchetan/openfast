@@ -27,6 +27,10 @@ module FVW_BiotSavart
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
 
+   !$OMP DECLARE TARGET(signit)
+   !$OMP DECLARE TARGET(EqualRealNos_Target)
+   !$OMP DECLARE TARGET(ui_quad_src_11)
+
 contains
 
 
@@ -453,7 +457,9 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), dimension(3,3) :: tA                         !< 
+   real(ReKi),parameter       :: Pi = 3.1415926535897932384626433832795028841971_ReKi
+   real(ReKi),parameter       :: fourpi = 4.0_ReKi * Pi
+   real(ReKi),parameter       :: MinLen = 1.0e-10_ReKi !< Minimum length to avoid singularities
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -482,7 +488,11 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
 
    ! transform control points in panel coordinate system using matrix 
    DP(1:3) = CP(1:3)-RefPoint(1:3)
-   DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   !DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
+   DPp(1) = R_g2p(1,1)*DP(1) + R_g2p(1,2)*DP(2) + R_g2p(1,3)*DP(3)
+   DPp(2) = R_g2p(2,1)*DP(1) + R_g2p(2,2)*DP(2) + R_g2p(2,3)*DP(3)
+   DPp(3) = R_g2p(3,1)*DP(1) + R_g2p(3,2)*DP(2) + R_g2p(3,3)*DP(3)
+
    ! scalars
    r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
    r2 = sqrt((DPp(1)-xi2)**2 + (DPp(2)-eta2)**2 + DPp(3)**2)
@@ -501,32 +511,32 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    ! Velocities in element frame 
    ! --- Log term 
    ! Security - Katz Plotkin page 608 appendix D Code 11 
-   if ( r1+r2-d12<=0.0_ReKi .or. d12 <=0.0_ReKi ) then
+   if ( r1+r2-d12<=MinLen .or. d12 <=MinLen ) then
       RJ12=0._ReKi
    else
       RJ12=1/d12 * log((r1+r2-d12)/(r1+r2+d12))
    endif
 
-   if ( r2+r3-d23<=0.0_ReKi .or. d23 <=0.0_ReKi ) then
+   if ( r2+r3-d23<=MinLen .or. d23 <=MinLen ) then
       RJ23=0._ReKi
    else
       RJ23=1/d23 * log((r2+r3-d23)/(r2+r3+d23))
    endif
 
-   if ( r3+r4-d34<=0.0_ReKi .or. d34 <=0.0_ReKi ) then
+   if ( r3+r4-d34<=MinLen .or. d34 <=MinLen ) then
       RJ34=0._ReKi
    else
       RJ34=1/d34 * log((r3+r4-d34)/(r3+r4+d34))
    endif
 
-   if ( r4+r1-d41<=0.0_ReKi .or. d41 <=0.0_ReKi ) then
+   if ( r4+r1-d41<=MinLen .or. d41 <=MinLen ) then
       RJ41=0._ReKi
    else
       RJ41=1/d41 * log((r4+r1-d41)/(r4+r1+d41))
    endif
    ! --- Tan term 
    ! 12
-   if (EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
@@ -537,7 +547,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       endif
    endif
    ! 23
-   if (EqualRealNos(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
@@ -548,7 +558,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       endif
    endif 
    ! 34
-   if (EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
@@ -559,7 +569,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       endif
    endif
    ! 41
-   if (EqualRealNos(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
@@ -574,7 +584,10 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
    Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   !UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
+   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
+   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
@@ -591,28 +604,48 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+      !$OMP map(tofrom: UI(1:3,1:nCPs)) &
+      !$OMP firstprivate(nCPs, nPanels) &
+      !$OMP PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(static)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>PRECISION_EPS ) then
+  real(ReKi),parameter  :: Eps = 2.2204460492503131e-16_ReKi
+  if ( abs(val)>Eps ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
   endif
 endfunction
+
+elemental logical function EqualRealNos_Target(ReNum1, ReNum2)
+   real(ReKi), intent(in) :: ReNum1
+   real(ReKi), intent(in) :: ReNum2
+   real(ReKi), parameter  :: Eps = 2.2204460492503131e-16_ReKi
+   real(ReKi), parameter  :: Tol = 100.0_ReKi * Eps / 2.0_ReKi
+   real(ReKi)             :: Fraction
+
+   Fraction = MAX( ABS(ReNum1+ReNum2), 1.0_ReKi )
+   if ( ABS(ReNum1 - ReNum2) <= Fraction*Tol ) then
+      EqualRealNos_Target = .TRUE.
+   else
+      EqualRealNos_Target = .FALSE.
+   endif
+end function EqualRealNos_Target
 
 end module FVW_BiotSavart
