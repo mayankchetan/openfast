@@ -457,11 +457,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-#ifdef OPENFAST_DOUBLE_PRECISION
    real(ReKi), parameter      :: Pi_loc = 3.141592653589793238462643383279502884197_ReKi
-#else
-   real(ReKi), parameter      :: Pi_loc = 3.14159265359_ReKi
-#endif
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
@@ -625,11 +621,14 @@ end subroutine ui_quad_src_nn
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-#ifdef OPENFAST_DOUBLE_PRECISION
-  real(ReKi), parameter :: PRECISION_EPS_LOC = 2.220446049250313e-16_ReKi
-#else
-  real(ReKi), parameter :: PRECISION_EPS_LOC = 1.1920929e-07_ReKi
-#endif
+  real(ReKi) :: PRECISION_EPS_LOC
+
+  if (digits(ref) > 30) then
+     PRECISION_EPS_LOC = 2.220446049250313e-16_ReKi
+  else
+     PRECISION_EPS_LOC = 1.1920929e-07_ReKi
+  endif
+
   if ( abs(val)>PRECISION_EPS_LOC ) then
       signit = sign(ref, val)
   else
@@ -639,14 +638,15 @@ endfunction
 
 elemental logical function EqualRealNos_Target(val1, val2)
   real(ReKi), intent(in) :: val1, val2
-#ifdef OPENFAST_DOUBLE_PRECISION
-  real(ReKi), parameter :: Eps = 2.220446049250313e-16_ReKi
-#else
-  real(ReKi), parameter :: Eps = 1.1920929e-07_ReKi
-#endif
+  real(ReKi) :: Eps, Tol, Fraction
+
+  if (digits(val1) > 30) then
+     Eps = 2.220446049250313e-16_ReKi
+  else
+     Eps = 1.1920929e-07_ReKi
+  endif
   ! Based on NWTC_Library logic: Tol = 100 * Eps / 2 = 50 * Eps
-  real(ReKi), parameter :: Tol = 50.0_ReKi * Eps
-  real(ReKi) :: Fraction
+  Tol = 50.0_ReKi * Eps
 
   Fraction = max(abs(val1 + val2), 1.0_ReKi)
   if (abs(val1 - val2) <= Fraction * Tol) then
