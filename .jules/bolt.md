@@ -1,0 +1,3 @@
+## 2024-05-23 - [GPU Offloading Strategy for Fortran N-Body Problems]
+**Learning:** In Fortran OpenMP offloading, `matmul` and `transpose` intrinsics can be performance bottlenecks or compatibility issues on some GPU backends. Explicitly unrolling small matrix operations (like 3x3) improves robustness and potentially performance. Additionally, initializing `parameter` constants with inquiry functions like `epsilon` inside device code can cause runtime failures; using literals or runtime logic is safer.
+**Action:** When porting `ui_quad_src_nn`, I will replace `matmul` with unrolled loops and avoid `epsilon` in parameters for the device kernel `ui_quad_src_11_target`.
