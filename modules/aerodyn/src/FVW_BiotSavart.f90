@@ -472,8 +472,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi),parameter       :: Pi_loc = 3.1415926535897932384626433832795028841971_ReKi
-   real(ReKi),parameter       :: FourPiInv_loc = 0.25_ReKi / Pi_loc
    real(ReKi), dimension(3,3) :: tA                         !< 
    real(ReKi)                 :: d12, d23, d34, d41         !< 
    real(ReKi)                 :: m12, m23, m34, m41         !< 
@@ -503,10 +501,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
 
    ! transform control points in panel coordinate system using matrix 
    DP(1:3) = CP(1:3)-RefPoint(1:3)
-   ! Unrolled matmul(R_g2p, DP)
-   DPp(1) = R_g2p(1,1)*DP(1) + R_g2p(1,2)*DP(2) + R_g2p(1,3)*DP(3)
-   DPp(2) = R_g2p(2,1)*DP(1) + R_g2p(2,2)*DP(2) + R_g2p(2,3)*DP(3)
-   DPp(3) = R_g2p(3,1)*DP(1) + R_g2p(3,2)*DP(2) + R_g2p(3,3)*DP(3)
+   DPp     = matmul(R_g2p, DP)
 
    ! scalars
    r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
@@ -557,7 +552,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN12=Pi_loc*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
+         TAN12=pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
@@ -568,7 +563,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN23=Pi_loc*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
+         TAN23=pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
@@ -579,7 +574,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN34=Pi_loc*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
+         TAN34=pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
@@ -590,20 +585,17 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
-         TAN41=Pi_loc*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
+         TAN41=pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
    endif
    ! --- Velocity  in Panel frame
-   Vp(1)= Sigma*FourPiInv_loc*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
-   Vp(2)= Sigma*FourPiInv_loc*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
-   Vp(3)= Sigma*FourPiInv_loc*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
+   Vp(1)= Sigma/(fourpi)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
+   Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
+   Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame 
-   ! Unrolled matmul(transpose(R_g2p), Vp(1:3))
-   UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
-   UI(2) = R_g2p(1,2)*Vp(1) + R_g2p(2,2)*Vp(2) + R_g2p(3,2)*Vp(3)
-   UI(3) = R_g2p(1,3)*Vp(1) + R_g2p(2,3)*Vp(2) + R_g2p(3,3)*Vp(3)
+   UI = matmul(transpose(R_g2p), Vp)
 end subroutine  ui_quad_src_11
 
 !> Induced velocity from one source panel at one control point (Target version)
@@ -628,12 +620,12 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(3)   :: Vp                         !<
    real(ReKi), dimension(3)   :: DP                         !<
    real(ReKi), dimension(3)   :: DPp                        !<
-   real(ReKi)                 :: Pi_loc, FourPiInv_loc      !< Local constants
+   real(ReKi)                 :: Pi_loc, FourPi_loc         !< Local constants
    integer :: i, j
 
    ! Define local constants to avoid global parameter issues in OpenMP offloading
    Pi_loc = acos(-1.0_ReKi)
-   FourPiInv_loc = 1.0_ReKi / (4.0_ReKi * Pi_loc)
+   FourPi_loc = 4.0_ReKi * Pi_loc
 
    xi1=xi(1)
    xi2=xi(2)
@@ -743,9 +735,9 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       endif
    endif
    ! --- Velocity  in Panel frame
-   Vp(1)= Sigma*FourPiInv_loc*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
-   Vp(2)= Sigma*FourPiInv_loc*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
-   Vp(3)= Sigma*FourPiInv_loc*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
+   Vp(1)= Sigma/FourPi_loc*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
+   Vp(2)= Sigma/FourPi_loc*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
+   Vp(3)= Sigma/FourPi_loc*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame
    ! Unrolled matmul(transpose(R_g2p), Vp(1:3))
    ! Transpose of R_g2p means swapping indices: R_g2p(j, i)
