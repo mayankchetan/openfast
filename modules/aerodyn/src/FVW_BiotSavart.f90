@@ -27,6 +27,8 @@ module FVW_BiotSavart
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
 
+   !$OMP DECLARE TARGET(EqualRealNos_Target, ui_quad_src_11_target, signit)
+
 contains
 
 
@@ -443,7 +445,6 @@ subroutine ui_quad_n1(CPs, nCPs, P1, P2, P3, P4, Gamm, RegFunction, RegParam, Ui
    !OMP END PARALLEL
 end subroutine  ui_quad_n1
 
-!$OMP DECLARE TARGET
 elemental logical function EqualRealNos_Target(a, b) result(val)
    real(ReKi), intent(in) :: a, b
    real(ReKi) :: tol
@@ -588,7 +589,6 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
 end subroutine  ui_quad_src_11
 
-!$OMP DECLARE TARGET
 subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
@@ -762,7 +762,6 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    endif
 end subroutine ui_quad_src_nn
 
-!$OMP DECLARE TARGET
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
