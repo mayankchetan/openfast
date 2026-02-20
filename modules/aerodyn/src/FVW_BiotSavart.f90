@@ -448,11 +448,7 @@ end subroutine  ui_quad_n1
 elemental logical function EqualRealNos_Target(a, b) result(val)
    real(ReKi), intent(in) :: a, b
    real(ReKi) :: tol
-   if (digits(a) > 24) then
-      tol = 2.220446049250313e-14_ReKi
-   else
-      tol = 1.1920929e-5_ReKi
-   endif
+   tol = 100.0_ReKi * epsilon(a)
    val = abs(a - b) <= max(abs(a+b), 1.0_ReKi) * tol * 0.5_ReKi
 end function
 
