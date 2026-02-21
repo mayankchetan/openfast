@@ -24,7 +24,7 @@ module FVW_BiotSavart
    integer(IntKi), parameter, dimension(5) :: idRegVALID      = (/idRegNone,idRegRankine,idRegLambOseen,idRegVatistas,idRegOffset/)
    integer(IntKi), parameter, dimension(3) :: idRegPartVALID  = (/idRegNone,idRegExp,idRegCompact/)
 
-   !$OMP DECLARE TARGET(signit, EqualRealNos_Target, ui_quad_src_11_target)
+   !$OMP DECLARE TARGET(signit_target, EqualRealNos_Target, ui_quad_src_11_target)
 
    real(ReKi),parameter    :: fourpi_inv =  0.25_ReKi / ACOS(-1.0_Reki )
    real(ReKi),parameter    :: fourpi     =  4.00_ReKi * ACOS(-1.0_Reki )
@@ -593,21 +593,22 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   real(ReKi) :: local_Pi, local_fourpi
+   real(ReKi) :: local_Pi, local_fourpi, local_Eps
 
    local_Pi = Pi
    local_fourpi = fourpi
+   local_Eps = epsilon(1.0_ReKi)
 
    if (nCPs > 0 .and. nPanels > 0) then
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
       !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), RefPoint(1:3,1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
       !$OMP map(tofrom: UI(1:3,1:nCPs)) &
-      !$OMP firstprivate(nCPs, nPanels, local_Pi, local_fourpi) &
+      !$OMP firstprivate(nCPs, nPanels, local_Pi, local_fourpi, local_Eps) &
       !$OMP private(icp, ip, Uind_cum, Uind_tmp) schedule(static)
       do icp=1,nCPs ! loop on Control Points
          Uind_cum = 0.0_ReKi
          do ip=1,nPanels !loop on panels
-            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp, local_Pi, local_fourpi)
+            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp, local_Pi, local_fourpi, local_Eps)
             Uind_cum = Uind_cum + Uind_tmp
          enddo
          UI(1:3,icp) = UI(1:3,icp) + Uind_cum
@@ -616,7 +617,7 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    endif
 end subroutine ui_quad_src_nn
 
-subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in, fourpi_in)
+subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in, fourpi_in, Eps_in)
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -626,6 +627,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),                 intent(in)  :: Pi_in      !< Pi
    real(ReKi),                 intent(in)  :: fourpi_in  !< 4*Pi
+   real(ReKi),                 intent(in)  :: Eps_in     !< Machine Epsilon
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
    real(ReKi)                 :: d12, d23, d34, d41         !<
    real(ReKi)                 :: m12, m23, m34, m41         !<
@@ -703,45 +705,45 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
    endif
    ! --- Tan term
    ! 12
-   if (EqualRealNos_Target(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi2,xi1,Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN12=Pi_in*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN12=Pi_in*aint((signit_target(1.0_ReKi,(m12*e1-h1),Eps_in) - signit_target(1.0_ReKi,(m12*e2-h2),Eps_in))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
    endif
    ! 23
-   if (EqualRealNos_Target(xi3,xi2)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi3,xi2,Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN23=Pi_in*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN23=Pi_in*aint((signit_target(1.0_ReKi,(m23*e2-h2),Eps_in) - signit_target(1.0_ReKi,(m23*e3-h3),Eps_in))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
    endif
    ! 34
-   if (EqualRealNos_Target(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi4,xi3,Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN34=Pi_in*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN34=Pi_in*aint((signit_target(1.0_ReKi,(m34*e3-h3),Eps_in) - signit_target(1.0_ReKi,(m34*e4-h4),Eps_in))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
    endif
    ! 41
-   if (EqualRealNos_Target(xi1,xi4)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi1,xi4,Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN41=Pi_in*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN41=Pi_in*aint((signit_target(1.0_ReKi,(m41*e4-h4),Eps_in) - signit_target(1.0_ReKi,(m41*e1-h1),Eps_in))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
@@ -760,24 +762,34 @@ end subroutine  ui_quad_src_11_target
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val) > epsilon(1.0_ReKi) ) then
+  if ( abs(val)>PRECISION_EPS ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
   endif
 endfunction
 
+elemental real(ReKi) function signit_target(ref, val, Eps_in)
+  real(ReKi),intent(in) ::ref
+  real(ReKi),intent(in) ::val
+  real(ReKi),intent(in) ::Eps_in
+  if ( abs(val) > Eps_in ) then
+      signit_target = sign(ref, val)
+  else
+      signit_target = 1.0_ReKi
+  endif
+endfunction
+
 !> Target-compatible version of EqualRealNos
-pure function EqualRealNos_Target( ReNum1, ReNum2 )
+pure function EqualRealNos_Target( ReNum1, ReNum2, Eps_in )
    real(ReKi), intent(in) :: ReNum1
    real(ReKi), intent(in) :: ReNum2
+   real(ReKi), intent(in) :: Eps_in
    logical                :: EqualRealNos_Target
    real(ReKi)             :: Fraction
-   real(ReKi)             :: Eps
    real(ReKi)             :: Tol
 
-   Eps = epsilon(1.0_ReKi)
-   Tol = 100.0_ReKi * Eps / 2.0_ReKi
+   Tol = 100.0_ReKi * Eps_in / 2.0_ReKi
 
    Fraction = max( abs(ReNum1+ReNum2), 1.0_ReKi )
    if ( abs(ReNum1 - ReNum2) <= Fraction*Tol ) then

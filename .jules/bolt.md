@@ -11,3 +11,6 @@
 
 **Learning:** Accessing module-level parameters directly in OpenMP device kernels can fail.
 **Action:** Assign module parameters to local variables on the host, map them as `firstprivate`, and pass them as arguments to the device subroutine.
+
+**Learning:** Modifying the signature of shared helper functions (e.g., to pass `epsilon`) for device kernels breaks compilation for existing host callers.
+**Action:** Create dedicated `_target` versions of helper functions instead of modifying shared ones.
