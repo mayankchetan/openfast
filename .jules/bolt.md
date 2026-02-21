@@ -4,3 +4,10 @@
 
 **Learning:** Accessing module-level `PARAMETER` constants (like `Pi`) inside `!$OMP DECLARE TARGET` subroutines can cause runtime crashes (Exit Code 8) in `gfortran` OpenMP offloading.
 **Action:** Define local parameters using literals (e.g., `3.14159..._ReKi`) within the device subroutine instead of using module-level constants or intrinsics like `ACOS(-1.0)`.
+
+## 2026-02-21 - OpenMP Offloading - Parameter Initialization
+**Learning:** Initializing `PARAMETER`s with intrinsics (e.g., `epsilon(1.0_ReKi)`) inside `!$OMP DECLARE TARGET` subroutines causes runtime failures (Exit Code 8/SIGFPE) in `gfortran` OpenMP offloading.
+**Action:** Use local variables initialized at runtime or pass values as arguments instead of using `parameter` attribute with intrinsics.
+
+**Learning:** Accessing module-level parameters directly in OpenMP device kernels can fail.
+**Action:** Assign module parameters to local variables on the host, map them as `firstprivate`, and pass them as arguments to the device subroutine.

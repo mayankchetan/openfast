@@ -593,17 +593,21 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
+   real(ReKi) :: local_Pi, local_fourpi
+
+   local_Pi = Pi
+   local_fourpi = fourpi
 
    if (nCPs > 0 .and. nPanels > 0) then
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
       !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), RefPoint(1:3,1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
       !$OMP map(tofrom: UI(1:3,1:nCPs)) &
-      !$OMP firstprivate(nCPs, nPanels) &
+      !$OMP firstprivate(nCPs, nPanels, local_Pi, local_fourpi) &
       !$OMP private(icp, ip, Uind_cum, Uind_tmp) schedule(static)
       do icp=1,nCPs ! loop on Control Points
          Uind_cum = 0.0_ReKi
          do ip=1,nPanels !loop on panels
-            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
+            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp, local_Pi, local_fourpi)
             Uind_cum = Uind_cum + Uind_tmp
          enddo
          UI(1:3,icp) = UI(1:3,icp) + Uind_cum
@@ -612,7 +616,7 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    endif
 end subroutine ui_quad_src_nn
 
-subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
+subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in, fourpi_in)
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
    real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
@@ -620,9 +624,9 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: xi         !< Panel points coordinates
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
+   real(ReKi),                 intent(in)  :: Pi_in      !< Pi
+   real(ReKi),                 intent(in)  :: fourpi_in  !< 4*Pi
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), parameter      :: Pi_target = 3.141592653589793238462643383279502884197_ReKi
-   real(ReKi), parameter      :: fourpi_target = 4.0_ReKi * Pi_target
    real(ReKi)                 :: d12, d23, d34, d41         !<
    real(ReKi)                 :: m12, m23, m34, m41         !<
    real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !<
@@ -704,7 +708,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m12=(eta2-eta1)/(xi2-xi1)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN12=Pi_target*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN12=Pi_in*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
       endif
@@ -715,7 +719,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m23=(eta3-eta2)/(xi3-xi2)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN23=Pi_target*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN23=Pi_in*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
@@ -726,7 +730,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m34=(eta4-eta3)/(xi4-xi3)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN34=Pi_target*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN34=Pi_in*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
       endif
@@ -737,15 +741,15 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       m41=(eta1-eta4)/(xi1-xi4)
       if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
-         TAN41=Pi_target*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2.0_ReKi) ! Security-Hess1962-page47-top
+         TAN41=Pi_in*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2.0_ReKi) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
       endif
    endif
    ! --- Velocity  in Panel frame
-   Vp(1)= Sigma/(fourpi_target)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
-   Vp(2)= Sigma/(fourpi_target)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
-   Vp(3)= Sigma/(fourpi_target)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
+   Vp(1)= Sigma/(fourpi_in)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
+   Vp(2)= Sigma/(fourpi_in)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
+   Vp(3)= Sigma/(fourpi_in)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
    ! --- Velocity in Reference frame
    ! UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
    UI(1) = R_g2p(1,1)*Vp(1) + R_g2p(2,1)*Vp(2) + R_g2p(3,1)*Vp(3)
@@ -756,7 +760,7 @@ end subroutine  ui_quad_src_11_target
 elemental real(ReKi) function signit(ref, val)
   real(ReKi),intent(in) ::ref
   real(ReKi),intent(in) ::val
-  if ( abs(val)>PRECISION_EPS ) then
+  if ( abs(val) > epsilon(1.0_ReKi) ) then
       signit = sign(ref, val)
   else
       signit = 1.0_ReKi
@@ -769,8 +773,11 @@ pure function EqualRealNos_Target( ReNum1, ReNum2 )
    real(ReKi), intent(in) :: ReNum2
    logical                :: EqualRealNos_Target
    real(ReKi)             :: Fraction
-   real(ReKi), parameter  :: Eps = epsilon(1.0_ReKi)
-   real(ReKi), parameter  :: Tol = 100.0_ReKi * Eps / 2.0_ReKi
+   real(ReKi)             :: Eps
+   real(ReKi)             :: Tol
+
+   Eps = epsilon(1.0_ReKi)
+   Tol = 100.0_ReKi * Eps / 2.0_ReKi
 
    Fraction = max( abs(ReNum1+ReNum2), 1.0_ReKi )
    if ( abs(ReNum1 - ReNum2) <= Fraction*Tol ) then
