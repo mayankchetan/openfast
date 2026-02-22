@@ -9,6 +9,7 @@ module FVW_BiotSavart
 
    real(ReKi),parameter :: PRECISION_UI  = epsilon(1.0_ReKi)/100 !< NOTE assuming problem of size 1
    real(ReKi),parameter :: PRECISION_EPS =  epsilon(1.0_ReKi) !< Machine Precision For the given ReKi for problems of scale 1!
+   real(ReKi),parameter :: TOL_EPS       =  100.0_ReKi * PRECISION_EPS / 2.0_ReKi
    real(ReKi),parameter :: MIN_EXP_VALUE=-10.0_ReKi
    real(ReKi),parameter :: MINDENOM=0.0_ReKi
 !    real(ReKi),parameter :: MINDENOM=1e-15_ReKi
@@ -453,19 +454,19 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
    real(ReKi), dimension(3,3), intent(in)  :: R_g2p !< 3 x 3, global 2 panel
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
-   real(ReKi), dimension(3,3) :: tA                         !< 
-   real(ReKi)                 :: d12, d23, d34, d41         !< 
-   real(ReKi)                 :: m12, m23, m34, m41         !< 
-   real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !< 
-   real(ReKi)                 :: eta1,  eta2,  eta3,  eta4  !< 
-   real(ReKi)                 :: e1,  e2,  e3,  e4          !< 
-   real(ReKi)                 :: h1,  h2,  h3,  h4          !< 
-   real(ReKi)                 :: r1,  r2,  r3,  r4          !< 
-   real(ReKi)                 :: RJ12, RJ23, RJ34, RJ41     !< 
-   real(ReKi)                 :: TAN12, TAN23, TAN34, TAN41 !< 
-   real(ReKi), dimension(3)   :: Vp                         !< 
-   real(ReKi), dimension(3)   :: DP                         !< 
-   real(ReKi), dimension(3)   :: DPp                        !< 
+   real(ReKi), dimension(3,3) :: tA                         !<
+   real(ReKi)                 :: d12, d23, d34, d41         !<
+   real(ReKi)                 :: m12, m23, m34, m41         !<
+   real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !<
+   real(ReKi)                 :: eta1,  eta2,  eta3,  eta4  !<
+   real(ReKi)                 :: e1,  e2,  e3,  e4          !<
+   real(ReKi)                 :: h1,  h2,  h3,  h4          !<
+   real(ReKi)                 :: r1,  r2,  r3,  r4          !<
+   real(ReKi)                 :: RJ12, RJ23, RJ34, RJ41     !<
+   real(ReKi)                 :: TAN12, TAN23, TAN34, TAN41 !<
+   real(ReKi), dimension(3)   :: Vp                         !<
+   real(ReKi), dimension(3)   :: DP                         !<
+   real(ReKi), dimension(3)   :: DPp                        !<
    xi1=xi(1)
    xi2=xi(2)
    xi3=xi(3)
@@ -474,13 +475,13 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    eta2=eta(2)
    eta3=eta(3)
    eta4=eta(4)
-   !param that are constant for each panel, distances and slopes - The slopes can be if divided by zero NaN => security required 
+   !param that are constant for each panel, distances and slopes - The slopes can be if divided by zero NaN => security required
    d12 = sqrt((xi2-xi1)**2+(eta2-eta1)**2)
    d23 = sqrt((xi3-xi2)**2+(eta3-eta2)**2)
    d34 = sqrt((xi4-xi3)**2+(eta4-eta3)**2)
    d41 = sqrt((xi1-xi4)**2+(eta1-eta4)**2)
 
-   ! transform control points in panel coordinate system using matrix 
+   ! transform control points in panel coordinate system using matrix
    DP(1:3) = CP(1:3)-RefPoint(1:3)
    DPp      = matmul(R_g2p, DP)           ! transfo in element coordinate system, noted x,y,z, but in fact xi eta zeta
    ! scalars
@@ -493,14 +494,14 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    e2 = DPp(3)**2 + (DPp(1)-xi2)**2
    e3 = DPp(3)**2 + (DPp(1)-xi3)**2
    e4 = DPp(3)**2 + (DPp(1)-xi4)**2
-   ! 
+   !
    h1 = (DPp(2)-eta1)*(DPp(1)-xi1)
    h2 = (DPp(2)-eta2)*(DPp(1)-xi2)
    h3 = (DPp(2)-eta3)*(DPp(1)-xi3)
    h4 = (DPp(2)-eta4)*(DPp(1)-xi4)
-   ! Velocities in element frame 
-   ! --- Log term 
-   ! Security - Katz Plotkin page 608 appendix D Code 11 
+   ! Velocities in element frame
+   ! --- Log term
+   ! Security - Katz Plotkin page 608 appendix D Code 11
    if ( r1+r2-d12<=0.0_ReKi .or. d12 <=0.0_ReKi ) then
       RJ12=0._ReKi
    else
@@ -524,13 +525,13 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    else
       RJ41=1/d41 * log((r4+r1-d41)/(r4+r1+d41))
    endif
-   ! --- Tan term 
+   ! --- Tan term
    ! 12
    if (EqualRealNos(xi2,xi1)) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
-      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
          TAN12=pi*aint((signit(1.0_ReKi,(m12*e1-h1)) - signit(1.0_ReKi,(m12*e2-h2)))/2) ! Security-Hess1962-page47-top
       else
          TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
@@ -541,18 +542,18 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
-      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
          TAN23=pi*aint((signit(1.0_ReKi,(m23*e2-h2)) - signit(1.0_ReKi,(m23*e3-h3)))/2) ! Security-Hess1962-page47-top
       else
          TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
       endif
-   endif 
+   endif
    ! 34
    if (EqualRealNos(xi4,xi3)) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
-      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
          TAN34=pi*aint((signit(1.0_ReKi,(m34*e3-h3)) - signit(1.0_ReKi,(m34*e4-h4)))/2) ! Security-Hess1962-page47-top
       else
          TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
@@ -563,7 +564,7 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
-      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur 
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
          TAN41=pi*aint((signit(1.0_ReKi,(m41*e4-h4)) - signit(1.0_ReKi,(m41*e1-h1)))/2) ! Security-Hess1962-page47-top
       else
          TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
@@ -573,9 +574,181 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
    Vp(1)= Sigma/(fourpi)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
    Vp(2)= Sigma/(fourpi)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
    Vp(3)= Sigma/(fourpi)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
-   ! --- Velocity in Reference frame 
+   ! --- Velocity in Reference frame
    UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
 end subroutine  ui_quad_src_11
+
+!> Target version of EqualRealNos
+pure function EqualRealNos_Target(ReNum1, ReNum2, Tol)
+   !$OMP DECLARE TARGET
+   real(ReKi), intent(in) :: ReNum1, ReNum2, Tol
+   logical                :: EqualRealNos_Target
+   real(ReKi)             :: Fraction
+
+   Fraction = MAX(ABS(ReNum1 + ReNum2), 1.0_ReKi)
+
+   if (ABS(ReNum1 - ReNum2) <= Fraction * Tol) then
+      EqualRealNos_Target = .TRUE.
+   else
+      EqualRealNos_Target = .FALSE.
+   endif
+end function EqualRealNos_Target
+
+!> Target version of signit
+pure elemental real(ReKi) function signit_target(ref, val, Eps)
+   !$OMP DECLARE TARGET
+   real(ReKi), intent(in) :: ref, val, Eps
+   if (abs(val) > Eps) then
+      signit_target = sign(ref, val)
+   else
+      signit_target = 1.0_ReKi
+   endif
+end function signit_target
+
+!> Target version of ui_quad_src_11
+subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in, fourpi_in, Eps_in, Tol_in)
+   !$OMP DECLARE TARGET
+   real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
+   real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
+   real(ReKi), dimension(3),   intent(out) :: UI         !< Induced velocity
+   real(ReKi), dimension(3),   intent(in)  :: RefPoint   !< Coordinate of panel origin in ref coordinates
+   real(ReKi), dimension(4),   intent(in)  :: xi         !< Panel points coordinates
+   real(ReKi), dimension(4),   intent(in)  :: eta        !< Panel points  coordinates
+   real(ReKi), dimension(3,3), intent(in)  :: R_g2p      !< 3 x 3, global 2 panel
+   real(ReKi),                 intent(in)  :: Pi_in      !< Pi
+   real(ReKi),                 intent(in)  :: fourpi_in  !< 4*Pi
+   real(ReKi),                 intent(in)  :: Eps_in     !< Machine Epsilon
+   real(ReKi),                 intent(in)  :: Tol_in     !< Tolerance for Equality
+
+   real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
+   real(ReKi)                 :: d12, d23, d34, d41         !<
+   real(ReKi)                 :: m12, m23, m34, m41         !<
+   real(ReKi)                 :: xi1,  xi2,  xi3,  xi4      !<
+   real(ReKi)                 :: eta1,  eta2,  eta3,  eta4  !<
+   real(ReKi)                 :: e1,  e2,  e3,  e4          !<
+   real(ReKi)                 :: h1,  h2,  h3,  h4          !<
+   real(ReKi)                 :: r1,  r2,  r3,  r4          !<
+   real(ReKi)                 :: RJ12, RJ23, RJ34, RJ41     !<
+   real(ReKi)                 :: TAN12, TAN23, TAN34, TAN41 !<
+   real(ReKi), dimension(3)   :: Vp                         !<
+   real(ReKi), dimension(3)   :: DP                         !<
+   real(ReKi), dimension(3)   :: DPp                        !<
+
+   xi1=xi(1)
+   xi2=xi(2)
+   xi3=xi(3)
+   xi4=xi(4)
+   eta1=eta(1)
+   eta2=eta(2)
+   eta3=eta(3)
+   eta4=eta(4)
+   !param that are constant for each panel, distances and slopes - The slopes can be if divided by zero NaN => security required
+   d12 = sqrt((xi2-xi1)**2+(eta2-eta1)**2)
+   d23 = sqrt((xi3-xi2)**2+(eta3-eta2)**2)
+   d34 = sqrt((xi4-xi3)**2+(eta4-eta3)**2)
+   d41 = sqrt((xi1-xi4)**2+(eta1-eta4)**2)
+
+   ! transform control points in panel coordinate system using matrix
+   DP(1:3) = CP(1:3)-RefPoint(1:3)
+
+   ! NOTE: Using matmul instead of unrolled loops to match host precision for regression tests
+   ! This assumes gfortran offloading handles matmul (which gfortran 10+ should do by inlining)
+   DPp = matmul(R_g2p, DP)
+
+   ! scalars
+   r1 = sqrt((DPp(1)-xi1)**2 + (DPp(2)-eta1)**2 + DPp(3)**2)
+   r2 = sqrt((DPp(1)-xi2)**2 + (DPp(2)-eta2)**2 + DPp(3)**2)
+   r3 = sqrt((DPp(1)-xi3)**2 + (DPp(2)-eta3)**2 + DPp(3)**2)
+   r4 = sqrt((DPp(1)-xi4)**2 + (DPp(2)-eta4)**2 + DPp(3)**2)
+   !
+   e1 = DPp(3)**2 + (DPp(1)-xi1)**2
+   e2 = DPp(3)**2 + (DPp(1)-xi2)**2
+   e3 = DPp(3)**2 + (DPp(1)-xi3)**2
+   e4 = DPp(3)**2 + (DPp(1)-xi4)**2
+   !
+   h1 = (DPp(2)-eta1)*(DPp(1)-xi1)
+   h2 = (DPp(2)-eta2)*(DPp(1)-xi2)
+   h3 = (DPp(2)-eta3)*(DPp(1)-xi3)
+   h4 = (DPp(2)-eta4)*(DPp(1)-xi4)
+   ! Velocities in element frame
+   ! --- Log term
+   ! Security - Katz Plotkin page 608 appendix D Code 11
+   if ( r1+r2-d12<=0.0_ReKi .or. d12 <=0.0_ReKi ) then
+      RJ12=0._ReKi
+   else
+      RJ12=1/d12 * log((r1+r2-d12)/(r1+r2+d12))
+   endif
+
+   if ( r2+r3-d23<=0.0_ReKi .or. d23 <=0.0_ReKi ) then
+      RJ23=0._ReKi
+   else
+      RJ23=1/d23 * log((r2+r3-d23)/(r2+r3+d23))
+   endif
+
+   if ( r3+r4-d34<=0.0_ReKi .or. d34 <=0.0_ReKi ) then
+      RJ34=0._ReKi
+   else
+      RJ34=1/d34 * log((r3+r4-d34)/(r3+r4+d34))
+   endif
+
+   if ( r4+r1-d41<=0.0_ReKi .or. d41 <=0.0_ReKi ) then
+      RJ41=0._ReKi
+   else
+      RJ41=1/d41 * log((r4+r1-d41)/(r4+r1+d41))
+   endif
+   ! --- Tan term
+   ! 12
+   if (EqualRealNos_Target(xi2, xi1, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
+      TAN12=0._ReKi
+   else
+      m12=(eta2-eta1)/(xi2-xi1)
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
+         TAN12=Pi_in*aint((signit_target(1.0_ReKi, (m12*e1-h1), Eps_in) - signit_target(1.0_ReKi, (m12*e2-h2), Eps_in))/2) ! Security-Hess1962-page47-top
+      else
+         TAN12= atan((m12*e1-h1)/(DPp(3)*r1)) - atan((m12*e2-h2)/(DPp(3)*r2))
+      endif
+   endif
+   ! 23
+   if (EqualRealNos_Target(xi3, xi2, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
+      TAN23=0._ReKi
+   else
+      m23=(eta3-eta2)/(xi3-xi2)
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
+         TAN23=Pi_in*aint((signit_target(1.0_ReKi, (m23*e2-h2), Eps_in) - signit_target(1.0_ReKi, (m23*e3-h3), Eps_in))/2) ! Security-Hess1962-page47-top
+      else
+         TAN23= atan((m23*e2-h2)/(DPp(3)*r2)) - atan((m23*e3-h3)/(DPp(3)*r3))
+      endif
+   endif
+   ! 34
+   if (EqualRealNos_Target(xi4, xi3, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
+      TAN34=0._ReKi
+   else
+      m34=(eta4-eta3)/(xi4-xi3)
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
+         TAN34=Pi_in*aint((signit_target(1.0_ReKi, (m34*e3-h3), Eps_in) - signit_target(1.0_ReKi, (m34*e4-h4), Eps_in))/2) ! Security-Hess1962-page47-top
+      else
+         TAN34= atan((m34*e3-h3)/(DPp(3)*r3)) - atan((m34*e4-h4)/(DPp(3)*r4))
+      endif
+   endif
+   ! 41
+   if (EqualRealNos_Target(xi1, xi4, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
+      TAN41=0._ReKi
+   else
+      m41=(eta1-eta4)/(xi1-xi4)
+      if( abs(DPp(3))<eps_quadsource ) then ! case where z is too small, jumps may occur
+         TAN41=Pi_in*aint((signit_target(1.0_ReKi, (m41*e4-h4), Eps_in) - signit_target(1.0_ReKi, (m41*e1-h1), Eps_in))/2) ! Security-Hess1962-page47-top
+      else
+         TAN41= atan((m41*e4-h4)/(DPp(3)*r4)) - atan((m41*e1-h1)/(DPp(3)*r1))
+      endif
+   endif
+   ! --- Velocity  in Panel frame
+   Vp(1)= Sigma/(fourpi_in)*( (eta2-eta1)*RJ12 + (eta3-eta2)*RJ23 + (eta4-eta3)*RJ34 + (eta1-eta4)*RJ41 )
+   Vp(2)= Sigma/(fourpi_in)*( (xi1-xi2)  *RJ12 + (xi2-xi3)  *RJ23 +  (xi3-xi4) *RJ34 +  (xi4-xi1) *RJ41 )
+   Vp(3)= Sigma/(fourpi_in)*( ( TAN12 ) + ( TAN23 ) + ( TAN34 ) + ( TAN41 ) )
+   ! --- Velocity in Reference frame
+   ! NOTE: Using matmul(transpose) to match host precision for regression tests
+   UI(1:3) = matmul(transpose(R_g2p), Vp(1:3))
+end subroutine  ui_quad_src_11_target
 
 !> Induced velocity by several flat quadrilateral source panels on multiple control points (CPs)
 subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPanels)
@@ -591,18 +764,30 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   !$OMP PARALLEL DEFAULT(SHARED)
-   !$OMP DO PRIVATE(icp, Uind_cum, Uind_tmp, ip) schedule(runtime)
-   do icp=1,nCPs ! loop on Control Points
-      Uind_cum = 0.0_ReKi
-      do ip=1,nPanels !loop on panels 
-         call ui_quad_src_11(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp)
-         Uind_cum = Uind_cum + Uind_tmp
-      enddo
-      UI(1:3,icp) = UI(1:3,icp) + Uind_cum
-   end do ! control points
-   !$OMP END DO 
-   !$OMP END PARALLEL
+   real(ReKi) :: Pi_loc, fourpi_loc, Eps_loc, Tol_loc
+
+   Pi_loc = Pi
+   fourpi_loc = fourpi
+   Eps_loc = PRECISION_EPS
+   Tol_loc = TOL_EPS
+
+   if (nCPs > 0 .and. nPanels > 0) then
+      !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
+      !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
+      !$OMP map(tofrom: UI(1:3,1:nCPs)) &
+      !$OMP firstprivate(nCPs, nPanels, Pi_loc, fourpi_loc, Eps_loc, Tol_loc) &
+      !$OMP private(icp, ip, Uind_cum, Uind_tmp) &
+      !$OMP schedule(static)
+      do icp=1,nCPs ! loop on Control Points
+         Uind_cum = 0.0_ReKi
+         do ip=1,nPanels !loop on panels
+            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp, Pi_loc, fourpi_loc, Eps_loc, Tol_loc)
+            Uind_cum = Uind_cum + Uind_tmp
+         enddo
+         UI(1:3,icp) = UI(1:3,icp) + Uind_cum
+      end do ! control points
+      !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
+   endif
 end subroutine ui_quad_src_nn
 
 elemental real(ReKi) function signit(ref, val)
