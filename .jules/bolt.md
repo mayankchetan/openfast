@@ -1,3 +1,6 @@
 ## 2024-05-22 - Fortran GPU Offloading Patterns
 **Learning:** When offloading Fortran subroutines that use module variables or parameters (like `Pi`, `epsilon`), these must be passed as arguments or mapped explicitly (`firstprivate`) to the target region. Accessing module data directly on the device often fails. Creating `_target` clones of helper functions that accept these constants as arguments is a robust pattern. Also, explicit unrolling of small matrix ops avoids intrinsic issues on GPU.
 **Action:** Always create `_target` versions for device code, pass constants as arguments, and unroll small loops.
+## 2024-05-23 - Fortran GPU Precision and Intrinsics
+**Learning:** Replacing intrinsics like `matmul` with unrolled loops in OpenMP target regions can introduce subtle precision differences (due to compiler optimization choices like FMA). These differences can cause regression tests (e.g., `ModAmb_3`) to fail. If legacy behavior must be preserved, use `matmul` in the target region (assuming compiler support like `gfortran-14`) or ensure the unrolled logic is bitwise identical.
+**Action:** When creating `_target` clones, verify arithmetic operations match the host implementation exactly. If host uses `matmul`, prioritize `matmul` in target unless it causes compilation/runtime errors.
