@@ -4,3 +4,6 @@
 ## 2024-05-23 - Fortran GPU Precision and Intrinsics
 **Learning:** Replacing intrinsics like `matmul` with unrolled loops in OpenMP target regions can introduce subtle precision differences (due to compiler optimization choices like FMA). These differences can cause regression tests (e.g., `ModAmb_3`) to fail. If legacy behavior must be preserved, use `matmul` in the target region (assuming compiler support like `gfortran-14`) or ensure the unrolled logic is bitwise identical.
 **Action:** When creating `_target` clones, verify arithmetic operations match the host implementation exactly. If host uses `matmul`, prioritize `matmul` in target unless it causes compilation/runtime errors.
+## 2024-05-23 - Precision Drift in OpenMP Offloading
+**Learning:** Recalculating derived constants (like `Tol = 100 * eps / 2`) inside a target region at runtime can yield slightly different results than compile-time `parameter` calculations on the host, causing strict regression tests to fail. This is due to compiler optimization differences or FMA usage.
+**Action:** Define such constants as `parameter` in the module, calculate them on the host, and pass them as explicit arguments to the target kernel.

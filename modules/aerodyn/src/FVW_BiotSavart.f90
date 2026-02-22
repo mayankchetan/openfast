@@ -9,6 +9,7 @@ module FVW_BiotSavart
 
    real(ReKi),parameter :: PRECISION_UI  = epsilon(1.0_ReKi)/100 !< NOTE assuming problem of size 1
    real(ReKi),parameter :: PRECISION_EPS =  epsilon(1.0_ReKi) !< Machine Precision For the given ReKi for problems of scale 1!
+   real(ReKi),parameter :: TOL_EPS       =  100.0_ReKi * PRECISION_EPS / 2.0_ReKi
    real(ReKi),parameter :: MIN_EXP_VALUE=-10.0_ReKi
    real(ReKi),parameter :: MINDENOM=0.0_ReKi
 !    real(ReKi),parameter :: MINDENOM=1e-15_ReKi
@@ -578,13 +579,12 @@ subroutine ui_quad_src_11(CP, Sigma, xi, eta, RefPoint, R_g2p, UI)
 end subroutine  ui_quad_src_11
 
 !> Target version of EqualRealNos
-function EqualRealNos_Target(ReNum1, ReNum2, Eps)
+pure function EqualRealNos_Target(ReNum1, ReNum2, Tol)
    !$OMP DECLARE TARGET
-   real(ReKi), intent(in) :: ReNum1, ReNum2, Eps
+   real(ReKi), intent(in) :: ReNum1, ReNum2, Tol
    logical                :: EqualRealNos_Target
-   real(ReKi)             :: Tol, Fraction
+   real(ReKi)             :: Fraction
 
-   Tol = 100.0_ReKi * Eps / 2.0_ReKi
    Fraction = MAX(ABS(ReNum1 + ReNum2), 1.0_ReKi)
 
    if (ABS(ReNum1 - ReNum2) <= Fraction * Tol) then
@@ -595,7 +595,7 @@ function EqualRealNos_Target(ReNum1, ReNum2, Eps)
 end function EqualRealNos_Target
 
 !> Target version of signit
-elemental real(ReKi) function signit_target(ref, val, Eps)
+pure elemental real(ReKi) function signit_target(ref, val, Eps)
    !$OMP DECLARE TARGET
    real(ReKi), intent(in) :: ref, val, Eps
    if (abs(val) > Eps) then
@@ -606,7 +606,7 @@ elemental real(ReKi) function signit_target(ref, val, Eps)
 end function signit_target
 
 !> Target version of ui_quad_src_11
-subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in, fourpi_in, Eps_in)
+subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in, fourpi_in, Eps_in, Tol_in)
    !$OMP DECLARE TARGET
    real(ReKi),                 intent(in)  :: Sigma      !< Source panel intensity
    real(ReKi), dimension(3),   intent(in)  :: CP         !< Control Point
@@ -618,6 +618,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
    real(ReKi),                 intent(in)  :: Pi_in      !< Pi
    real(ReKi),                 intent(in)  :: fourpi_in  !< 4*Pi
    real(ReKi),                 intent(in)  :: Eps_in     !< Machine Epsilon
+   real(ReKi),                 intent(in)  :: Tol_in     !< Tolerance for Equality
 
    real(ReKi),parameter       :: eps_quadsource=1e-6_ReKi !!!!!!!!!!!!!!!!!! !< Used if z coordinate close to zero
    real(ReKi)                 :: d12, d23, d34, d41         !<
@@ -697,7 +698,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
    endif
    ! --- Tan term
    ! 12
-   if (EqualRealNos_Target(xi2, xi1, Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi2, xi1, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN12=0._ReKi
    else
       m12=(eta2-eta1)/(xi2-xi1)
@@ -708,7 +709,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
       endif
    endif
    ! 23
-   if (EqualRealNos_Target(xi3, xi2, Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi3, xi2, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN23=0._ReKi
    else
       m23=(eta3-eta2)/(xi3-xi2)
@@ -719,7 +720,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
       endif
    endif
    ! 34
-   if (EqualRealNos_Target(xi4, xi3, Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi4, xi3, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN34=0._ReKi
    else
       m34=(eta4-eta3)/(xi4-xi3)
@@ -730,7 +731,7 @@ subroutine ui_quad_src_11_target(CP, Sigma, xi, eta, RefPoint, R_g2p, UI, Pi_in,
       endif
    endif
    ! 41
-   if (EqualRealNos_Target(xi1, xi4, Eps_in)) then ! Security - Hess 1962 - page 47 - bottom
+   if (EqualRealNos_Target(xi1, xi4, Tol_in)) then ! Security - Hess 1962 - page 47 - bottom
       TAN41=0._ReKi
    else
       m41=(eta1-eta4)/(xi1-xi4)
@@ -763,23 +764,24 @@ subroutine ui_quad_src_nn(CPs, Sigmas, xi, eta, RefPoint, R_g2p, UI, nCPs, nPane
    real(ReKi) :: Uind_tmp(3) !< 
    real(ReKi) :: Uind_cum(3) !< 
    integer    :: ip, icp     !< loop index
-   real(ReKi) :: Pi_loc, fourpi_loc, Eps_loc
+   real(ReKi) :: Pi_loc, fourpi_loc, Eps_loc, Tol_loc
 
    Pi_loc = Pi
    fourpi_loc = fourpi
-   Eps_loc = epsilon(1.0_ReKi)
+   Eps_loc = PRECISION_EPS
+   Tol_loc = TOL_EPS
 
    if (nCPs > 0 .and. nPanels > 0) then
       !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO &
       !$OMP map(to: CPs(1:3,1:nCPs), Sigmas(1:nPanels), xi(1:4,1:nPanels), eta(1:4,1:nPanels), RefPoint(1:3,1:nPanels), R_g2p(1:3,1:3,1:nPanels)) &
       !$OMP map(tofrom: UI(1:3,1:nCPs)) &
-      !$OMP firstprivate(nCPs, nPanels, Pi_loc, fourpi_loc, Eps_loc) &
+      !$OMP firstprivate(nCPs, nPanels, Pi_loc, fourpi_loc, Eps_loc, Tol_loc) &
       !$OMP private(icp, ip, Uind_cum, Uind_tmp) &
       !$OMP schedule(static)
       do icp=1,nCPs ! loop on Control Points
          Uind_cum = 0.0_ReKi
          do ip=1,nPanels !loop on panels
-            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp, Pi_loc, fourpi_loc, Eps_loc)
+            call ui_quad_src_11_target(CPs(:,icp), Sigmas(ip), xi(:,ip), eta(:,ip), RefPoint(:,ip), R_g2p(:,:,ip), Uind_tmp, Pi_loc, fourpi_loc, Eps_loc, Tol_loc)
             Uind_cum = Uind_cum + Uind_tmp
          enddo
          UI(1:3,icp) = UI(1:3,icp) + Uind_cum
