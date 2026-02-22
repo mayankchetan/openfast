@@ -1,0 +1,3 @@
+## 2024-05-22 - Fortran GPU Offloading Patterns
+**Learning:** When offloading Fortran subroutines that use module variables or parameters (like `Pi`, `epsilon`), these must be passed as arguments or mapped explicitly (`firstprivate`) to the target region. Accessing module data directly on the device often fails. Creating `_target` clones of helper functions that accept these constants as arguments is a robust pattern. Also, explicit unrolling of small matrix ops avoids intrinsic issues on GPU.
+**Action:** Always create `_target` versions for device code, pass constants as arguments, and unroll small loops.
