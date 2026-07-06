@@ -93,6 +93,16 @@ module YamlInput
 
    character(*), parameter :: StringSourceName = '(string input)'
 
+   !> Transient parser state: the anchor registry (&name -> node index). Redefining an
+   !! anchor name shadows the earlier definition, per YAML.
+   type :: YamlParseState
+      character(64),  allocatable :: AnchorNames(:)
+      integer(IntKi), allocatable :: AnchorNodes(:)
+      integer                     :: NumAnchors = 0
+   end type YamlParseState
+
+   integer, parameter :: MaxMergeSrcs = 16  !< aliases allowed in one "<<:" merge list
+
 contains
 
 !> Returns true when FileName's extension (judged on the basename only) is .yaml or .yml,
@@ -174,6 +184,7 @@ subroutine Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
 
    character(*), parameter          :: RoutineName = 'Yaml_LoadString'
    type(ScanLineType), allocatable  :: SL(:)
+   type(YamlParseState)             :: PS
    integer(IntKi)                   :: ErrStat2
    character(ErrMsgLen)             :: ErrMsg2
    integer                          :: Cur
@@ -199,7 +210,7 @@ subroutine Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
    Doc%Nodes(iRoot)%FileLine = SL(1)%FileLine
 
    Cur = 1
-   call ParseBlockNode(SL, Cur, SL(1)%Indent, Doc, iRoot, ErrStat2, ErrMsg2)
+   call ParseBlockNode(SL, Cur, SL(1)%Indent, Doc, iRoot, PS, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
 
@@ -247,6 +258,91 @@ integer(IntKi) function AddNode(Doc, iParent) result(iNew)
       Doc%Nodes(iParent)%NumChildren = Doc%Nodes(iParent)%NumChildren + 1
    end if
 end function AddNode
+
+!> Deep-copy the subtree rooted at iSrc as a new child of iParent, returning the new
+!! node's index. Provenance is retained from the source (alias copies report the
+!! anchor's true location); Used flags reset. Indices are stable, so copying from the
+!! same arena that is growing is safe — only indices are held across AddNode calls.
+recursive function CopySubtree(Doc, iSrc, iParent) result(iNew)
+   type(YamlDoc),  intent(inout) :: Doc
+   integer(IntKi), intent(in   ) :: iSrc
+   integer(IntKi), intent(in   ) :: iParent
+   integer(IntKi)                :: iNew
+
+   iNew = AddNode(Doc, iParent)
+   if (allocated(Doc%Nodes(iSrc)%Key)) Doc%Nodes(iNew)%Key = Doc%Nodes(iSrc)%Key
+   call CopyInto(Doc, iSrc, iNew)
+end function CopySubtree
+
+!> Copy kind, scalar text, provenance, and (deep) children of iSrc into the existing node
+!! iDest — the node's own Key and parent linkage are left untouched (an alias takes the
+!! host's key but the anchor's content and provenance).
+recursive subroutine CopyInto(Doc, iSrc, iDest)
+   type(YamlDoc),  intent(inout) :: Doc
+   integer(IntKi), intent(in   ) :: iSrc
+   integer(IntKi), intent(in   ) :: iDest
+
+   integer(IntKi) :: iEntry, iNext, iNew
+
+   Doc%Nodes(iDest)%Kind     = Doc%Nodes(iSrc)%Kind
+   Doc%Nodes(iDest)%FileIndx = Doc%Nodes(iSrc)%FileIndx
+   Doc%Nodes(iDest)%FileLine = Doc%Nodes(iSrc)%FileLine
+   Doc%Nodes(iDest)%Used     = .false.
+   if (allocated(Doc%Nodes(iSrc)%Scalar)) Doc%Nodes(iDest)%Scalar = Doc%Nodes(iSrc)%Scalar
+
+   iEntry = Doc%Nodes(iSrc)%FirstChild
+   do while (iEntry > 0)
+      iNext = Doc%Nodes(iEntry)%NextSibling       ! read before any arena growth
+      iNew  = CopySubtree(Doc, iEntry, iDest)
+      iEntry = iNext
+   end do
+end subroutine CopyInto
+
+!> Register (or redefine) an anchor name for a completed node.
+subroutine RegisterAnchor(PS, Name, iNode)
+   type(YamlParseState), intent(inout) :: PS
+   character(*),         intent(in   ) :: Name
+   integer(IntKi),       intent(in   ) :: iNode
+
+   character(64),  allocatable :: TmpN(:)
+   integer(IntKi), allocatable :: TmpI(:)
+   integer                     :: i
+
+   do i = 1, PS%NumAnchors
+      if (trim(PS%AnchorNames(i)) == Name) then   ! redefinition shadows, per YAML
+         PS%AnchorNodes(i) = iNode
+         return
+      end if
+   end do
+
+   if (.not. allocated(PS%AnchorNames)) then
+      allocate(PS%AnchorNames(8), PS%AnchorNodes(8))
+   else if (PS%NumAnchors == size(PS%AnchorNames)) then
+      allocate(TmpN(2*size(PS%AnchorNames)), TmpI(2*size(PS%AnchorNodes)))
+      TmpN(1:PS%NumAnchors) = PS%AnchorNames
+      TmpI(1:PS%NumAnchors) = PS%AnchorNodes
+      call move_alloc(TmpN, PS%AnchorNames)
+      call move_alloc(TmpI, PS%AnchorNodes)
+   end if
+
+   PS%NumAnchors = PS%NumAnchors + 1
+   PS%AnchorNames(PS%NumAnchors) = Name
+   PS%AnchorNodes(PS%NumAnchors) = iNode
+end subroutine RegisterAnchor
+
+!> Node index for an anchor name; 0 when undefined.
+integer(IntKi) function ResolveAlias(PS, Name) result(iNode)
+   type(YamlParseState), intent(in) :: PS
+   character(*),         intent(in) :: Name
+   integer :: i
+   iNode = 0
+   do i = 1, PS%NumAnchors
+      if (trim(PS%AnchorNames(i)) == Name) then
+         iNode = PS%AnchorNodes(i)
+         return
+      end if
+   end do
+end function ResolveAlias
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Internal: scanning
@@ -380,22 +476,23 @@ end subroutine StripComment
 
 !> Parse the block starting at SL(Cur) (a mapping or a sequence at indentation Indent)
 !! into node iNode. On return Cur points at the first line no longer part of this block.
-recursive subroutine ParseBlockNode(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
-   type(ScanLineType), intent(in   ) :: SL(:)
-   integer,            intent(inout) :: Cur
-   integer,            intent(in   ) :: Indent
-   type(YamlDoc),      intent(inout) :: Doc
-   integer(IntKi),     intent(in   ) :: iNode
-   integer(IntKi),     intent(  out) :: ErrStat
-   character(*),       intent(  out) :: ErrMsg
+recursive subroutine ParseBlockNode(SL, Cur, Indent, Doc, iNode, PS, ErrStat, ErrMsg)
+   type(ScanLineType),   intent(in   ) :: SL(:)
+   integer,              intent(inout) :: Cur
+   integer,              intent(in   ) :: Indent
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
 
    ErrStat = ErrID_None
    ErrMsg  = ""
 
    if (IsSeqItem(SL(Cur)%Text)) then
-      call ParseBlockSeq(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
+      call ParseBlockSeq(SL, Cur, Indent, Doc, iNode, PS, ErrStat, ErrMsg)
    else
-      call ParseBlockMap(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
+      call ParseBlockMap(SL, Cur, Indent, Doc, iNode, PS, ErrStat, ErrMsg)
    end if
 end subroutine ParseBlockNode
 
@@ -406,37 +503,60 @@ logical function IsSeqItem(Text) result(IsItem)
 end function IsSeqItem
 
 !> Parse a block mapping whose keys sit at indentation Indent, adding entries under iNode.
-recursive subroutine ParseBlockMap(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
-   type(ScanLineType), intent(in   ) :: SL(:)
-   integer,            intent(inout) :: Cur
-   integer,            intent(in   ) :: Indent
-   type(YamlDoc),      intent(inout) :: Doc
-   integer(IntKi),     intent(in   ) :: iNode
-   integer(IntKi),     intent(  out) :: ErrStat
-   character(*),       intent(  out) :: ErrMsg
+!! Handles "&anchor" capture on values, "<<:" merge keys (applied after the block so
+!! explicit keys always win), and delegates alias expansion to SetScalar.
+recursive subroutine ParseBlockMap(SL, Cur, Indent, Doc, iNode, PS, ErrStat, ErrMsg)
+   type(ScanLineType),   intent(in   ) :: SL(:)
+   integer,              intent(inout) :: Cur
+   integer,              intent(in   ) :: Indent
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
 
    character(*), parameter   :: RoutineName = 'ParseBlockMap'
-   character(:), allocatable :: Key, Value
+   character(:), allocatable :: Key, Value, AnchName
    integer(IntKi)            :: iChild, iDup
+   integer(IntKi)            :: MergeSrcs(MaxMergeSrcs)
+   integer                   :: nMergeSrc
+   logical                   :: MergeSeen
    integer(IntKi)            :: ErrStat2
    character(ErrMsgLen)      :: ErrMsg2
 
    ErrStat = ErrID_None
    ErrMsg  = ""
    Doc%Nodes(iNode)%Kind = YAML_MAP
+   MergeSeen = .false.
+   nMergeSrc = 0
 
    do while (Cur <= size(SL))
-      if (SL(Cur)%Indent < Indent) return         ! end of this block
+      if (SL(Cur)%Indent < Indent) exit           ! end of this block
       if (SL(Cur)%Indent > Indent) then
          call SetErrStat(ErrID_Fatal, LineRef(SL(Cur), Doc%FileList)//' Unexpected indentation '// &
             '(expected a key at column '//trim(Num2LStr(Indent+1))//').', ErrStat, ErrMsg, RoutineName)
          return
       end if
-      if (IsSeqItem(SL(Cur)%Text)) return         ! sequence item belongs to the enclosing key
+      if (IsSeqItem(SL(Cur)%Text)) exit           ! sequence item belongs to the enclosing key
 
       call SplitKeyValue(SL(Cur), Doc%FileList, Key, Value, ErrStat2, ErrMsg2)
       call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       if (ErrStat >= AbortErrLev) return
+
+      ! "<<:" — standard merge key: collect sources now, apply after the block completes
+      if (Key == '<<') then
+         if (MergeSeen) then
+            call SetErrStat(ErrID_Fatal, LineRef(SL(Cur), Doc%FileList)//' A mapping may contain '// &
+               'only one "<<" merge key.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+         MergeSeen = .true.
+         call ParseMergeValue(SL(Cur), Value, Doc, PS, MergeSrcs, nMergeSrc, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat >= AbortErrLev) return
+         Cur = Cur + 1
+         cycle
+      end if
 
       ! duplicate keys are ambiguous decks: hard error naming both definitions
       iDup = Yaml_ChildByKey(Doc, iNode, Key)
@@ -448,14 +568,17 @@ recursive subroutine ParseBlockMap(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
          return
       end if
 
+      ! "&anchor" prefix on the value: remember the name, keep parsing the remainder
+      call TakeAnchor(Value, AnchName)
+
       iChild = AddNode(Doc, iNode)
       Doc%Nodes(iChild)%Key      = Key
       Doc%Nodes(iChild)%FileIndx = SL(Cur)%FileIndx
       Doc%Nodes(iChild)%FileLine = SL(Cur)%FileLine
 
       if (len(Value) > 0) then
-         ! value on the same line: a scalar
-         call SetScalar(Doc, iChild, Value, SL(Cur), ErrStat2, ErrMsg2)
+         ! value on the same line: a scalar, flow collection, or alias
+         call SetScalar(Doc, iChild, Value, SL(Cur), PS, ErrStat2, ErrMsg2)
          call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          if (ErrStat >= AbortErrLev) return
          Cur = Cur + 1
@@ -464,7 +587,7 @@ recursive subroutine ParseBlockMap(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
          ! indentation), or an empty scalar
          Cur = Cur + 1
          if (NestedFollows(SL, Cur, Indent)) then
-            call ParseBlockNode(SL, Cur, SL(Cur)%Indent, Doc, iChild, ErrStat2, ErrMsg2)
+            call ParseBlockNode(SL, Cur, SL(Cur)%Indent, Doc, iChild, PS, ErrStat2, ErrMsg2)
             call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
             if (ErrStat >= AbortErrLev) return
          else
@@ -472,8 +595,143 @@ recursive subroutine ParseBlockMap(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
             Doc%Nodes(iChild)%Scalar = ''
          end if
       end if
+
+      ! anchors bind once their node is complete (a self-referencing alias is undefined)
+      if (len(AnchName) > 0) call RegisterAnchor(PS, AnchName, iChild)
    end do
+
+   call ApplyMerges(Doc, iNode, MergeSrcs, nMergeSrc, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine ParseBlockMap
+
+!> Strip a leading "&name" from a value text, returning the name ('' when none).
+subroutine TakeAnchor(Value, AnchName)
+   character(:), allocatable, intent(inout) :: Value
+   character(:), allocatable, intent(  out) :: AnchName
+
+   integer :: SpacePos
+
+   AnchName = ''
+   if (len(Value) == 0) return
+   if (Value(1:1) /= '&') return
+
+   SpacePos = index(Value, ' ')
+   if (SpacePos == 0) then
+      AnchName = Value(2:)
+      Value    = ''
+   else
+      AnchName = Value(2:SpacePos-1)
+      Value    = trim(adjustl(Value(SpacePos+1:)))
+   end if
+end subroutine TakeAnchor
+
+!> Parse the value of a "<<:" merge key: one alias or a flow list of aliases, each of
+!! which must resolve to a mapping. Appends the resolved node indices to MergeSrcs.
+subroutine ParseMergeValue(SLine, Value, Doc, PS, MergeSrcs, nMergeSrc, ErrStat, ErrMsg)
+   type(ScanLineType),   intent(in   ) :: SLine
+   character(*),         intent(in   ) :: Value
+   type(YamlDoc),        intent(in   ) :: Doc
+   type(YamlParseState), intent(in   ) :: PS
+   integer(IntKi),       intent(inout) :: MergeSrcs(:)
+   integer,              intent(inout) :: nMergeSrc
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
+
+   character(*), parameter   :: RoutineName = 'ParseMergeValue'
+   character(:), allocatable :: Token
+   integer                   :: Pos
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   if (len(Value) == 0) then
+      call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' The "<<" merge key requires an '// &
+         'inline value: an alias (*name) or a list of aliases ([*a, *b]).', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   if (Value(1:1) == '*') then
+      call AddMergeSrc(trim(Value))
+   else if (Value(1:1) == '[') then
+      Pos = 2
+      do
+         call FlowToken(Value, Pos, .false., Token)
+         if (len_trim(Token) > 0) call AddMergeSrc(trim(Token))
+         if (ErrStat >= AbortErrLev) return
+         if (Pos > len(Value)) then
+            call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' Unterminated alias list '// &
+               'on the "<<" merge key.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+         if (Value(Pos:Pos) == ']') exit
+         Pos = Pos + 1   ! consume ','
+      end do
+   else
+      call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' The "<<" merge key value must be '// &
+         'an alias (*name) or a list of aliases ([*a, *b]); found "'//trim(Value)//'".', &
+         ErrStat, ErrMsg, RoutineName)
+   end if
+
+contains
+
+   subroutine AddMergeSrc(AliasText)
+      character(*), intent(in) :: AliasText
+      integer(IntKi) :: iSrc
+
+      if (AliasText(1:1) /= '*') then
+         call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' Items in a "<<" merge list must '// &
+            'be aliases (*name); found "'//AliasText//'".', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      iSrc = ResolveAlias(PS, AliasText(2:))
+      if (iSrc == 0) then
+         call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' Undefined anchor "'// &
+            AliasText(2:)//'" referenced by the "<<" merge key.', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      if (Doc%Nodes(iSrc)%Kind /= YAML_MAP) then
+         call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' The "<<" merge key can only '// &
+            'merge mappings; anchor "'//AliasText(2:)//'" is not a mapping.', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      if (nMergeSrc >= size(MergeSrcs)) then
+         call SetErrStat(ErrID_Fatal, LineRef(SLine, Doc%FileList)//' Too many aliases in one "<<" '// &
+            'merge list (limit '//trim(Num2LStr(size(MergeSrcs)))//').', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      nMergeSrc = nMergeSrc + 1
+      MergeSrcs(nMergeSrc) = iSrc
+   end subroutine AddMergeSrc
+
+end subroutine ParseMergeValue
+
+!> Apply collected merge sources to a completed mapping: entries whose keys the host does
+!! not already have are deep-copied in, in source order (host keys and earlier sources win).
+subroutine ApplyMerges(Doc, iHost, MergeSrcs, nMergeSrc, ErrStat, ErrMsg)
+   type(YamlDoc),  intent(inout) :: Doc
+   integer(IntKi), intent(in   ) :: iHost
+   integer(IntKi), intent(in   ) :: MergeSrcs(:)
+   integer,        intent(in   ) :: nMergeSrc
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+
+   integer        :: i
+   integer(IntKi) :: iEntry, iNext, iNew
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   do i = 1, nMergeSrc
+      iEntry = Doc%Nodes(MergeSrcs(i))%FirstChild
+      do while (iEntry > 0)
+         iNext = Doc%Nodes(iEntry)%NextSibling    ! read before any arena growth
+         if (Yaml_ChildByKey(Doc, iHost, Doc%Nodes(iEntry)%Key) == 0) then
+            iNew = CopySubtree(Doc, iEntry, iHost)
+         end if
+         iEntry = iNext
+      end do
+   end do
+end subroutine ApplyMerges
 
 !> After consuming "key:" at indentation Indent, decide whether the next line opens the
 !! key's nested block: any deeper line does, and so does a sequence item at the same
@@ -489,18 +747,21 @@ logical function NestedFollows(SL, Cur, Indent) result(Follows)
              (SL(Cur)%Indent == Indent .and. IsSeqItem(SL(Cur)%Text))
 end function NestedFollows
 
-!> Parse a block sequence whose "-" markers sit at indentation Indent, adding items under iNode.
-recursive subroutine ParseBlockSeq(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
-   type(ScanLineType), intent(in   ) :: SL(:)
-   integer,            intent(inout) :: Cur
-   integer,            intent(in   ) :: Indent
-   type(YamlDoc),      intent(inout) :: Doc
-   integer(IntKi),     intent(in   ) :: iNode
-   integer(IntKi),     intent(  out) :: ErrStat
-   character(*),       intent(  out) :: ErrMsg
+!> Parse a block sequence whose "-" markers sit at indentation Indent, adding items under
+!! iNode. Items may carry "&anchor" prefixes and may be aliases ("- *T1").
+recursive subroutine ParseBlockSeq(SL, Cur, Indent, Doc, iNode, PS, ErrStat, ErrMsg)
+   type(ScanLineType),   intent(in   ) :: SL(:)
+   integer,              intent(inout) :: Cur
+   integer,              intent(in   ) :: Indent
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
 
    character(*), parameter          :: RoutineName = 'ParseBlockSeq'
    type(ScanLineType), allocatable  :: Slice(:)
+   character(:), allocatable        :: ItemText, AnchName
    integer(IntKi)                   :: iChild
    integer(IntKi)                   :: ErrStat2
    character(ErrMsgLen)             :: ErrMsg2
@@ -519,16 +780,24 @@ recursive subroutine ParseBlockSeq(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
       Doc%Nodes(iChild)%FileLine = SL(Cur)%FileLine
       ItemLine = SL(Cur)%FileLine
 
-      ! Re-baseline the item: its inline text (after "- ") acts as a line at Indent+2,
-      ! followed by every subsequent line deeper than Indent. Parsing the slice as its
-      ! own block handles "- scalar", "- key: value" map items, and "-" + nested block.
+      ! inline text after "- ", with any "&anchor" prefix taken off first
+      if (len_trim(SL(Cur)%Text) > 1) then
+         ItemText = trim(adjustl(SL(Cur)%Text(2:)))
+      else
+         ItemText = ''
+      end if
+      call TakeAnchor(ItemText, AnchName)
+
+      ! Re-baseline the item: its inline text acts as a line at Indent+2, followed by
+      ! every subsequent line deeper than Indent. Parsing the slice as its own block
+      ! handles "- scalar", "- key: value" map items, and "-" + nested block.
       allocate(Slice(size(SL)))
       NSlice = 0
-      if (len_trim(SL(Cur)%Text) > 1) then       ! "- something"
+      if (len(ItemText) > 0) then
          NSlice = NSlice + 1
          Slice(NSlice)          = SL(Cur)
          Slice(NSlice)%Indent   = Indent + 2
-         Slice(NSlice)%Text     = trim(adjustl(SL(Cur)%Text(2:)))
+         Slice(NSlice)%Text     = ItemText
       end if
       Cur = Cur + 1
       do while (Cur <= size(SL))
@@ -542,12 +811,12 @@ recursive subroutine ParseBlockSeq(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
          Doc%Nodes(iChild)%Kind   = YAML_SCALAR  ! bare "-" with nothing nested
          Doc%Nodes(iChild)%Scalar = ''
       else if (NSlice == 1 .and. ItemLine == Slice(1)%FileLine .and. FindColon(Slice(1)%Text) == 0) then
-         call SetScalar(Doc, iChild, Slice(1)%Text, Slice(1), ErrStat2, ErrMsg2)
+         call SetScalar(Doc, iChild, Slice(1)%Text, Slice(1), PS, ErrStat2, ErrMsg2)
          call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          if (ErrStat >= AbortErrLev) return
       else
          SubCur = 1
-         call ParseBlockNode(Slice(1:NSlice), SubCur, Slice(1)%Indent, Doc, iChild, ErrStat2, ErrMsg2)
+         call ParseBlockNode(Slice(1:NSlice), SubCur, Slice(1)%Indent, Doc, iChild, PS, ErrStat2, ErrMsg2)
          call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          if (ErrStat >= AbortErrLev) return
          if (SubCur <= NSlice) then
@@ -557,6 +826,7 @@ recursive subroutine ParseBlockSeq(SL, Cur, Indent, Doc, iNode, ErrStat, ErrMsg)
          end if
       end if
 
+      if (len(AnchName) > 0) call RegisterAnchor(PS, AnchName, iChild)
       deallocate(Slice)
    end do
 end subroutine ParseBlockSeq
@@ -648,17 +918,19 @@ end subroutine SplitKeyValue
 !> Fill node iNode with an inline value: a flow collection ("[...]"/"{...}"), or a scalar
 !! (unquoted as needed; raw text stored — typed conversion happens at lookup). Block
 !! scalars and tags are rejected here with named-line errors.
-recursive subroutine SetScalar(Doc, iNode, Text, SL, ErrStat, ErrMsg)
-   type(YamlDoc),      intent(inout) :: Doc
-   integer(IntKi),     intent(in   ) :: iNode
-   character(*),       intent(in   ) :: Text
-   type(ScanLineType), intent(in   ) :: SL
-   integer(IntKi),     intent(  out) :: ErrStat
-   character(*),       intent(  out) :: ErrMsg
+recursive subroutine SetScalar(Doc, iNode, Text, SL, PS, ErrStat, ErrMsg)
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   character(*),         intent(in   ) :: Text
+   type(ScanLineType),   intent(in   ) :: SL
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
 
    character(*), parameter   :: RoutineName = 'SetScalar'
    character(:), allocatable :: Unquoted
    integer                   :: Pos, TagEnd
+   integer(IntKi)            :: iSrc
 
    ErrStat = ErrID_None
    ErrMsg  = ""
@@ -666,12 +938,28 @@ recursive subroutine SetScalar(Doc, iNode, Text, SL, ErrStat, ErrMsg)
    select case (Text(1:1))
    case ('[', '{')
       Pos = 1
-      call ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
+      call ParseFlow(Doc, iNode, Text, Pos, SL, PS, ErrStat, ErrMsg)
       if (ErrStat >= AbortErrLev) return
       if (len_trim(Text(Pos:)) > 0) then
          call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unexpected content after '// &
             'the flow collection: "'//trim(Text(Pos:))//'".', ErrStat, ErrMsg, RoutineName)
       end if
+   case ('*')
+      if (index(Text, ' ') > 0) then
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unexpected content after '// &
+            'the alias "'//Text(1:index(Text,' ')-1)//'".', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      iSrc = ResolveAlias(PS, Text(2:))
+      if (iSrc == 0) then
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Undefined anchor "'//Text(2:)// &
+            '" (anchors must be defined before they are referenced).', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      call CopyInto(Doc, iSrc, iNode)
+   case ('&')
+      call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Anchors ("&") are supported on '// &
+         'block mapping values and sequence items, not here.', ErrStat, ErrMsg, RoutineName)
    case ('|', '>')
       call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Block scalars ("|", ">") are '// &
          'not supported by OpenFAST; use a quoted string or a flow collection.', ErrStat, ErrMsg, RoutineName)
@@ -692,14 +980,15 @@ end subroutine SetScalar
 !> Parse a flow collection ("[a, b]" / "{k: v}") starting at Text(Pos:Pos) into iNode.
 !! On return Pos points just past the closing bracket. Nested flow collections recurse;
 !! commas and colons inside quoted strings are honored.
-recursive subroutine ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
-   type(YamlDoc),      intent(inout) :: Doc
-   integer(IntKi),     intent(in   ) :: iNode
-   character(*),       intent(in   ) :: Text
-   integer,            intent(inout) :: Pos
-   type(ScanLineType), intent(in   ) :: SL
-   integer(IntKi),     intent(  out) :: ErrStat
-   character(*),       intent(  out) :: ErrMsg
+recursive subroutine ParseFlow(Doc, iNode, Text, Pos, SL, PS, ErrStat, ErrMsg)
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   character(*),         intent(in   ) :: Text
+   integer,              intent(inout) :: Pos
+   type(ScanLineType),   intent(in   ) :: SL
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
 
    character(*), parameter   :: RoutineName = 'ParseFlow'
    character(1)              :: Open, Close, c
@@ -755,6 +1044,11 @@ recursive subroutine ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
             return
          end if
          Pos = Pos + 1                              ! consume ':'
+         if (Key == '<<') then
+            call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' The "<<" merge key is not '// &
+               'supported inside flow mappings; use a block mapping.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
          iDup = Yaml_ChildByKey(Doc, iNode, Key)
          if (iDup > 0 .and. iDup /= iChild) then
             call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Duplicate key "'//Key// &
@@ -767,7 +1061,7 @@ recursive subroutine ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
 
       if (Pos <= len(Text) .and. (Text(min(Pos,len(Text)):min(Pos,len(Text))) == '[' .or. &
                                   Text(min(Pos,len(Text)):min(Pos,len(Text))) == '{')) then
-         call ParseFlow(Doc, iChild, Text, Pos, SL, ErrStat2, ErrMsg2)
+         call ParseFlow(Doc, iChild, Text, Pos, SL, PS, ErrStat2, ErrMsg2)
          call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          if (ErrStat >= AbortErrLev) return
       else
@@ -777,11 +1071,26 @@ recursive subroutine ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
                ErrStat, ErrMsg, RoutineName)
             return
          end if
-         call Unquote(trim(Token), SL, Doc%FileList, Key, ErrStat2, ErrMsg2)   ! Key reused as buffer
-         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
-         if (ErrStat >= AbortErrLev) return
-         Doc%Nodes(iChild)%Kind   = YAML_SCALAR
-         Doc%Nodes(iChild)%Scalar = Key
+         if (Token(1:1) == '*') then
+            ! alias item: deep-copy the anchored subtree into this element
+            iDup = ResolveAlias(PS, trim(Token(2:)))       ! iDup reused as source index
+            if (iDup == 0) then
+               call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Undefined anchor "'// &
+                  trim(Token(2:))//'" in flow collection.', ErrStat, ErrMsg, RoutineName)
+               return
+            end if
+            call CopyInto(Doc, iDup, iChild)
+         else if (Token(1:1) == '&') then
+            call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Anchors ("&") are not '// &
+               'supported inside flow collections.', ErrStat, ErrMsg, RoutineName)
+            return
+         else
+            call Unquote(trim(Token), SL, Doc%FileList, Key, ErrStat2, ErrMsg2)   ! Key reused as buffer
+            call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+            if (ErrStat >= AbortErrLev) return
+            Doc%Nodes(iChild)%Kind   = YAML_SCALAR
+            Doc%Nodes(iChild)%Scalar = Key
+         end if
       end if
 
       ! --- separator or close ---

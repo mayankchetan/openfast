@@ -27,8 +27,214 @@ subroutine test_YamlInput_suite(testsuite)
                new_unittest("test_flow_unterminated_fatal", test_flow_unterminated_fatal), &
                new_unittest("test_block_scalar_fatal", test_block_scalar_fatal), &
                new_unittest("test_multidoc_fatal", test_multidoc_fatal), &
-               new_unittest("test_unknown_tag_fatal", test_unknown_tag_fatal) &
+               new_unittest("test_unknown_tag_fatal", test_unknown_tag_fatal), &
+               new_unittest("test_alias_scalar", test_alias_scalar), &
+               new_unittest("test_alias_subtree", test_alias_subtree), &
+               new_unittest("test_merge_key", test_merge_key), &
+               new_unittest("test_merge_list_precedence", test_merge_list_precedence), &
+               new_unittest("test_merge_in_sequence", test_merge_in_sequence), &
+               new_unittest("test_undefined_alias_fatal", test_undefined_alias_fatal), &
+               new_unittest("test_merge_bad_value_fatal", test_merge_bad_value_fatal) &
                ]
+end subroutine
+
+subroutine test_alias_scalar(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iV
+
+   character(64) :: Lines(2)
+   Lines(1) = "a: &A 5.0"
+   Lines(2) = "b: *A"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iV = Yaml_ChildByKey(Doc, 1_IntKi, "a")
+   call check(error, Doc%Nodes(iV)%Scalar, "5.0")
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, 1_IntKi, "b")
+   call check(error, Doc%Nodes(iV)%Scalar, "5.0")
+   if (allocated(error)) return
+   ! copied nodes keep the anchor's provenance
+   call check(error, int(Doc%Nodes(iV)%FileLine), 1)
+end subroutine
+
+subroutine test_alias_subtree(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iT2, iV, iX
+
+   character(64) :: Lines(5)
+   Lines(1) = "t1: &T1"
+   Lines(2) = "  ed: ED.yaml"
+   Lines(3) = "  x: [1, 2]"
+   Lines(4) = "t2: *T1"
+   Lines(5) = "z: 0"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iT2 = Yaml_ChildByKey(Doc, 1_IntKi, "t2")
+   call check(error, Doc%Nodes(iT2)%Kind, YAML_MAP)
+   if (allocated(error)) return
+   call check(error, int(Yaml_NumChildren(Doc, iT2)), 2)
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iT2, "ed")
+   call check(error, Doc%Nodes(iV)%Scalar, "ED.yaml")
+   if (allocated(error)) return
+   iX = Yaml_ChildByKey(Doc, iT2, "x")
+   call check(error, Doc%Nodes(iX)%Kind, YAML_SEQ)
+   if (allocated(error)) return
+   call check(error, int(Yaml_NumChildren(Doc, iX)), 2)
+   if (allocated(error)) return
+   iV = Yaml_Child(Doc, iX, 2_IntKi)
+   call check(error, Doc%Nodes(iV)%Scalar, "2")
+end subroutine
+
+subroutine test_merge_key(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iH, iV
+
+   character(64) :: Lines(7)
+   Lines(1) = "base: &B"
+   Lines(2) = "  a: 1"
+   Lines(3) = "  b: 2"
+   Lines(4) = "host:"
+   Lines(5) = "  <<: *B"
+   Lines(6) = "  b: 9"
+   Lines(7) = "  c: 3"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iH = Yaml_ChildByKey(Doc, 1_IntKi, "host")
+   call check(error, int(Yaml_NumChildren(Doc, iH)), 3)
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iH, "a")
+   call check(error, iV > 0, .true., "merged key a missing")
+   if (allocated(error)) return
+   call check(error, Doc%Nodes(iV)%Scalar, "1")
+   if (allocated(error)) return
+   ! explicit host keys always win over merged ones
+   iV = Yaml_ChildByKey(Doc, iH, "b")
+   call check(error, Doc%Nodes(iV)%Scalar, "9")
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iH, "c")
+   call check(error, Doc%Nodes(iV)%Scalar, "3")
+end subroutine
+
+subroutine test_merge_list_precedence(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iH, iV
+
+   character(64) :: Lines(8)
+   Lines(1) = "x: &X"
+   Lines(2) = "  k: 1"
+   Lines(3) = "y: &Y"
+   Lines(4) = "  k: 2"
+   Lines(5) = "  m: 5"
+   Lines(6) = "host:"
+   Lines(7) = "  <<: [*X, *Y]"
+   Lines(8) = "  own: 7"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iH = Yaml_ChildByKey(Doc, 1_IntKi, "host")
+   ! earlier alias in the merge list takes precedence (YAML merge-key spec)
+   iV = Yaml_ChildByKey(Doc, iH, "k")
+   call check(error, Doc%Nodes(iV)%Scalar, "1")
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iH, "m")
+   call check(error, Doc%Nodes(iV)%Scalar, "5")
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iH, "own")
+   call check(error, Doc%Nodes(iV)%Scalar, "7")
+end subroutine
+
+subroutine test_merge_in_sequence(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iT, iItem, iV
+
+   ! the FAST.Farm turbine-copy pattern
+   character(64) :: Lines(6)
+   Lines(1) = "turbines:"
+   Lines(2) = "  - &T1"
+   Lines(3) = "    ed: ED1.yaml"
+   Lines(4) = "    sd: SD1.yaml"
+   Lines(5) = "  - <<: *T1"
+   Lines(6) = "    sd: SD2.yaml"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iT = Yaml_ChildByKey(Doc, 1_IntKi, "turbines")
+   call check(error, int(Yaml_NumChildren(Doc, iT)), 2)
+   if (allocated(error)) return
+   iItem = Yaml_Child(Doc, iT, 2_IntKi)
+   call check(error, Doc%Nodes(iItem)%Kind, YAML_MAP)
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iItem, "ed")
+   call check(error, iV > 0, .true., "merged ed missing in turbine 2")
+   if (allocated(error)) return
+   call check(error, Doc%Nodes(iV)%Scalar, "ED1.yaml")
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iItem, "sd")
+   call check(error, Doc%Nodes(iV)%Scalar, "SD2.yaml")
+end subroutine
+
+subroutine test_undefined_alias_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+
+   character(64) :: Lines(1)
+   Lines(1) = "b: *NOPE"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "NOPE") > 0, .true., "error must name the anchor: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #1") > 0, .true., "error must name line #1: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_merge_bad_value_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+
+   character(64) :: Lines(2)
+   Lines(1) = "host:"
+   Lines(2) = "  <<: 42"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #2") > 0, .true., "error must name line #2: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "<<") > 0, .true., "error must mention the merge key: "//trim(ErrMsg))
 end subroutine
 
 subroutine test_flow_sequences(error)
