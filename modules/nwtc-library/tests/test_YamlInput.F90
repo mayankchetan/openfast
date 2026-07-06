@@ -49,8 +49,73 @@ subroutine test_YamlInput_suite(testsuite)
                new_unittest("test_get_node_rooted", test_get_node_rooted), &
                new_unittest("test_warn_unused", test_warn_unused), &
                new_unittest("test_erracc_failfast", test_erracc_failfast), &
-               new_unittest("test_erracc_accumulate", test_erracc_accumulate) &
+               new_unittest("test_erracc_accumulate", test_erracc_accumulate), &
+               new_unittest("test_serialize_roundtrip", test_serialize_roundtrip) &
                ]
+end subroutine
+
+subroutine test_serialize_roundtrip(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc, Doc2
+   type(FileInfoType) :: FI
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iSub, iSec, iV
+   real(R8Ki) :: DT
+   character(:), allocatable :: Chans(:)
+
+   character(64) :: Lines(9)
+   Lines(1) = "general:"
+   Lines(2) = "  WindType: 3         # provenance line 2"
+   Lines(3) = "  DT: 0.0125"
+   Lines(4) = '  title: "a: b, c"'
+   Lines(5) = "  points: [1.5, -2e3]"
+   Lines(6) = "output:"
+   Lines(7) = "  OutList:"
+   Lines(8) = "    - Wind1VelX"
+   Lines(9) = "    - Wind1VelY"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   ! serialize the whole document (root subtree), then re-parse from the FileInfoType
+   call Yaml_Serialize(Doc, 1_IntKi, FI, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, int(FI%NumLines) > 0, .true.)
+   if (allocated(error)) return
+
+   call Yaml_LoadFileInfo(FI, Doc2, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   ! values survive the round trip
+   call YamlGet(Doc2, "general:DT", DT, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, DT, 0.0125_R8Ki)
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc2, Yaml_ChildByKey(Doc2, 1_IntKi, "general"), "title")
+   call check(error, Doc2%Nodes(iV)%Scalar, "a: b, c")
+   if (allocated(error)) return
+   call YamlGet(Doc2, "output:OutList", Chans, ErrStat, ErrMsg)
+   call check(error, size(Chans), 2)
+   if (allocated(error)) return
+   call check(error, trim(Chans(2)), "Wind1VelY")
+   if (allocated(error)) return
+
+   ! provenance survives: WindType still points at line 2 of the original source
+   iSec = Yaml_ChildByKey(Doc2, 1_IntKi, "general")
+   iV   = Yaml_ChildByKey(Doc2, iSec, "WindType")
+   call check(error, int(Doc2%Nodes(iV)%FileLine), 2)
+   if (allocated(error)) return
+   ! flow-seq items carry their source line too
+   iV = Yaml_ChildByKey(Doc2, iSec, "points")
+   iSub = Yaml_Child(Doc2, iV, 2_IntKi)
+   call check(error, Doc2%Nodes(iSub)%Scalar, "-2e3")
+   if (allocated(error)) return
+   call check(error, int(Doc2%Nodes(iSub)%FileLine), 5)
 end subroutine
 
 subroutine test_erracc_failfast(error)

@@ -38,7 +38,7 @@
 module YamlInput
 
    use NWTC_Base
-   use NWTC_IO, only: Conv2UC, GetPath, PathIsRelative, Num2LStr, GetNewUnit, OpenFInpFile
+   use NWTC_IO, only: Conv2UC, GetPath, PathIsRelative, Num2LStr, GetNewUnit, OpenFInpFile, FileInfoType
 
    implicit none
    private
@@ -93,6 +93,8 @@ module YamlInput
    public :: IsYamlExt
    public :: Yaml_LoadFile
    public :: Yaml_LoadString
+   public :: Yaml_LoadFileInfo
+   public :: Yaml_Serialize
    public :: Yaml_NumChildren
    public :: Yaml_Child
    public :: Yaml_ChildByKey
@@ -1153,6 +1155,209 @@ subroutine Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
    end if
 end subroutine Yaml_LoadString
 
+!> Parse YAML content carried in a FileInfoType — the passed-data channel used to hand
+!! inline module input (or python-supplied YAML lines) to a module. The FileInfoType's
+!! per-line FileLine/FileIndx/FileList provenance is honored, so error messages name the
+!! original file and line even though the content arrived in memory. !include is not
+!! available through this entry (includes are resolved before content is passed).
+subroutine Yaml_LoadFileInfo(FileInfo, Doc, ErrStat, ErrMsg)
+   type(FileInfoType), intent(in   ) :: FileInfo
+   type(YamlDoc),      intent(  out) :: Doc
+   integer(IntKi),     intent(  out) :: ErrStat
+   character(*),       intent(  out) :: ErrMsg
+
+   character(*), parameter          :: RoutineName = 'Yaml_LoadFileInfo'
+   type(ScanLineType), allocatable  :: SL(:)
+   type(YamlParseState)             :: PS
+   integer(IntKi)                   :: iRoot
+   integer                          :: i, Cur
+   logical                          :: HaveFileList
+   integer(IntKi)                   :: ErrStat2
+   character(ErrMsgLen)             :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   HaveFileList = .false.
+   if (allocated(FileInfo%FileList)) HaveFileList = (FileInfo%NumFiles >= 1)
+   if (HaveFileList) then
+      allocate(Doc%FileList(FileInfo%NumFiles))
+      do i = 1, FileInfo%NumFiles
+         Doc%FileList(i) = FileInfo%FileList(i)
+      end do
+   else
+      allocate(Doc%FileList(1))
+      Doc%FileList(1) = '(passed file info)'
+   end if
+
+   if (FileInfo%NumLines < 1) then
+      call SetErrStat(ErrID_Fatal, 'No data found in the passed file info.', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   if (HaveFileList) then
+      call ScanSource(FileInfo%Lines(1:FileInfo%NumLines), 1, Doc%FileList, SL, ErrStat2, ErrMsg2, &
+                      LineNos=FileInfo%FileLine, FileIndxs=FileInfo%FileIndx)
+   else
+      call ScanSource(FileInfo%Lines(1:FileInfo%NumLines), 1, Doc%FileList, SL, ErrStat2, ErrMsg2, &
+                      LineNos=FileInfo%FileLine)
+   end if
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+
+   if (size(SL) == 0) then
+      call SetErrStat(ErrID_Fatal, 'No data found in the passed file info.', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   iRoot = AddNode(Doc, 0_IntKi)
+   Doc%Nodes(iRoot)%FileIndx = SL(1)%FileIndx
+   Doc%Nodes(iRoot)%FileLine = SL(1)%FileLine
+
+   Cur = 1
+   call ParseBlockNode(SL, Cur, SL(1)%Indent, Doc, iRoot, PS, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+
+   if (Cur <= size(SL)) then
+      call SetErrStat(ErrID_Fatal, LineRef(SL(Cur), Doc%FileList)// &
+         ' Unexpected content after the end of the top-level block.', ErrStat, ErrMsg, RoutineName)
+   end if
+end subroutine Yaml_LoadFileInfo
+
+!> Serialize the subtree rooted at iNode into a FileInfoType: YAML text lines whose
+!! per-line FileLine/FileIndx point back at each node's true source (FileList is copied
+!! from the document). This is how the glue code hands an inline module section to a
+!! module through the existing passed-FileInfoType channel without losing error
+!! provenance; Yaml_LoadFileInfo is the receiving end.
+subroutine Yaml_Serialize(Doc, iNode, FileInfo, ErrStat, ErrMsg)
+   type(YamlDoc),      intent(in   ) :: Doc
+   integer(IntKi),     intent(in   ) :: iNode
+   type(FileInfoType), intent(  out) :: FileInfo
+   integer(IntKi),     intent(  out) :: ErrStat
+   character(*),       intent(  out) :: ErrMsg
+
+   character(*), parameter :: RoutineName = 'Yaml_Serialize'
+   integer                 :: i, NLines
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   if (Doc%Nodes(iNode)%Kind /= YAML_MAP .and. Doc%Nodes(iNode)%Kind /= YAML_SEQ) then
+      call SetErrStat(ErrID_Fatal, 'Only mappings and sequences can be serialized.', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   FileInfo%NumFiles = size(Doc%FileList)
+   allocate(FileInfo%FileList(FileInfo%NumFiles))
+   do i = 1, FileInfo%NumFiles
+      FileInfo%FileList(i) = Doc%FileList(i)
+   end do
+
+   ! two passes: count, then fill
+   NLines = 0
+   call EmitChildren(iNode, 0, .true., NLines)
+   FileInfo%NumLines = NLines
+   allocate(FileInfo%Lines(NLines), FileInfo%FileLine(NLines), FileInfo%FileIndx(NLines))
+   NLines = 0
+   call EmitChildren(iNode, 0, .false., NLines)
+
+contains
+
+   recursive subroutine EmitChildren(iParent, Indent, CountOnly, N)
+      integer(IntKi), intent(in   ) :: iParent
+      integer,        intent(in   ) :: Indent
+      logical,        intent(in   ) :: CountOnly
+      integer,        intent(inout) :: N
+
+      integer(IntKi)            :: iChild
+      character(:), allocatable :: Prefix, Line
+      logical                   :: IsMapCtx
+
+      IsMapCtx = (Doc%Nodes(iParent)%Kind == YAML_MAP)
+      iChild = Doc%Nodes(iParent)%FirstChild
+      do while (iChild > 0)
+         if (IsMapCtx) then
+            Prefix = QuoteIfNeeded(Doc%Nodes(iChild)%Key)//':'
+         else
+            Prefix = '-'
+         end if
+
+         select case (Doc%Nodes(iChild)%Kind)
+         case (YAML_SCALAR)
+            Line = Prefix//' '//QuoteIfNeeded(Doc%Nodes(iChild)%Scalar)
+            call PutLine(iChild, Indent, Line, CountOnly, N)
+         case (YAML_MAP, YAML_SEQ)
+            if (Doc%Nodes(iChild)%NumChildren == 0) then
+               if (Doc%Nodes(iChild)%Kind == YAML_MAP) then
+                  Line = Prefix//' {}'
+               else
+                  Line = Prefix//' []'
+               end if
+               call PutLine(iChild, Indent, Line, CountOnly, N)
+            else
+               call PutLine(iChild, Indent, Prefix, CountOnly, N)
+               call EmitChildren(iChild, Indent+2, CountOnly, N)
+            end if
+         end select
+         iChild = Doc%Nodes(iChild)%NextSibling
+      end do
+   end subroutine EmitChildren
+
+   subroutine PutLine(iSrc, Indent, Text, CountOnly, N)
+      integer(IntKi), intent(in   ) :: iSrc
+      integer,        intent(in   ) :: Indent
+      character(*),   intent(in   ) :: Text
+      logical,        intent(in   ) :: CountOnly
+      integer,        intent(inout) :: N
+
+      N = N + 1
+      if (CountOnly) return
+      FileInfo%Lines(N)    = repeat(' ', Indent)//Text
+      FileInfo%FileLine(N) = Doc%Nodes(iSrc)%FileLine
+      FileInfo%FileIndx(N) = Doc%Nodes(iSrc)%FileIndx
+   end subroutine PutLine
+
+   !> Double-quote (with \" and \\ escapes) any token that plain YAML could misread.
+   function QuoteIfNeeded(TextIn) result(TextOut)
+      character(:), allocatable, intent(in) :: TextIn
+      character(:), allocatable             :: TextOut
+
+      character(*), parameter :: SafeChars = &
+         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.+-/\()'
+      integer :: i2
+      logical :: Plain
+
+      if (.not. allocated(TextIn)) then
+         TextOut = '""'
+         return
+      end if
+      if (len(TextIn) == 0) then
+         TextOut = '""'
+         return
+      end if
+
+      Plain = .true.
+      do i2 = 1, len(TextIn)
+         if (index(SafeChars, TextIn(i2:i2)) == 0) then
+            Plain = .false.
+            exit
+         end if
+      end do
+      if (Plain) then
+         TextOut = TextIn
+      else
+         TextOut = ''
+         do i2 = 1, len(TextIn)
+            if (TextIn(i2:i2) == '"' .or. TextIn(i2:i2) == '\') TextOut = TextOut//'\'
+            TextOut = TextOut//TextIn(i2:i2)
+         end do
+         TextOut = '"'//TextOut//'"'
+      end if
+   end function QuoteIfNeeded
+
+end subroutine Yaml_Serialize
+
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Internal: node arena
 !----------------------------------------------------------------------------------------------------------------------------------
@@ -1292,16 +1497,18 @@ end function LineRef
 !> Scan raw source lines into significant ScanLines: measure indentation (spaces only —
 !! a tab anywhere in the indent is fatal), strip comments quote-awareness included, drop
 !! blank/comment-only lines, tolerate one leading '---' document marker.
-subroutine ScanSource(Lines, FileIndx, FileList, SL, ErrStat, ErrMsg)
+subroutine ScanSource(Lines, FileIndx, FileList, SL, ErrStat, ErrMsg, LineNos, FileIndxs)
    character(*),       intent(in   )              :: Lines(:)
    integer,            intent(in   )              :: FileIndx
    character(*),       intent(in   )              :: FileList(:)
    type(ScanLineType), allocatable, intent(  out) :: SL(:)
    integer(IntKi),     intent(  out)              :: ErrStat
    character(*),       intent(  out)              :: ErrMsg
+   integer(IntKi),     intent(in   ), optional    :: LineNos(:)   !< per-line source line numbers (passed FileInfo)
+   integer(IntKi),     intent(in   ), optional    :: FileIndxs(:) !< per-line source file indices (passed FileInfo)
 
    character(*), parameter   :: RoutineName = 'ScanSource'
-   integer                   :: i, j, NSig, Indent, TextLen
+   integer                   :: i, j, NSig, Indent, TextLen, FL, FX
    character(:), allocatable :: Text
    logical                   :: DocMarkerSeen
 
@@ -1313,6 +1520,10 @@ subroutine ScanSource(Lines, FileIndx, FileList, SL, ErrStat, ErrMsg)
    NSig = 0
 
    do i = 1, size(Lines)
+      FL = i
+      FX = FileIndx
+      if (present(LineNos))   FL = LineNos(i)
+      if (present(FileIndxs)) FX = FileIndxs(i)
       TextLen = len_trim(Lines(i))
 
       ! measure indentation; reject tabs within it
@@ -1321,8 +1532,8 @@ subroutine ScanSource(Lines, FileIndx, FileList, SL, ErrStat, ErrMsg)
          if (Lines(i)(j:j) == ' ') then
             Indent = Indent + 1
          else if (Lines(i)(j:j) == char(9)) then
-            call SetErrStat(ErrID_Fatal, '>> Error on line #'//trim(Num2LStr(i))//' of "'// &
-               trim(FileList(FileIndx))//'": Tab character in indentation; YAML requires spaces.', &
+            call SetErrStat(ErrID_Fatal, '>> Error on line #'//trim(Num2LStr(FL))//' of "'// &
+               trim(FileList(FX))//'": Tab character in indentation; YAML requires spaces.', &
                ErrStat, ErrMsg, RoutineName)
             return
          else
@@ -1340,8 +1551,8 @@ subroutine ScanSource(Lines, FileIndx, FileList, SL, ErrStat, ErrMsg)
             DocMarkerSeen = .true.
             cycle
          else
-            call SetErrStat(ErrID_Fatal, '>> Error on line #'//trim(Num2LStr(i))//' of "'// &
-               trim(FileList(FileIndx))//'": Multi-document YAML streams are not supported by OpenFAST '// &
+            call SetErrStat(ErrID_Fatal, '>> Error on line #'//trim(Num2LStr(FL))//' of "'// &
+               trim(FileList(FX))//'": Multi-document YAML streams are not supported by OpenFAST '// &
                '(only one leading "---" is allowed).', ErrStat, ErrMsg, RoutineName)
             return
          end if
@@ -1349,8 +1560,8 @@ subroutine ScanSource(Lines, FileIndx, FileList, SL, ErrStat, ErrMsg)
 
       NSig = NSig + 1
       SL(NSig)%Indent   = Indent
-      SL(NSig)%FileLine = i
-      SL(NSig)%FileIndx = FileIndx
+      SL(NSig)%FileLine = FL
+      SL(NSig)%FileIndx = FX
       SL(NSig)%Text     = trim(Text)
    end do
 
