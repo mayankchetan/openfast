@@ -35,6 +35,8 @@ MODULE InflowWind
    USE                              NWTC_Library
    USE                              InflowWind_Types
    USE                              InflowWind_Subs
+   USE                              InflowWind_Yaml
+   USE                              YamlInput, ONLY: IsYamlExt
    USE                              InflowWind_IO_Types
    USE                              InflowWind_IO
    USE                              IfW_FlowField
@@ -144,13 +146,21 @@ SUBROUTINE InflowWind_Init( InitInp, InputGuess, p, ContStates, DiscStates, Cons
 
    IF ( InitInp%FilePassingMethod == 0_IntKi ) THEN    ! Normal calling with an input file
 
-      CALL GetPath( InitInp%InputFileName, PriPath )
-      CALL ProcessComFile( InitInp%InputFileName, InFileInfo, TmpErrStat, TmpErrMsg ); if (Failed()) return
-      ! For diagnostic purposes, the following can be used to display the contents
-      ! of the InFileInfo data structure.
-      ! call Print_FileInfo_Struct( CU, InFileInfo ) ! CU is the screen -- different number on different systems.
+      IF ( IsYamlExt( InitInp%InputFileName ) ) THEN   ! YAML-format input file (.yaml/.yml)
 
-      CALL InflowWind_ParseInputFileInfo( InputFileData,  InFileInfo, PriPath, InitInp%InputFileName, EchoFileName, InitInp%FixedWindFileRootName, InitInp%TurbineID, TmpErrStat, TmpErrMsg ); if (Failed()) return
+         CALL InflowWind_ParseYamlFile( InitInp%InputFileName, EchoFileName, InitInp%FixedWindFileRootName, InitInp%TurbineID, InputFileData, TmpErrStat, TmpErrMsg ); if (Failed()) return
+
+      ELSE                                             ! text-format input file
+
+         CALL GetPath( InitInp%InputFileName, PriPath )
+         CALL ProcessComFile( InitInp%InputFileName, InFileInfo, TmpErrStat, TmpErrMsg ); if (Failed()) return
+         ! For diagnostic purposes, the following can be used to display the contents
+         ! of the InFileInfo data structure.
+         ! call Print_FileInfo_Struct( CU, InFileInfo ) ! CU is the screen -- different number on different systems.
+
+         CALL InflowWind_ParseInputFileInfo( InputFileData,  InFileInfo, PriPath, InitInp%InputFileName, EchoFileName, InitInp%FixedWindFileRootName, InitInp%TurbineID, TmpErrStat, TmpErrMsg ); if (Failed()) return
+
+      ENDIF
 
    ELSEIF ( InitInp%FilePassingMethod == 1_IntKi ) THEN        ! passing the FileInfoType structure
 

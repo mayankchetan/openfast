@@ -232,6 +232,24 @@ function(ifw_regression TESTNAME LABEL)
   regression(${TEST_SCRIPT} ${INFLOWWIND_EXECUTABLE} ${SOURCE_DIRECTORY} ${BUILD_DIRECTORY} " " ${TESTNAME} "${LABEL}" " ")
 endfunction(ifw_regression)
 
+# yaml-equivalence: run a case with text and YAML input files and require
+# bit-identical outputs (the text inputs are converted to YAML on the fly)
+function(yaml_equiv MODULE CASENAME EXECUTABLE LABEL)
+  set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeYamlEquivalenceCase.py")
+  set(SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/..")
+  set(BUILD_DIRECTORY "${CTEST_BINARY_DIR}/modules/${MODULE}")
+  add_test(
+    yaml_equiv_${CASENAME} ${Python_EXECUTABLE}
+       ${TEST_SCRIPT}
+       ${MODULE}
+       ${CASENAME}
+       ${EXECUTABLE}
+       ${SOURCE_DIRECTORY}
+       ${BUILD_DIRECTORY}
+  )
+  set_tests_properties(yaml_equiv_${CASENAME} PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
+endfunction(yaml_equiv)
+
 # py_inflowwind
 function(py_ifw_regression TESTNAME LABEL)
   set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeInflowwindPyRegressionCase.py")
@@ -541,6 +559,11 @@ ifw_regression("ifw_HAWC"                                     "inflowwind")
 
 # Py-InflowWind regression tests
 py_ifw_regression("py_ifw_turbsimff"                          "inflowwind;python")
+
+yaml_equiv("inflowwind" "ifw_turbsimff"    "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
+yaml_equiv("inflowwind" "ifw_uniform"      "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
+yaml_equiv("inflowwind" "ifw_HAWC"         "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
+yaml_equiv("inflowwind" "ifw_nativeBladed" "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 
 # SeaState regression tests
 seast_regression("seastate_1"                                "seastate")

@@ -30,7 +30,8 @@ add_library(ifwlib STATIC
   src/InflowWind_IO.f90
   src/InflowWind_Subs.f90
   src/InflowWind_Types.f90
-  src/InflowWind.f90 
+  src/InflowWind_Yaml.f90
+  src/InflowWind.f90
   src/Lidar_Types.f90
   src/Lidar.f90
 )

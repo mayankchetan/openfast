@@ -140,3 +140,55 @@ When modeling a rotor or rotor/tower and support structure (i.e., hydrodynamics 
 - For combined wave and current flow fields, SeaState will query InflowWind
 
 Wave and current coupling is only possible when running the OpenFAST glue code or the AeroDyn driver. This feature is not supported by the HydroDyn or MoorDyn drivers.
+
+.. _ifw-yaml-input:
+
+YAML input file
+---------------
+
+The InflowWind primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); see :ref:`yaml_input` for the conventions shared by all modules.
+Parameters keep their documented names, grouped into sections. Two counts are
+derived from list lengths rather than being separate inputs: ``NWindVel`` (the
+length of ``WindVxiList``) and ``NumBeam`` (the length of ``FocalDistanceX``).
+The ``general``, ``lidar``, and ``output`` sections are always required; each
+wind-type section is required only when the selected ``WindType`` uses it
+(``steady_wind`` for 1, ``uniform_wind`` for 2, ``turbsim_wind`` for 3,
+``bladed_wind`` for 4 and 7, ``hawc_wind`` for 5).
+
+.. code-block:: yaml
+
+   # InflowWind primary input file (YAML form)
+   general:
+     Echo: false
+     WindType: 3            # 1=steady; 2=uniform; 3=TurbSim FF; 4=Bladed FF; 5=HAWC; 6=user; 7=native Bladed
+     PropagationDir: 0.0    # meteorological rotation from aligned with X (deg)
+     VFlowAng: 0.0          # upflow angle (deg)
+     VelInterpCubic: false
+     WindVxiList: [0.0]     # wind-output points; NWindVel = list length (max 9)
+     WindVyiList: [0.0]
+     WindVziList: [150.0]
+
+   turbsim_wind:            # only needed because WindType = 3
+     FileName_BTS: "Wind/90m_12mps_twr.bts"
+
+   lidar:
+     SensorType: 0          # 0=none, 1=single point beam(s), 2=continuous, 3=pulsed
+     NumPulseGate: 0
+     PulseSpacing: 30.0
+     FocalDistanceX: [-200.0]   # NumBeam = list length
+     FocalDistanceY: [0.0]
+     FocalDistanceZ: [0.0]
+     RotorApexOffsetPos: [0.0, 0.0, 0.0]
+     URefLid: 17.0
+     MeasurementInterval: 0.25
+     LidRadialVel: false
+     ConsiderHubMotion: 1
+
+   output:
+     SumPrint: false
+     OutList: [Wind1VelX, Wind1VelY, Wind1VelZ]
+
+The ``hawc_wind`` section nests its two text-format subsections as ``scaling:``
+(``ScaleMethod``, ``SFx`` … ``SigmaFz``) and ``mean_profile:`` (``URef``,
+``WindProfile``, ``PLExp_HAWC``, ``Z0``, ``XOffset``).
