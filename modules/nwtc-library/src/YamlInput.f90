@@ -75,6 +75,21 @@ module YamlInput
       character(1024), allocatable :: FileList(:)
    end type YamlDoc
 
+   !> Opt-in error accumulator (initially unused by modules): with Accumulate=.true.,
+   !! Collect absorbs fatal ErrStat/ErrMsg pairs instead of letting them abort, so a
+   !! reader can attempt every key and report all problems at once via Finalize. With
+   !! Accumulate=.false. (default) Collect is a no-op and fail-fast behavior is
+   !! unchanged. Shaped to plug into the -CheckInput attempt-everything machinery.
+   type, public :: YamlErrAcc
+      logical                           :: Accumulate = .false.
+      integer(IntKi)                    :: NumErrors  = 0
+      character(ErrMsgLen), allocatable :: Messages(:)
+   contains
+      procedure :: Collect  => YamlErrAcc_Collect
+      procedure :: Failed   => YamlErrAcc_Failed
+      procedure :: Finalize => YamlErrAcc_Finalize
+   end type YamlErrAcc
+
    public :: IsYamlExt
    public :: Yaml_LoadFile
    public :: Yaml_LoadString
@@ -181,6 +196,65 @@ integer(IntKi) function Yaml_ChildByKey(Doc, iNode, Key) result(iChild)
       iChild = Doc%Nodes(iChild)%NextSibling
    end do
 end function Yaml_ChildByKey
+
+!----------------------------------------------------------------------------------------------------------------------------------
+! Error accumulation
+!----------------------------------------------------------------------------------------------------------------------------------
+
+!> In accumulate mode, absorb a fatal ErrStat/ErrMsg (record it, reset to None) so the
+!! caller can keep attempting lookups. Otherwise leave the error untouched (fail-fast).
+subroutine YamlErrAcc_Collect(this, ErrStat, ErrMsg)
+   class(YamlErrAcc), intent(inout) :: this
+   integer(IntKi),    intent(inout) :: ErrStat
+   character(*),      intent(inout) :: ErrMsg
+
+   character(ErrMsgLen), allocatable :: Tmp(:)
+
+   if (.not. this%Accumulate) return
+   if (ErrStat < AbortErrLev) return
+
+   if (.not. allocated(this%Messages)) then
+      allocate(this%Messages(8))
+   else if (this%NumErrors == size(this%Messages)) then
+      allocate(Tmp(2*size(this%Messages)))
+      Tmp(1:this%NumErrors) = this%Messages
+      call move_alloc(Tmp, this%Messages)
+   end if
+
+   this%NumErrors = this%NumErrors + 1
+   this%Messages(this%NumErrors) = ErrMsg
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+end subroutine YamlErrAcc_Collect
+
+!> True when any error has been collected. Not meant as a per-lookup abort gate (the
+!! point of accumulate mode is to keep going); consult it to skip dependent work or
+!! after Finalize.
+logical function YamlErrAcc_Failed(this) result(HasFailed)
+   class(YamlErrAcc), intent(in) :: this
+   HasFailed = (this%NumErrors > 0)
+end function YamlErrAcc_Failed
+
+!> Report everything collected as one fatal error (no-op when nothing was collected).
+subroutine YamlErrAcc_Finalize(this, ErrStat, ErrMsg)
+   class(YamlErrAcc), intent(in   ) :: this
+   integer(IntKi),    intent(  out) :: ErrStat
+   character(*),      intent(  out) :: ErrMsg
+
+   integer :: i
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+   if (this%NumErrors == 0) return
+
+   ErrStat = ErrID_Fatal
+   ErrMsg  = trim(Num2LStr(this%NumErrors))//' input error(s) found:'
+   do i = 1, this%NumErrors
+      if (len_trim(ErrMsg) + len_trim(this%Messages(i)) + 2 > len(ErrMsg)) exit
+      ErrMsg = trim(ErrMsg)//new_line('a')//trim(this%Messages(i))
+   end do
+end subroutine YamlErrAcc_Finalize
 
 !----------------------------------------------------------------------------------------------------------------------------------
 ! Lookups (the YamlGet family)

@@ -47,8 +47,72 @@ subroutine test_YamlInput_suite(testsuite)
                new_unittest("test_get_arrays", test_get_arrays), &
                new_unittest("test_get_matrix", test_get_matrix), &
                new_unittest("test_get_node_rooted", test_get_node_rooted), &
-               new_unittest("test_warn_unused", test_warn_unused) &
+               new_unittest("test_warn_unused", test_warn_unused), &
+               new_unittest("test_erracc_failfast", test_erracc_failfast), &
+               new_unittest("test_erracc_accumulate", test_erracc_accumulate) &
                ]
+end subroutine
+
+subroutine test_erracc_failfast(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   type(YamlErrAcc) :: Acc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki) :: V
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+
+   ! default mode: Collect leaves a fatal error fatal (fail-fast preserved)
+   call YamlGet(Doc, "no:such:key", V, ErrStat, ErrMsg)
+   call Acc%Collect(ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, Acc%Failed(), .false.)
+end subroutine
+
+subroutine test_erracc_accumulate(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   type(YamlErrAcc) :: Acc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki) :: V
+   integer(IntKi) :: IV
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+   Acc%Accumulate = .true.
+
+   call YamlGet(Doc, "aero:missing_one", V, ErrStat, ErrMsg)
+   call Acc%Collect(ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, "accumulated error must be absorbed")
+   if (allocated(error)) return
+   call check(error, Acc%Failed(), .true., "Failed() reflects collected errors")
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "hydro:missing_two", V, ErrStat, ErrMsg)
+   call Acc%Collect(ErrStat, ErrMsg)
+   call YamlGet(Doc, "simulation_control:OutFmt", IV, ErrStat, ErrMsg)   ! type error
+   call Acc%Collect(ErrStat, ErrMsg)
+   call check(error, int(Acc%NumErrors), 3)
+   if (allocated(error)) return
+
+   ! a successful lookup adds nothing
+   call YamlGet(Doc, "simulation_control:TMax", V, ErrStat, ErrMsg)
+   call Acc%Collect(ErrStat, ErrMsg)
+   call check(error, int(Acc%NumErrors), 3)
+   if (allocated(error)) return
+
+   call Acc%Finalize(ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "aero:missing_one") > 0, .true., "must list error 1: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "hydro:missing_two") > 0, .true., "must list error 2: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "OutFmt") > 0, .true., "must list error 3: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "3 input error") > 0, .true., "must count errors: "//trim(ErrMsg))
 end subroutine
 
 !> Shared fixture for lookup tests.
