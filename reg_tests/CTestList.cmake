@@ -627,9 +627,23 @@ yaml_equiv("aerodisk" "adsk_timeseries_shutdown" "${CTEST_AERODISK_EXECUTABLE}" 
 yaml_equiv("simple-elastodyn" "sed_test_freewheel" "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
 yaml_equiv("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
 
+# SeaState standalone-driver yaml-equivalence: seastate_1 (WaveMod=3, white noise) and
+# seastate_CNW1 (WaveMod=2 JONSWAP with ConstWaveMod=1 constrained wave) cover distinct
+# WaveMod/constrained-wave code paths while staying cheap (short NSteps/TimeInterval).
+yaml_equiv("seastate" "seastate_1"    "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
+yaml_equiv("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
+
 yaml_equiv_openfast("AWT_YFix_WSt" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
+# MHK_RM1_Fixed: CompSeaSt=1 with no DISCON DLL (CompServo=0), so the inline SeaStFile
+# glue path (all-yaml/single-file) can be exercised directly via ctest, unlike AeroDisk/
+# Simplified ElastoDyn's inline glue paths which currently require a manually-staged DLL.
+yaml_equiv_openfast("MHK_RM1_Fixed" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("MHK_RM1_Fixed" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("MHK_RM1_Fixed" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

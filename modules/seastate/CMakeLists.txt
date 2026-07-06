@@ -29,8 +29,9 @@ add_library(seastlib STATIC
   src/UserWaves.f90
   src/SeaSt_WaveField.f90
   src/SeaState_Input.f90
-  src/SeaState.f90
   src/SeaState_Output.f90
+  src/SeaState_Yaml.f90
+  src/SeaState.f90
   src/Current_Types.f90
   src/Waves_Types.f90
   src/Waves2_Types.f90

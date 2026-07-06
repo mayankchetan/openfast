@@ -611,5 +611,135 @@ effect will be reflected in the wave kinematics and dynamic pressure outputs.
 For example, a point below SWL will report all zeros if it is momentarily out of 
 water due to a wave trough. Similarly, a point above SWL will report wave kinematics 
 and dynamic pressure according to the wave-stretching model selected if it 
-is momentarily in water due to a wave crest. Any point out of water will report 
+is momentarily in water due to a wave crest. Any point out of water will report
 zeros in all wave-kinematics and dynamic-pressure outputs until it reenters water.
+
+.. _seastate-yaml-input:
+
+YAML input file
+----------------
+
+The SeaState primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); see :ref:`yaml_input` for the conventions shared by all modules.
+Parameters keep their documented names, grouped into sections that mirror the
+text format's banners: ``general`` (``Echo``), ``environmental_conditions``
+(``WtrDens``, ``WtrDpth``, ``MSL2SWL``), ``spatial_discretization``
+(``X_HalfWidth``, ``Y_HalfWidth``, ``Z_Depth``, ``NX``, ``NY``, ``NZ``), ``waves``
+(the incident-wave settings, ``WvKinFile`` through ``WaveNDAmp``),
+``second_order_waves`` (``WvDiffQTF``, ``WvSumQTF``, and the difference/sum
+frequency cutoffs), ``constrained_waves`` (``ConstWaveMod`` and the crest
+parameters), ``current`` (``CurrMod`` through ``CurrDIDir``), ``maccamy_fuchs``
+(``MCFD``), ``output`` (``SeaStSum``, ``OutSwtch``, ``OutFmt``, ``OutSFmt``, and the
+wave-elevation/wave-kinematics output-point coordinate lists), and
+``output_channels`` (``OutList``).
+
+``WtrDens``, ``WtrDpth``, ``MSL2SWL``, ``Z_Depth``, and ``WavePkShp`` each accept
+the scalar ``default`` exactly like ``"default"``/``DEFAULT`` in the text format:
+``WtrDens``/``WtrDpth``/``MSL2SWL`` fall back to the value the glue code (or
+driver) supplies; ``Z_Depth`` falls back to ``WtrDpth + MSL2SWL``; ``WavePkShp``
+falls back to the JONSWAP peak-shape default computed from ``WaveMod``,
+``WaveHs``, and ``WaveTp``. ``CurrSSDir`` accepts the same literal string
+``"DEFAULT"`` (case-insensitive) as a sentinel meaning "use ``WaveDir``" — this
+is resolved later (once ``WaveDir`` is known), not a YAML-level default.
+
+``WaveMod`` and ``WaveSeed2`` are variant fields, exactly as in the text format:
+
+- ``WaveMod`` is either an integer (``0``-``7``) or the string ``"1P#"`` — a
+  regular wave with a user-specified phase ``#`` in degrees (e.g. ``"1P45"``
+  for a 45-degree phase).
+- ``WaveSeed2`` is either an integer seed (uses the intrinsic pseudo-random
+  number generator) or the string ``"RANLUX"`` naming the alternative
+  generator.
+
+``NWaveElev``, ``NWaveKin``, and ``NumOuts`` are not YAML keys: they are derived
+from the lengths of the ``WaveElevxi``/``WaveElevyi``, ``WaveKinxi``/
+``WaveKinyi``/``WaveKinzi``, and ``output_channels:OutList`` lists,
+respectively (each of the first two groups of coordinate lists must agree in
+length within the group, and be between 0 and 9 entries). ``WvKinFile``
+remains a file-path string, resolved relative to the primary input file.
+
+.. code-block:: yaml
+
+   # SeaState primary input file (YAML form)
+   general:
+     Echo: false
+
+   environmental_conditions:
+     WtrDens: default        # or a value in kg/m^3
+     WtrDpth: default        # or a value in meters
+     MSL2SWL: default        # or a value in meters
+
+   spatial_discretization:
+     X_HalfWidth: 30.0
+     Y_HalfWidth: 30.0
+     Z_Depth: default         # or a value in meters; default = WtrDpth + MSL2SWL
+     NX: 10
+     NY: 10
+     NZ: 10
+
+   waves:
+     WaveMod: 3               # 0-7, or "1P#" for a user-specified phase (degrees)
+     WaveStMod: 0
+     WvCrntMod: 0
+     WaveTMax: 600
+     WaveDT: 0.2
+     WaveHs: 1.7884
+     WaveTp: 10
+     WavePkShp: default       # or a value between 1 and 7; only used for WaveMod=2
+     WvLowCOff: 0.314159
+     WvHiCOff: 1.570796
+     WaveDir: 0
+     WaveDirMod: 0
+     WaveDirSpread: 1
+     WaveNDir: 1
+     WaveDirRange: 0
+     WaveSeed1: 123456789
+     WaveSeed2: RANLUX        # or an integer seed
+     WaveNDAmp: false
+     WvKinFile: "unused"      # root name of externally generated wave data files
+
+   second_order_waves:
+     WvDiffQTF: false
+     WvSumQTF: false
+     WvLowCOffD: 0
+     WvHiCOffD: 1.256637
+     WvLowCOffS: 0.618319
+     WvHiCOffS: 3.141593
+
+   constrained_waves:
+     ConstWaveMod: 0
+     CrestHmax: 1
+     CrestTime: 60
+     CrestXi: 0
+     CrestYi: 0
+
+   current:
+     CurrMod: 0
+     CurrSSV0: 0
+     CurrSSDir: default       # or a value in degrees; default = WaveDir
+     CurrNSRef: 20
+     CurrNSV0: 0
+     CurrNSDir: 0
+     CurrDIV: 0
+     CurrDIDir: 0
+
+   maccamy_fuchs:
+     MCFD: 0
+
+   output:
+     SeaStSum: false
+     OutSwtch: 3
+     OutFmt: "E15.7e2"
+     OutSFmt: "A15"
+     WaveElevxi: [14.43376, -18.47520]     # NWaveElev = 2 (derived from list length)
+     WaveElevyi: [25.00000,  -6.00000]
+     WaveKinxi: [14.43376, -18.47520]      # NWaveKin = 2 (derived from list length)
+     WaveKinyi: [25.00000,  -6.00000]
+     WaveKinzi: [-14.00000, -17.00000]
+
+   output_channels:
+     OutList: [Wave1Elev, Wave2Elev, FVel1xi, FVel1yi, FVel1zi, FDynP1]
+
+SeaState's input file may also be given inline under an OpenFAST primary (.fst)
+file's ``input_files:SeaStFile`` (only legal when ``CompSeaSt`` selects SeaState;
+see :ref:`yaml_input`).

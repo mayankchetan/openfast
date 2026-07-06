@@ -11,6 +11,7 @@
         convert_inflowwind(text_path) -> str   (YAML document)
         convert_aerodisk(text_path) -> str      (YAML document)
         convert_sed(text_path) -> str           (YAML document)
+        convert_seastate(text_path) -> str      (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -409,6 +410,126 @@ def convert_sed(text_path):
     return '\n'.join(out)
 
 
+def convert_seastate(text_path):
+    """Convert a text-format SeaState primary input file to its YAML schema.
+
+    Sections mirror the text file's banners (general, environmental_conditions,
+    spatial_discretization, waves, second_order_waves, constrained_waves, current,
+    maccamy_fuchs, output, output_channels). WtrDens/WtrDpth/MSL2SWL/Z_Depth/WavePkShp
+    accept the scalar "default" (ParseVarWDefault in the text path); CurrSSDir's
+    "DEFAULT" sentinel is passed through the same helper (SeaState_Yaml.f90 recognizes
+    it case-insensitively regardless of case). WaveMod and WaveSeed2 are variant fields
+    (an integer, or a "1P#"/RNG-name string respectively) and are copied through
+    verbatim, unquoted, exactly like the text format. NWaveElev/NWaveKin/NumOuts are
+    derived in YAML from list lengths, so the text-format counts are consumed here only
+    to know how many list entries to slice, and are never themselves emitted."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# SeaState primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('environmental_conditions:')
+    w('  WtrDens: ' + _default_or_num(d.scalar('WtrDens')))
+    w('  WtrDpth: ' + _default_or_num(d.scalar('WtrDpth')))
+    w('  MSL2SWL: ' + _default_or_num(d.scalar('MSL2SWL')))
+    w('')
+
+    w('spatial_discretization:')
+    w('  X_HalfWidth: ' + d.scalar('X_HalfWidth'))
+    w('  Y_HalfWidth: ' + d.scalar('Y_HalfWidth'))
+    w('  Z_Depth: '     + _default_or_num(d.scalar('Z_Depth')))
+    w('  NX: ' + d.scalar('NX'))
+    w('  NY: ' + d.scalar('NY'))
+    w('  NZ: ' + d.scalar('NZ'))
+    w('')
+
+    w('waves:')
+    w('  WaveMod: '       + _unquote(d.scalar('WaveMod')))
+    w('  WaveStMod: '     + d.scalar('WaveStMod'))
+    w('  WvCrntMod: '     + d.scalar('WvCrntMod'))
+    w('  WaveTMax: '      + d.scalar('WaveTMax'))
+    w('  WaveDT: '        + d.scalar('WaveDT'))
+    w('  WaveHs: '        + d.scalar('WaveHs'))
+    w('  WaveTp: '        + d.scalar('WaveTp'))
+    w('  WavePkShp: '     + _default_or_num(d.scalar('WavePkShp')))
+    w('  WvLowCOff: '     + d.scalar('WvLowCOff'))
+    w('  WvHiCOff: '      + d.scalar('WvHiCOff'))
+    w('  WaveDir: '       + d.scalar('WaveDir'))
+    w('  WaveDirMod: '    + d.scalar('WaveDirMod'))
+    w('  WaveDirSpread: ' + d.scalar('WaveDirSpread'))
+    w('  WaveNDir: '      + d.scalar('WaveNDir'))
+    w('  WaveDirRange: '  + d.scalar('WaveDirRange'))
+    w('  WaveSeed1: '     + d.scalar('WaveSeed(1)'))
+    w('  WaveSeed2: '     + _unquote(d.scalar('WaveSeed(2)')))
+    w('  WaveNDAmp: '     + _as_bool(d.scalar('WaveNDAmp')))
+    w('  WvKinFile: '     + _as_str(d.scalar('WvKinFile')))
+    w('')
+
+    w('second_order_waves:')
+    w('  WvDiffQTF: '  + _as_bool(d.scalar('WvDiffQTF')))
+    w('  WvSumQTF: '   + _as_bool(d.scalar('WvSumQTF')))
+    w('  WvLowCOffD: ' + d.scalar('WvLowCOffD'))
+    w('  WvHiCOffD: '  + d.scalar('WvHiCOffD'))
+    w('  WvLowCOffS: ' + d.scalar('WvLowCOffS'))
+    w('  WvHiCOffS: '  + d.scalar('WvHiCOffS'))
+    w('')
+
+    w('constrained_waves:')
+    w('  ConstWaveMod: ' + d.scalar('ConstWaveMod'))
+    w('  CrestHmax: '    + d.scalar('CrestHmax'))
+    w('  CrestTime: '    + d.scalar('CrestTime'))
+    w('  CrestXi: '      + d.scalar('CrestXi'))
+    w('  CrestYi: '      + d.scalar('CrestYi'))
+    w('')
+
+    w('current:')
+    w('  CurrMod: '   + d.scalar('CurrMod'))
+    w('  CurrSSV0: '  + d.scalar('CurrSSV0'))
+    w('  CurrSSDir: ' + _default_or_num(d.scalar('CurrSSDir')))
+    w('  CurrNSRef: ' + d.scalar('CurrNSRef'))
+    w('  CurrNSV0: '  + d.scalar('CurrNSV0'))
+    w('  CurrNSDir: ' + d.scalar('CurrNSDir'))
+    w('  CurrDIV: '    + d.scalar('CurrDIV'))
+    w('  CurrDIDir: ' + d.scalar('CurrDIDir'))
+    w('')
+
+    w('maccamy_fuchs:')
+    w('  MCFD: ' + d.scalar('MCFD'))
+    w('')
+
+    w('output:')
+    w('  SeaStSum: ' + _as_bool(d.scalar('SeaStSum')))
+    w('  OutSwtch: ' + d.scalar('OutSwtch'))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    w('  OutSFmt: '  + _as_str(d.scalar('OutSFmt')))
+
+    n_wave_elev = int(d.scalar('NWaveElev'))
+    w('  WaveElevxi: [' + _list_join(d.find('WaveElevxi')[:n_wave_elev]) + ']')
+    w('  WaveElevyi: [' + _list_join(d.find('WaveElevyi')[:n_wave_elev]) + ']')
+
+    n_wave_kin = int(d.scalar('NWaveKin'))
+    w('  WaveKinxi: [' + _list_join(d.find('WaveKinxi')[:n_wave_kin]) + ']')
+    w('  WaveKinyi: [' + _list_join(d.find('WaveKinyi')[:n_wave_kin]) + ']')
+    w('  WaveKinzi: [' + _list_join(d.find('WaveKinzi')[:n_wave_kin]) + ']')
+    w('')
+
+    w('output_channels:')
+    # unlike the other modules' OUTPUT sections, SeaState's text format has no literal
+    # "OutList" keyword line -- channel names start immediately after the "OUTPUT
+    # CHANNELS" section banner, so anchor on the banner text itself
+    channels = d.outlist(keyword='OUTPUT CHANNELS')
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
 def _quote_line(text):
     """Double-quote an arbitrary raw line of text (e.g. the .fst description),
     escaping backslashes/quotes so it is always a valid YAML scalar even when
@@ -430,14 +551,16 @@ def convert_fst(text_path, mode='per-file'):
       'per-file'    - all module input file entries stay as paths to the original
                       (text) files, unchanged.
       'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1),
-                      AeroDisk file (if CompAero == 1), and/or EDFile (if
-                      CompElast == 3, i.e. Simplified ElastoDyn) are ALSO converted to
-                      YAML and their input_files entries are repointed at the new
-                      .yaml files. Other module files stay as text paths.
+                      AeroDisk file (if CompAero == 1), EDFile (if CompElast == 3, i.e.
+                      Simplified ElastoDyn), and/or SeaStFile (if CompSeaSt == 1) are
+                      ALSO converted to YAML and their input_files entries are
+                      repointed at the new .yaml files. Other module files stay as
+                      text paths.
       'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk input
-                      (if CompAero == 1), and/or the EDFile input (if CompElast == 3)
-                      are inlined as a nested mapping under input_files:InflowFile /
-                      input_files:AeroFile / input_files:EDFile (the uniform value
+                      (if CompAero == 1), the EDFile input (if CompElast == 3), and/or
+                      the SeaStFile input (if CompSeaSt == 1) are inlined as a nested
+                      mapping under input_files:InflowFile / input_files:AeroFile /
+                      input_files:EDFile / input_files:SeaStFile (the uniform value
                       rule: a mapping value is inline module input). Other modules
                       stay as text paths.
 
@@ -621,7 +744,26 @@ def convert_fst(text_path, mode='per-file'):
         w('  AeroFile: ' + _as_str(aero_rel))
 
     w('  ServoFile: '   + _as_str(servo_file))
-    w('  SeaStFile: '   + _as_str(seast_file))
+
+    convert_seast = (comp_seast == 1) and (mode in ('all-yaml', 'single-file'))
+    seast_rel = _unquote(seast_file)
+    if convert_seast:
+        seast_abs = os.path.join(base_dir, seast_rel)
+        seast_yaml_text = convert_seastate(seast_abs)
+        if mode == 'single-file':
+            w('  SeaStFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under SeaStFile:
+            seast_lines = seast_yaml_text.split('\n')
+            seast_body = '\n'.join(seast_lines[2:]) if len(seast_lines) > 2 else seast_yaml_text
+            w(_indent_block(seast_body, '    '))
+        else:  # all-yaml
+            seast_yaml_rel = os.path.splitext(seast_rel)[0] + '.yaml'
+            extra_files[seast_yaml_rel] = seast_yaml_text
+            w('  SeaStFile: ' + _as_str(seast_yaml_rel))
+    else:
+        w('  SeaStFile: ' + _as_str(seast_rel))
+
     w('  HydroFile: '   + _as_str(hydro_file))
     w('  SubFile: '     + _as_str(sub_file))
     w('  MooringFile: ' + _as_str(mooring_file))

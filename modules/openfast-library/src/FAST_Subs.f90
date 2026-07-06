@@ -600,12 +600,17 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_SeaSt%defWtrDpth    = p_FAST%WtrDpth
       Init%InData_SeaSt%defMSL2SWL    = p_FAST%MSL2SWL
       Init%InData_SeaSt%MHK           = p_FAST%MHK
-      Init%InData_SeaSt%UseInputFile  = .TRUE.
+      Init%InData_SeaSt%UseInputFile  = .not. m_FAST%SeaStIsInline
       Init%InData_SeaSt%Linearize     = p_FAST%Linearize
       Init%InData_SeaSt%hasIce        = p_FAST%CompIce /= Module_None
       Init%InData_SeaSt%InputFile     = p_FAST%SeaStFile
       Init%InData_SeaSt%OutRootName   = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_SeaSt))
       Init%InData_SeaSt%WaveTimeShift = 0.0_DbKi         ! for phase shifting wave field in time (positive value only)
+      IF ( m_FAST%SeaStIsInline ) THEN      ! inline SeaState input from a YAML primary file
+         Init%InData_SeaSt%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%SeaStInlineFileInfo, Init%InData_SeaSt%PassedFileData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      END IF
 
       ! these values support wave field handling
       Init%InData_SeaSt%WaveFieldMod  = p_FAST%WaveFieldMod

@@ -30,6 +30,8 @@ MODULE SeaState
    USE SeaSt_WaveField
    USE SeaState_Input
    USE SeaState_Output
+   USE SeaState_Yaml
+   USE YamlInput, only: IsYamlExt
    USE Current
    USE Waves2
    USE GridInterp
@@ -133,18 +135,29 @@ SUBROUTINE SeaSt_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, Init
       CALL DispNVD( SeaSt_ProgDesc )
 
       IF ( InitInp%UseInputFile ) THEN
-         CALL ProcessComFile( InitInp%InputFile, InFileInfo, ErrStat2, ErrMsg2 ); if(Failed()) return;
+         IF ( IsYamlExt( InitInp%InputFile ) ) THEN
+            CALL SeaSt_ParseYamlFile( InitInp%InputFile, InitInp, InitInp%OutRootName, InputFileData, ErrStat2, ErrMsg2 ); if(Failed()) return;
+         ELSE
+            CALL ProcessComFile( InitInp%InputFile, InFileInfo, ErrStat2, ErrMsg2 ); if(Failed()) return;
+
+            ! Parse all SeaState-related input and populate the InputFileData structure
+            CALL SeaSt_ParseInput( InitInp%InputFile, InitInp%OutRootName, InitInp%defWtrDens, InitInp%defWtrDpth, InitInp%defMSL2SWL, InFileInfo, InputFileData, ErrStat2, ErrMsg2 ); if(Failed()) return;
+         ENDIF
       ELSE
-         CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileData, InFileInfo, MESH_NEWCOPY, ErrStat2, ErrMsg2 ); if(Failed()) return;
+         IF ( InitInp%PassedFileIsYaml ) THEN
+            CALL SeaSt_ParseYamlFileInfo( InitInp%PassedFileData, InitInp, InitInp%OutRootName, InputFileData, ErrStat2, ErrMsg2 ); if(Failed()) return;
+         ELSE
+            CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileData, InFileInfo, MESH_NEWCOPY, ErrStat2, ErrMsg2 ); if(Failed()) return;
+
+            ! Parse all SeaState-related input and populate the InputFileData structure
+            CALL SeaSt_ParseInput( InitInp%InputFile, InitInp%OutRootName, InitInp%defWtrDens, InitInp%defWtrDpth, InitInp%defMSL2SWL, InFileInfo, InputFileData, ErrStat2, ErrMsg2 ); if(Failed()) return;
+         ENDIF
       ENDIF
 
       ! For diagnostic purposes, the following can be used to display the contents
       ! of the InFileInfo data structure.
       ! call Print_FileInfo_Struct( CU, InFileInfo ) ! CU is the screen -- different number on different systems.
 
-      ! Parse all SeaState-related input and populate the InputFileData structure 
-      CALL SeaSt_ParseInput( InitInp%InputFile, InitInp%OutRootName, InitInp%defWtrDens, InitInp%defWtrDpth, InitInp%defMSL2SWL, InFileInfo, InputFileData, ErrStat2, ErrMsg2 ); if(Failed()) return;
-      
       ! Verify all the necessary initialization data. Do this at the HydroDynInput module-level 
       !   because the HydroDynInput module is also responsible for parsing all this 
       !   initialization data from a file
