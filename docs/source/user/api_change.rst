@@ -12,6 +12,13 @@ Thus, be sure to implement each in order so that subsequent line numbers are cor
 OpenFAST v5.0.x to OpenFAST  v5.1.0
 -----------------------------------
 
+YAML input files are now accepted alongside the traditional text format, selected
+purely by file extension (``.yaml``/``.yml``). The OpenFAST primary file and the
+InflowWind primary input file may each be written in YAML, the two formats may be
+mixed within one model, and a YAML primary file may carry the InflowWind input
+inline for a single-file model. Existing text input files are unaffected. See
+:ref:`yaml_input` for the conventions and schemas.
+
 Under-relaxation is introduced for the tight-coupling iterative solver to improve numerical stability, requiring two new inputs in the main OpenFAST input file.
 
 ============================================= ======== ==================== ==========================================================================================================================================================================================================================================================================================================

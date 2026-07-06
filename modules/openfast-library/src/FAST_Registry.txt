@@ -533,6 +533,8 @@ typedef	^	FAST_MiscVarType	INTEGER	SimStrtTime	{8}	-	-	"Start time of simulation
 #typedef	^	FAST_MiscVarType	IntKi	n_t_global	-	-	-	"simulation time step, loop counter for global (FAST) simulation"	(s)
 typedef	^	FAST_MiscVarType	FAST_ExternInputType	ExternInput	-	-	-	"external input values"	-
 typedef	^	FAST_MiscVarType	FAST_MiscLinType	Lin	-	-	-	"misc data for linearization analysis"	-
+typedef	^	FAST_MiscVarType	FileInfoType	IfWInlineFileInfo	-	-	-	"serialized inline InflowWind input from a YAML primary file (YAML text lines with provenance)"	-
+typedef	^	FAST_MiscVarType	LOGICAL	IfWIsInline	-	.FALSE.	-	"InflowWind input was given inline in the YAML primary file"	-
 
 
 # ..... FAST_InitData data .......................................................................................................

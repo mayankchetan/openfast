@@ -78,6 +78,75 @@ Merge keys follow the standard YAML rules: keys written explicitly in the host
 mapping always win, and when several aliases are merged (``<<: [*a, *b]``) the
 earlier one takes precedence.
 
+Inline module input: the uniform value rule
+--------------------------------------------
+
+In a YAML OpenFAST primary file, every entry under ``input_files`` follows one
+rule, at every level:
+
+- a **string** value is a file path (text or YAML, decided by its extension);
+- a **mapping** value is that module's input, written inline.
+
+Inlining removes the separate module file entirely — the module's YAML schema
+simply nests under its ``input_files`` key::
+
+   input_files:
+     EDFile: ED.dat                # text module file (path)
+     AeroFile: AD.yaml             # YAML module file (path)
+     InflowFile:                   # inline module input (mapping)
+       general:
+         WindType: 1
+         ...
+       steady_wind:
+         HWindSpeed: 12
+         RefHt: 90
+         PLexp: 0.2
+
+Formats mix freely: one deck may combine text files, YAML files, and inline
+sections. Inline input is available for modules whose YAML schema exists
+(currently InflowWind); an inline mapping for any other module is a clear
+fatal error suggesting a file path instead. Combined with ``!include`` and
+anchors, this supports fully single-file models.
+
+OpenFAST primary file (.fst)
+----------------------------
+
+The YAML form of the OpenFAST primary file mirrors the text format's banners as
+sections: ``description`` (a string), ``simulation_control``,
+``feature_switches``, ``environment``, ``input_files``, ``output``,
+``linearization``, and ``visualization``. Keys are the documented parameter
+names (``TMax``, ``CompElast``, ``OutFileFmt``, ...). Differences from the text
+format:
+
+- ``NRotors`` is not an input. It is ``1 +`` the number of entries in the
+  optional ``input_files:rotors`` sequence. Each ``rotors`` entry is a mapping
+  with ``EDFile``, ``ServoFile``, and (when ``CompElast`` is 2) ``BDBldFile``
+  for that additional rotor.
+- ``BDBldFile`` is a sequence of blade-file paths (its length gives the number
+  of BeamDyn blade files); it is required only when ``CompElast`` is 2.
+- ``MirrorRotor`` (under ``feature_switches``) is a sequence of true/false
+  values, required with exactly ``NRotors`` entries only for multirotor models.
+- ``NLinTimes`` is not an input: it is the length of
+  ``linearization:LinTimes``. The whole ``linearization`` section may be
+  omitted when ``Linearize`` is false, as may ``visualization`` when ``WrVTK``
+  is 0 — every entry in those sections has a default.
+- Unused module files are simply omitted (no ``"unused"`` placeholders): only
+  the files for enabled modules are required.
+
+A complete, runnable single-file example — demonstrating comments,
+``!include``, an anchor/alias pair, and an inline InflowWind section — is kept
+at ``reg_tests/yaml-examples/AWT_YFix_WSt_single_file.yaml``.
+
+A multirotor deck reuses rotor definitions with anchors and merge keys::
+
+   input_files:
+     EDFile: &ed  ED_rotor1.yaml
+     ServoFile: SrvD_rotor1.yaml
+     ...
+     rotors:                      # rotor 2..N; NRotors = 1 + list length
+       - EDFile: *ed              # same ElastoDyn input as rotor 1
+         ServoFile: SrvD_rotor2.yaml
+
 Interoperability
 ----------------
 
@@ -107,4 +176,6 @@ The set of files accepted in YAML form is growing module by module; each module'
 documentation describes its YAML schema alongside the text format. Currently
 supported:
 
-- InflowWind primary input file (:ref:`ifw-yaml-input`)
+- OpenFAST primary file (``.fst``) — see above
+- InflowWind primary input file (:ref:`ifw-yaml-input`), including inline use
+  under ``input_files:InflowFile``

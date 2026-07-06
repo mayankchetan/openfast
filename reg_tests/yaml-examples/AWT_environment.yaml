@@ -1,0 +1,12 @@
+# Environmental conditions for the AWT-27CR2 example, spliced into the main
+# deck with `!include`. Any section (or any mapping/sequence value) can live in
+# its own file this way; paths are resolved relative to the *including* file.
+Gravity:  9.80665     # gravitational acceleration (m/s^2)
+AirDens:  1.225       # air density (kg/m^3)
+WtrDens:  0           # water density (kg/m^3)
+KinVisc:  1.4639E-05  # kinematic viscosity of working fluid (m^2/s)
+SpdSound: 335         # speed of sound in working fluid (m/s)
+Patm:     103500      # atmospheric pressure (Pa) [MHK cavitation check only]
+Pvap:     1700        # vapour pressure of working fluid (Pa) [MHK only]
+WtrDpth:  0           # water depth (m)
+MSL2SWL:  0           # offset between still-water level and mean sea level (m)

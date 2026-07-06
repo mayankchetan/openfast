@@ -23,6 +23,8 @@ MODULE FAST_Subs
 
    use FAST_Types
    use FAST_ModTypes
+   use FAST_Yaml, only: FAST_ParseYamlPrimary
+   use YamlInput, only: IsYamlExt
    use FAST_ModGlue
    use VersionInfo
    use FAST_Funcs
@@ -490,6 +492,13 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_IfW%InputFileName          = p_FAST%InflowFile
       Init%InData_IfW%RootName               = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_IfW))
       Init%InData_IfW%FilePassingMethod      = 0_IntKi               ! IfW will read input file
+      IF ( m_FAST%IfWIsInline ) THEN         ! inline InflowWind input from a YAML primary file
+         Init%InData_IfW%FilePassingMethod = 1_IntKi
+         Init%InData_IfW%PassedFileIsYaml  = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%IfWInlineFileInfo, Init%InData_IfW%PassedFileInfo, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
+         IF (ErrStat >= AbortErrLev) RETURN
+      END IF
       Init%InData_IfW%FixedWindFileRootName  = .FALSE.
       Init%InData_IfW%OutputAccel            = p_FAST%MHK /= MHK_None
       Init%InData_IfW%MHK                    = p_FAST%MHK
@@ -1885,7 +1894,11 @@ SUBROUTINE FAST_Init( p, m_FAST, y_FAST, t_initial, InputFile, ErrStat, ErrMsg, 
    ELSE
       p%KMax = 1                 ! after more checking, we may put this in the input file...
       p%tolerSquared = 1         ! not used for time-marching simulation
-      CALL FAST_ReadPrimaryFile( InputFile, p, m_FAST, OverrideAbortErrLev, ErrStat2, ErrMsg2 )
+      IF ( IsYamlExt( InputFile ) ) THEN    ! YAML-format primary input file (.yaml/.yml)
+         CALL FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, ErrStat2, ErrMsg2 )
+      ELSE
+         CALL FAST_ReadPrimaryFile( InputFile, p, m_FAST, OverrideAbortErrLev, ErrStat2, ErrMsg2 )
+      END IF
    END IF
    CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
 

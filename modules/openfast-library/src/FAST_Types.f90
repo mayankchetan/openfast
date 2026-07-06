@@ -574,6 +574,8 @@ IMPLICIT NONE
     INTEGER(IntKi) , DIMENSION(1:8)  :: SimStrtTime = 0_IntKi      !< Start time of simulation (after initialization) [-]
     TYPE(FAST_ExternInputType)  :: ExternInput      !< external input values [-]
     TYPE(FAST_MiscLinType)  :: Lin      !< misc data for linearization analysis [-]
+    TYPE(FileInfoType)  :: IfWInlineFileInfo      !< serialized inline InflowWind input from a YAML primary file (YAML text lines with provenance) [-]
+    LOGICAL  :: IfWIsInline = .FALSE.      !< InflowWind input was given inline in the YAML primary file [-]
   END TYPE FAST_MiscVarType
 ! =======================
 ! =========  FAST_InitData  =======
@@ -8780,6 +8782,10 @@ subroutine FAST_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
    call FAST_CopyMiscLinType(SrcMiscData%Lin, DstMiscData%Lin, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
+   call NWTC_Library_CopyFileInfoType(SrcMiscData%IfWInlineFileInfo, DstMiscData%IfWInlineFileInfo, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstMiscData%IfWIsInline = SrcMiscData%IfWIsInline
 end subroutine
 
 subroutine FAST_DestroyMisc(MiscData, ErrStat, ErrMsg)
@@ -8794,6 +8800,8 @@ subroutine FAST_DestroyMisc(MiscData, ErrStat, ErrMsg)
    call FAST_DestroyExternInputType(MiscData%ExternInput, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    call FAST_DestroyMiscLinType(MiscData%Lin, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   call NWTC_Library_DestroyFileInfoType(MiscData%IfWInlineFileInfo, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
@@ -8811,6 +8819,8 @@ subroutine FAST_PackMisc(RF, Indata)
    call RegPack(RF, InData%SimStrtTime)
    call FAST_PackExternInputType(RF, InData%ExternInput) 
    call FAST_PackMiscLinType(RF, InData%Lin) 
+   call NWTC_Library_PackFileInfoType(RF, InData%IfWInlineFileInfo) 
+   call RegPack(RF, InData%IfWIsInline)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -8828,6 +8838,8 @@ subroutine FAST_UnPackMisc(RF, OutData)
    call RegUnpack(RF, OutData%SimStrtTime); if (RegCheckErr(RF, RoutineName)) return
    call FAST_UnpackExternInputType(RF, OutData%ExternInput) ! ExternInput 
    call FAST_UnpackMiscLinType(RF, OutData%Lin) ! Lin 
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%IfWInlineFileInfo) ! IfWInlineFileInfo 
+   call RegUnpack(RF, OutData%IfWIsInline); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine FAST_CopyInitData(SrcInitDataData, DstInitDataData, CtrlCode, ErrStat, ErrMsg)

@@ -115,6 +115,7 @@ IMPLICIT NONE
     CHARACTER(1024)  :: RootName      !< RootName for writing output files [-]
     INTEGER(IntKi)  :: FilePassingMethod = 0      !< Method for file passing {0: None (read from file), 1: as FileInfoType to parse, 2: as InputFileType already parsed} [-]
     TYPE(FileInfoType)  :: PassedFileInfo      !< If we don't use the input file, pass everything through this [FilePassingMethod = 1] [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedFileInfo lines are YAML format (e.g., inline module input from a YAML primary file) [FilePassingMethod = 1] [-]
     TYPE(InflowWind_InputFile)  :: PassedFileData      !< If we don't use the input file, pass everything through this [FilePassingMethod = 2] [-]
     LOGICAL  :: OutputAccel = .FALSE.      !< Flag to output wind acceleration [-]
     TYPE(Grid4D_InitInputType)  :: FDext      !< InitInput for 4D external wind data [-]
@@ -530,6 +531,7 @@ subroutine InflowWind_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode
    call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedFileInfo, DstInitInputData%PassedFileInfo, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
    call InflowWind_CopyInputFile(SrcInitInputData%PassedFileData, DstInitInputData%PassedFileData, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
@@ -577,6 +579,7 @@ subroutine InflowWind_PackInitInput(RF, Indata)
    call RegPack(RF, InData%RootName)
    call RegPack(RF, InData%FilePassingMethod)
    call NWTC_Library_PackFileInfoType(RF, InData%PassedFileInfo) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    call InflowWind_PackInputFile(RF, InData%PassedFileData) 
    call RegPack(RF, InData%OutputAccel)
    call InflowWind_IO_PackGrid4D_InitInputType(RF, InData%FDext) 
@@ -604,6 +607,7 @@ subroutine InflowWind_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%RootName); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%FilePassingMethod); if (RegCheckErr(RF, RoutineName)) return
    call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedFileInfo) ! PassedFileInfo 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
    call InflowWind_UnpackInputFile(RF, OutData%PassedFileData) ! PassedFileData 
    call RegUnpack(RF, OutData%OutputAccel); if (RegCheckErr(RF, RoutineName)) return
    call InflowWind_IO_UnpackGrid4D_InitInputType(RF, OutData%FDext) ! FDext 

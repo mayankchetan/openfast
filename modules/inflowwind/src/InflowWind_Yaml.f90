@@ -36,6 +36,7 @@ module InflowWind_Yaml
    private
 
    public :: InflowWind_ParseYamlFile
+   public :: InflowWind_ParseYamlFileInfo
 
    integer(IntKi), parameter :: MaxOutPts = 98   ! same limit as InflowWind_Subs
 
@@ -105,6 +106,73 @@ contains
    end subroutine Cleanup
 
 end subroutine InflowWind_ParseYamlFile
+
+!> Parse YAML-format InflowWind input arriving as a FileInfoType — the passed-data
+!! channel used for inline module input from a YAML primary file (or python-supplied
+!! YAML lines). Per-line provenance in the FileInfoType keeps error messages pointing
+!! at the original file and line. When Echo is true the passed lines are echoed
+!! verbatim (they carry the original comments only if the caller preserved them;
+!! serialized inline input echoes in its serialized form).
+subroutine InflowWind_ParseYamlFileInfo(FileInfo, PriPath, InputFileName, EchoFileName, &
+                                        FixedWindFileRootName, TurbineID, InputFileData, ErrStat, ErrMsg)
+   type(FileInfoType),         intent(in   ) :: FileInfo
+   character(*),               intent(in   ) :: PriPath               !< path for resolving relative file names
+   character(*),               intent(in   ) :: InputFileName         !< name used in messages/echo header
+   character(*),               intent(in   ) :: EchoFileName
+   logical,                    intent(in   ) :: FixedWindFileRootName
+   integer(IntKi),             intent(in   ) :: TurbineID
+   type(InflowWind_InputFile), intent(inout) :: InputFileData
+   integer(IntKi),             intent(  out) :: ErrStat
+   character(*),               intent(  out) :: ErrMsg
+
+   character(*), parameter :: RoutineName = 'InflowWind_ParseYamlFileInfo'
+   type(YamlDoc)           :: Doc
+   integer(IntKi)          :: UnEc
+   integer(IntKi)          :: i
+   integer(IntKi)          :: TmpErrStat
+   character(ErrMsgLen)    :: TmpErrMsg
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+   UnEc    = -1
+
+   call Yaml_LoadFileInfo(FileInfo, Doc, TmpErrStat, TmpErrMsg)
+   if (Failed()) return
+
+   InputFileData%EchoFlag = .false.
+   call YamlGet(Doc, 'general:Echo', InputFileData%EchoFlag, TmpErrStat, TmpErrMsg, Default=.false.)
+   if (Failed()) return
+
+   if (InputFileData%EchoFlag) then
+      call OpenEcho(UnEc, trim(EchoFileName), TmpErrStat, TmpErrMsg)
+      if (Failed()) return
+      write(UnEc, '(A)') 'Echo file for InflowWind input (passed YAML data): '//trim(InputFileName)
+      do i = 1, FileInfo%NumLines
+         write(UnEc, '(A)') trim(FileInfo%Lines(i))
+      end do
+   end if
+
+   call ParseYamlDoc(Doc, PriPath, FixedWindFileRootName, TurbineID, InputFileData, TmpErrStat, TmpErrMsg)
+   if (Failed()) return
+
+   call Yaml_WarnUnused(Doc, TmpErrStat, TmpErrMsg)
+   call SetErrStat(TmpErrStat, TmpErrMsg, ErrStat, ErrMsg, RoutineName)
+
+   call Cleanup()
+
+contains
+
+   logical function Failed()
+      call SetErrStat(TmpErrStat, TmpErrMsg, ErrStat, ErrMsg, RoutineName)
+      Failed = ErrStat >= AbortErrLev
+      if (Failed) call Cleanup()
+   end function Failed
+
+   subroutine Cleanup()
+      if (UnEc > 0_IntKi) close(UnEc)
+   end subroutine Cleanup
+
+end subroutine InflowWind_ParseYamlFileInfo
 
 !> Fill InputFileData from a parsed document. Split from the file wrapper so a passed
 !! subtree (inline module input) can reuse it later.

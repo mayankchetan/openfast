@@ -1,0 +1,109 @@
+# =============================================================================
+# OpenFAST single-file YAML example — AWT-27CR2, fixed yaw error, steady wind.
+#
+# This deck demonstrates the YAML input format's reuse features:
+#   * comments anywhere (preserved in the echo file),
+#   * `!include` to splice a section kept in its own file (environment),
+#   * an anchor (&time_step) reused later with an alias (*time_step),
+#   * an inline module input: InflowFile is a nested mapping rather than a
+#     file path, so the InflowWind input lives inside this file (the
+#     "uniform value rule": string = path, mapping = inline).
+#
+# Run it from a directory containing the AWT_YFix_WSt module files
+# (ElastoDyn/AeroDyn/ServoDyn .dat files and the AWT27 airfoil data):
+#   openfast AWT_YFix_WSt_single_file.yaml
+# =============================================================================
+
+# The description contains a "#", so it is quoted (an unquoted " #" starts a comment):
+description: "FAST Certification Test #01 as a single-file YAML deck (AWT-27CR2, fixed yaw error, steady wind)"
+
+simulation_control:
+  Echo: true            # echo file gets a verbatim copy of this deck, comments included
+  AbortLevel: FATAL
+  TMax: 20              # total run time (s)
+  DT: &time_step 0.004  # module time step (s); anchored for reuse below
+  ModCoupling: 3        # 1=loose; 2=tight, fixed Jacobian updates; 3=tight, automatic
+  InterpOrder: 1
+  NumCrctn: 0
+  RhoInf: 0.0
+  ConvTol: 1e-4
+  MaxConvIter: 6
+  AutoRelax: false
+  RelaxFactor: 1.0
+  DT_UJac: 99999
+  UJacSclFact: 1000000
+
+# NRotors is not an input: it is 1 plus the number of entries under
+# input_files:rotors (this deck has none, so one rotor).
+feature_switches:
+  CompElast: 1          # 1=ElastoDyn; 2=ElastoDyn + BeamDyn blades; 3=Simplified ElastoDyn
+  CompInflow: 1         # 0=still air; 1=InflowWind; 2=external from ExtInflow
+  CompAero: 2           # 0=none; 1=AeroDisk; 2=AeroDyn; 3=ExtLoads
+  CompServo: 1
+  CompSeaSt: 0
+  CompHydro: 0
+  CompSub: 0
+  CompMooring: 0
+  CompIce: 0
+  CompSoil: 0
+  MHK: 0
+
+# A section can be kept in a separate file and spliced in with !include;
+# the path is relative to this file.
+environment: !include AWT_environment.yaml
+
+input_files:
+  EDFile: AWT_YFix_WSt_ElastoDyn.dat    # a string value is a file path (text or YAML, by extension)
+  AeroFile: AWT_YFix_WSt_AeroDyn.dat
+  ServoFile: AWT_YFix_WSt_ServoDyn.dat
+  # A mapping value is the module's input, inline (uniform value rule).
+  # This is the InflowWind YAML schema, verbatim:
+  InflowFile:
+    general:
+      Echo: false
+      WindType: 1               # 1=steady; 2=uniform; 3=TurbSim FF; 4=Bladed FF; 5=HAWC; 7=native Bladed
+      PropagationDir: 30        # meteorological rotation from +X (deg)
+      VFlowAng: 0
+      VelInterpCubic: false
+      # NWindVel is the length of these lists (no separate count input):
+      WindVxiList: [0]
+      WindVyiList: [0]
+      WindVziList: [42.672]
+    steady_wind:                # required because WindType is 1
+      HWindSpeed: 12            # (m/s)
+      RefHt: 42.672             # (m)
+      PLexp: 0.2
+    lidar:
+      SensorType: 0             # 0 = no lidar; remaining entries are placeholders
+      NumPulseGate: 0
+      PulseSpacing: 30
+      FocalDistanceX: [-200]    # NumBeam is the length of these lists
+      FocalDistanceY: [0]
+      FocalDistanceZ: [0]
+      RotorApexOffsetPos: [0.0, 0.0, 0.0]
+      URefLid: 17
+      MeasurementInterval: 0.25
+      LidRadialVel: false
+      ConsiderHubMotion: 1
+    output:
+      SumPrint: true
+      OutList: [Wind1VelX, Wind1VelY, Wind1VelZ]
+
+output:
+  SumPrint: true
+  SttsTime: 2
+  ChkptTime: 99999
+  DT_Out: *time_step    # alias reuses the anchored DT: tabular output every step
+  TStart: 10
+  OutFileFmt: 4         # 1=text; 2=binary; 3=both; 4=uncompressed binary; 5=text + uncompressed binary
+  TabDelim: true
+  OutFmt: G0
+
+# The linearization section is optional when Linearize is false (all entries
+# have defaults), so it is omitted here.
+
+visualization:
+  WrVTK: 0
+  VTK_type: 2
+  VTK_fields: false
+  VTK_fps: 15

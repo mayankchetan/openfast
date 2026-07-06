@@ -165,8 +165,12 @@ SUBROUTINE InflowWind_Init( InitInp, InputGuess, p, ContStates, DiscStates, Cons
    ELSEIF ( InitInp%FilePassingMethod == 1_IntKi ) THEN        ! passing the FileInfoType structure
 
       CALL GetPath( InitInp%InputFileName, PriPath )           ! in case a summary file is written
-      CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileInfo, InFileInfo, MESH_NEWCOPY, TmpErrStat, TmpErrMsg ); if (Failed()) return
-      CALL InflowWind_ParseInputFileInfo( InputFileData,  InFileInfo, PriPath, InitInp%InputFileName, EchoFileName, InitInp%FixedWindFileRootName, InitInp%TurbineID, TmpErrStat, TmpErrMsg ); if (Failed()) return
+      IF ( InitInp%PassedFileIsYaml ) THEN                     ! YAML content (e.g. inline module input from a YAML primary file)
+         CALL InflowWind_ParseYamlFileInfo( InitInp%PassedFileInfo, PriPath, InitInp%InputFileName, EchoFileName, InitInp%FixedWindFileRootName, InitInp%TurbineID, InputFileData, TmpErrStat, TmpErrMsg ); if (Failed()) return
+      ELSE
+         CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileInfo, InFileInfo, MESH_NEWCOPY, TmpErrStat, TmpErrMsg ); if (Failed()) return
+         CALL InflowWind_ParseInputFileInfo( InputFileData,  InFileInfo, PriPath, InitInp%InputFileName, EchoFileName, InitInp%FixedWindFileRootName, InitInp%TurbineID, TmpErrStat, TmpErrMsg ); if (Failed()) return
+      ENDIF
 
    ELSEIF ( InitInp%FilePassingMethod == 2_IntKi ) THEN        ! passing the InputFileData structure
 

@@ -250,6 +250,53 @@ function(yaml_equiv MODULE CASENAME EXECUTABLE LABEL)
   set_tests_properties(yaml_equiv_${CASENAME} PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
 endfunction(yaml_equiv)
 
+# yaml-equivalence for openfast (.fst) glue-code cases: like yaml_equiv, but the
+# primary (.fst) file is converted per MODE (perfile | allyaml | singlefile),
+# selecting how convert_fst() / executeYamlEquivalenceCase.py handles the
+# InflowFile entry under input_files (path-only, converted-to-YAML sibling file,
+# or inlined mapping, respectively -- see reg_tests/lib/yamlDeckConverter.py).
+function(yaml_equiv_openfast CASENAME MODE EXECUTABLE LABEL)
+  set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeYamlEquivalenceCase.py")
+  set(SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/..")
+  set(BUILD_DIRECTORY "${CTEST_BINARY_DIR}/modules/openfast")
+  if(MODE STREQUAL "perfile")
+    set(MODE_ARG "per-file")
+  elseif(MODE STREQUAL "allyaml")
+    set(MODE_ARG "all-yaml")
+  elseif(MODE STREQUAL "singlefile")
+    set(MODE_ARG "single-file")
+  else()
+    message(FATAL_ERROR "yaml_equiv_openfast: unknown MODE '${MODE}' (expected perfile|allyaml|singlefile)")
+  endif()
+  add_test(
+    yaml_equiv_${CASENAME}_${MODE} ${Python_EXECUTABLE}
+       ${TEST_SCRIPT}
+       "openfast"
+       ${CASENAME}
+       ${EXECUTABLE}
+       ${SOURCE_DIRECTORY}
+       ${BUILD_DIRECTORY}
+       ${MODE_ARG}
+  )
+  set_tests_properties(yaml_equiv_${CASENAME}_${MODE} PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
+endfunction(yaml_equiv_openfast)
+
+# smoke test for the curated hand-written single-file YAML example deck
+# (comments, !include, anchor/alias, inline InflowWind) in reg_tests/yaml-examples/
+function(yaml_example_smoke EXECUTABLE LABEL)
+  set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeYamlExampleSmoke.py")
+  set(RTEST_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/r-test")
+  set(BUILD_DIRECTORY "${CTEST_BINARY_DIR}/modules/openfast")
+  add_test(
+    yaml_example_smoke ${Python_EXECUTABLE}
+       ${TEST_SCRIPT}
+       ${EXECUTABLE}
+       ${RTEST_DIRECTORY}
+       ${BUILD_DIRECTORY}
+  )
+  set_tests_properties(yaml_example_smoke PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
+endfunction(yaml_example_smoke)
+
 # py_inflowwind
 function(py_ifw_regression TESTNAME LABEL)
   set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeInflowwindPyRegressionCase.py")
@@ -564,6 +611,11 @@ yaml_equiv("inflowwind" "ifw_turbsimff"    "${CTEST_INFLOWWIND_EXECUTABLE}" "inf
 yaml_equiv("inflowwind" "ifw_uniform"      "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 yaml_equiv("inflowwind" "ifw_HAWC"         "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 yaml_equiv("inflowwind" "ifw_nativeBladed" "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
+
+yaml_equiv_openfast("AWT_YFix_WSt" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("AWT_YFix_WSt" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests
 seast_regression("seastate_1"                                "seastate")
