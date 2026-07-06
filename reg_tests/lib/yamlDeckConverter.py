@@ -12,6 +12,8 @@
         convert_aerodisk(text_path) -> str      (YAML document)
         convert_sed(text_path) -> str           (YAML document)
         convert_seastate(text_path) -> str      (YAML document)
+        convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
+        convert_stc(text_path) -> str           (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -530,6 +532,311 @@ def convert_seastate(text_path):
     return '\n'.join(out)
 
 
+def _file_list_tokens(toks, n):
+    """Return the first `n` path tokens from a text-format file-list line, stripping
+    separator commas (both freestanding "," tokens and trailing commas on tokens)."""
+    cleaned = [t.rstrip(',') for t in toks if t.rstrip(',')]
+    if len(cleaned) < n:
+        raise ValueError('file list has {} entr(ies); expected at least {}'.format(len(cleaned), n))
+    return cleaned[:n]
+
+
+def convert_servodyn(text_path, stc_to_yaml=False):
+    """Convert a text-format ServoDyn primary input file to its YAML schema.
+
+    Sections mirror the text file's banners (general, pitch_control,
+    generator_torque_control, simple_variable_speed, simple_induction_generator,
+    thevenin_generator, high_speed_shaft_brake, yaw_control, aero_flow_control,
+    structural_control, cable_control, bladed_interface, torque_speed_lookup, output).
+    DT and DLL_DT accept the scalar "default" (ParseVarWDefault in the text path).
+    Per-blade values (PitNeut, PitSpr, PitDamp, TPitManS, PitManRat, BlPitchF) are
+    read as three separate keyword lines in the text format and become 3-entry lists.
+    NumBStC/NumNStC/NumTStC/NumSStC and DLL_NumTrq and NumOuts are derived in YAML from
+    list lengths, so the text-format counts are consumed here only to know how many
+    entries to slice, and are never themselves emitted. Angle/speed values are copied
+    verbatim in their native units (deg / rpm / %); ServoDyn_Yaml.f90 applies the same
+    conversions as the text path right after reading them.
+
+    stc_to_yaml: when True, every referenced StC sub-file (BStCfiles/NStCfiles/
+    TStCfiles/SStCfiles) is ALSO converted to YAML (convert_stc) and the list entries
+    are repointed at the new .yaml names; the converted documents are returned in
+    extra_files (path relative to the ServoDyn deck -> yaml text). StC files are a
+    separate file type, always referenced by path -- never inlined.
+
+    Returns (yaml_text, extra_files)."""
+    d = _TextDeck(text_path)
+    extra_files = {}
+
+    out = []
+    w = out.append
+    w('# ServoDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  DT: ' + _default_or_num(d.scalar('DT')))
+    w('')
+
+    w('pitch_control:')
+    w('  PCMode: ' + d.scalar('PCMode'))
+    w('  TPCOn: '  + d.scalar('TPCOn'))
+    for key in ('PitNeut', 'PitSpr', 'PitDamp', 'TPitManS', 'PitManRat', 'BlPitchF'):
+        vals = [d.scalar('{}({})'.format(key, k)) for k in (1, 2, 3)]
+        w('  {}: [{}]'.format(key, _list_join(vals)))
+    w('')
+
+    w('generator_torque_control:')
+    w('  VSContrl: ' + d.scalar('VSContrl'))
+    w('  GenModel: ' + d.scalar('GenModel'))
+    w('  GenEff: '   + d.scalar('GenEff'))
+    w('  GenTiStr: ' + _as_bool(d.scalar('GenTiStr')))
+    w('  GenTiStp: ' + _as_bool(d.scalar('GenTiStp')))
+    w('  SpdGenOn: ' + d.scalar('SpdGenOn'))
+    w('  TimGenOn: ' + d.scalar('TimGenOn'))
+    w('  TimGenOf: ' + d.scalar('TimGenOf'))
+    w('')
+
+    w('simple_variable_speed:')
+    w('  VS_RtGnSp: ' + d.scalar('VS_RtGnSp'))
+    w('  VS_RtTq: '   + d.scalar('VS_RtTq'))
+    w('  VS_Rgn2K: '  + d.scalar('VS_Rgn2K'))
+    w('  VS_SlPc: '   + d.scalar('VS_SlPc'))
+    w('')
+
+    w('simple_induction_generator:')
+    w('  SIG_SlPc: ' + d.scalar('SIG_SlPc'))
+    w('  SIG_SySp: ' + d.scalar('SIG_SySp'))
+    w('  SIG_RtTq: ' + d.scalar('SIG_RtTq'))
+    w('  SIG_PORt: ' + d.scalar('SIG_PORt'))
+    w('')
+
+    w('thevenin_generator:')
+    for key in ('TEC_Freq', 'TEC_NPol', 'TEC_SRes', 'TEC_RRes', 'TEC_VLL', 'TEC_SLR', 'TEC_RLR', 'TEC_MR'):
+        w('  {}: {}'.format(key, d.scalar(key)))
+    w('')
+
+    w('high_speed_shaft_brake:')
+    w('  HSSBrMode: ' + d.scalar('HSSBrMode'))
+    w('  THSSBrDp: '  + d.scalar('THSSBrDp'))
+    w('  HSSBrDT: '   + d.scalar('HSSBrDT'))
+    w('  HSSBrTqF: '  + d.scalar('HSSBrTqF'))
+    w('')
+
+    w('yaw_control:')
+    w('  YCMode: '    + d.scalar('YCMode'))
+    w('  TYCOn: '     + d.scalar('TYCOn'))
+    w('  YawNeut: '   + d.scalar('YawNeut'))
+    w('  YawSpr: '    + d.scalar('YawSpr'))
+    w('  YawDamp: '   + d.scalar('YawDamp'))
+    w('  TYawManS: '  + d.scalar('TYawManS'))
+    w('  YawManRat: ' + d.scalar('YawManRat'))
+    w('  NacYawF: '   + d.scalar('NacYawF'))
+    w('')
+
+    w('aero_flow_control:')
+    w('  AfCmode: '   + d.scalar('AfCmode'))
+    w('  AfC_Mean: '  + d.scalar('AfC_Mean'))
+    w('  AfC_Amp: '   + d.scalar('AfC_Amp'))
+    w('  AfC_Phase: ' + d.scalar('AfC_Phase'))
+    w('')
+
+    w('structural_control:')
+    for count_key, list_key in (('NumBStC', 'BStCfiles'), ('NumNStC', 'NStCfiles'),
+                                ('NumTStC', 'TStCfiles'), ('NumSStC', 'SStCfiles')):
+        n = int(d.scalar(count_key))
+        files = _file_list_tokens(d.find(list_key), n)
+        names = [_unquote(t) for t in files]
+        if stc_to_yaml:
+            for i, name in enumerate(names):
+                yaml_rel = os.path.splitext(name)[0] + '.yaml'
+                if yaml_rel not in extra_files:
+                    extra_files[yaml_rel] = convert_stc(os.path.join(d.base_dir, name))
+                names[i] = yaml_rel
+        w('  {}: [{}]'.format(list_key, ', '.join(_as_str(n2) for n2 in names)))
+    w('')
+
+    w('cable_control:')
+    w('  CCmode: ' + d.scalar('CCmode'))
+    w('')
+
+    w('bladed_interface:')
+    w('  DLL_FileName: ' + _as_str(d.scalar('DLL_FileName')))
+    w('  DLL_InFile: '   + _as_str(d.scalar('DLL_InFile')))
+    w('  DLL_ProcName: ' + _as_str(d.scalar('DLL_ProcName')))
+    w('  DLL_DT: '       + _default_or_num(d.scalar('DLL_DT')))
+    w('  DLL_Ramp: '     + _as_bool(d.scalar('DLL_Ramp')))
+    w('  BPCutoff: '     + d.scalar('BPCutoff'))
+    w('  NacYaw_North: ' + d.scalar('NacYaw_North'))
+    w('  Ptch_Cntrl: '   + d.scalar('Ptch_Cntrl'))
+    w('  Ptch_SetPnt: '  + d.scalar('Ptch_SetPnt'))
+    w('  Ptch_Min: '     + d.scalar('Ptch_Min'))
+    w('  Ptch_Max: '     + d.scalar('Ptch_Max'))
+    w('  PtchRate_Min: ' + d.scalar('PtchRate_Min'))
+    w('  PtchRate_Max: ' + d.scalar('PtchRate_Max'))
+    w('  Gain_OM: '      + d.scalar('Gain_OM'))
+    w('  GenSpd_MinOM: ' + d.scalar('GenSpd_MinOM'))
+    w('  GenSpd_MaxOM: ' + d.scalar('GenSpd_MaxOM'))
+    w('  GenSpd_Dem: '   + d.scalar('GenSpd_Dem'))
+    w('  GenTrq_Dem: '   + d.scalar('GenTrq_Dem'))
+    w('  GenPwr_Dem: '   + d.scalar('GenPwr_Dem'))
+    w('')
+
+    # torque-speed look-up table: DLL_NumTrq is derived in YAML from the (equal)
+    # lengths of the GenSpd_TLU/GenTrq_TLU lists. The text format's two descriptive
+    # header/units lines ("GenSpd_TLU GenTrq_TLU" / "(rpm) (Nm)") are always present
+    # and skipped without parsing, exactly as ServoDyn_IO.f90 does (CurLine += 1 twice).
+    n_trq = int(d.scalar('DLL_NumTrq'))
+    genspd, gentrq = [], []
+    if n_trq > 0:
+        for row in d.table_rows(n_trq, skip=2):
+            toks = [t for t in re.split(r'[,\s]+', row.strip()) if t]
+            if len(toks) != 2:
+                raise ValueError('convert_servodyn: torque-speed table row "{}" in {} has {} value(s); '
+                                 'expected 2'.format(row, text_path, len(toks)))
+            genspd.append(toks[0])
+            gentrq.append(toks[1])
+    w('torque_speed_lookup:')
+    w('  GenSpd_TLU: [' + ', '.join(genspd) + ']')
+    w('  GenTrq_TLU: [' + ', '.join(gentrq) + ']')
+    w('')
+
+    w('output:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  OutFile: '  + d.scalar('OutFile'))
+    w('  TabDelim: ' + _as_bool(d.scalar('TabDelim')))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    w('  TStart: '   + d.scalar('TStart'))
+    channels = d.outlist()
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out), extra_files
+
+
+def convert_stc(text_path):
+    """Convert a text-format Structural Control (StC) input file to its YAML schema.
+
+    Sections mirror the text file's banners (general, degrees_of_freedom, location,
+    initial_conditions, configuration, mass_stiffness_damping,
+    user_defined_spring_forces, control, tlcd, prescribed_time_series).
+    StC_Z_PreLd is a variant string field ("gravity", "none", or a number) copied
+    through verbatim as a string. NKInpSt is derived in YAML from the number of rows
+    of the F_TBL matrix; the text-format count is consumed here only to know how many
+    rows to read. StC_CChan and PrescribedForcesFile may each be a single value or a
+    per-instance list in the text format (the reader tries a full array first, then
+    falls back to one value broadcast) -- they are emitted as a scalar when one value
+    is present and a list otherwise, and StrucCtrl_Yaml.f90 accepts both forms."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# Structural Control (StC) input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('degrees_of_freedom:')
+    w('  StC_DOF_MODE: ' + d.scalar('StC_DOF_MODE'))
+    w('  StC_X_DOF: ' + _as_bool(d.scalar('StC_X_DOF')))
+    w('  StC_Y_DOF: ' + _as_bool(d.scalar('StC_Y_DOF')))
+    w('  StC_Z_DOF: ' + _as_bool(d.scalar('StC_Z_DOF')))
+    w('')
+
+    w('location:')
+    w('  StC_P_X: ' + d.scalar('StC_P_X'))
+    w('  StC_P_Y: ' + d.scalar('StC_P_Y'))
+    w('  StC_P_Z: ' + d.scalar('StC_P_Z'))
+    w('')
+
+    w('initial_conditions:')
+    w('  StC_X_DSP: ' + d.scalar('StC_X_DSP'))
+    w('  StC_Y_DSP: ' + d.scalar('StC_Y_DSP'))
+    w('  StC_Z_DSP: ' + d.scalar('StC_Z_DSP'))
+    w('  StC_Z_PreLd: ' + _as_str(d.scalar('StC_Z_PreLd')))
+    w('')
+
+    w('configuration:')
+    for key in ('StC_X_PSP', 'StC_X_NSP', 'StC_Y_PSP', 'StC_Y_NSP', 'StC_Z_PSP', 'StC_Z_NSP'):
+        w('  {}: {}'.format(key, d.scalar(key)))
+    w('')
+
+    w('mass_stiffness_damping:')
+    for key in ('StC_X_M', 'StC_Y_M', 'StC_Z_M', 'StC_Omni_M',
+                'StC_X_K', 'StC_Y_K', 'StC_Z_K',
+                'StC_X_C', 'StC_Y_C', 'StC_Z_C',
+                'StC_X_KS', 'StC_Y_KS', 'StC_Z_KS',
+                'StC_X_CS', 'StC_Y_CS', 'StC_Z_CS'):
+        w('  {}: {}'.format(key, d.scalar(key)))
+    w('')
+
+    # NKInpSt is derived in YAML from the F_TBL row count. The text format's three
+    # descriptive lines after NKInpSt (the "StC SPRING FORCES TABLE" section banner,
+    # the column-header line, and the units line) are always present and skipped
+    # without parsing, exactly as StrucCtrl.f90 does (CurLine += 1 three times).
+    w('user_defined_spring_forces:')
+    w('  Use_F_TBL: ' + _as_bool(d.scalar('Use_F_TBL')))
+    n_k = int(d.scalar('NKInpSt'))
+    if n_k > 0:
+        w('  F_TBL:')
+        for row in d.table_rows(n_k, skip=3):
+            toks = [t for t in re.split(r'[,\s]+', row.strip()) if t]
+            if len(toks) != 6:
+                raise ValueError('convert_stc: spring-force table row "{}" in {} has {} value(s); '
+                                 'expected 6'.format(row, text_path, len(toks)))
+            w('    - [' + ', '.join(toks) + ']')
+    else:
+        w('  F_TBL: []')
+    w('')
+
+    w('control:')
+    w('  StC_CMODE: ' + d.scalar('StC_CMODE'))
+    # StC_CChan: the text reader tries a NumMeshPts-long array first, then falls back
+    # to a single value broadcast to every instance. Emit whatever the line holds:
+    # one value -> scalar, several -> list (StrucCtrl_Yaml.f90 accepts both forms).
+    cchan = [t.rstrip(',') for t in d.find('StC_CChan') if t.rstrip(',')]
+    if len(cchan) == 1:
+        w('  StC_CChan: ' + cchan[0])
+    else:
+        w('  StC_CChan: [' + ', '.join(cchan) + ']')
+    for key in ('StC_SA_MODE', 'StC_X_C_HIGH', 'StC_X_C_LOW', 'StC_Y_C_HIGH', 'StC_Y_C_LOW',
+                'StC_Z_C_HIGH', 'StC_Z_C_LOW', 'StC_X_C_BRAKE', 'StC_Y_C_BRAKE', 'StC_Z_C_BRAKE'):
+        w('  {}: {}'.format(key, d.scalar(key)))
+    w('')
+
+    w('tlcd:')
+    for key in ('L_X', 'B_X', 'area_X', 'area_ratio_X', 'headLossCoeff_X', 'rho_X',
+                'L_Y', 'B_Y', 'area_Y', 'area_ratio_Y', 'headLossCoeff_Y', 'rho_Y'):
+        w('  {}: {}'.format(key, d.scalar(key)))
+    w('')
+
+    w('prescribed_time_series:')
+    # the keyword is written truncated ("PrescribedForcesCoord-") in most distributed
+    # StC files; accept both spellings
+    try:
+        w('  PrescribedForcesCoordSys: ' + d.scalar('PrescribedForcesCoordSys'))
+    except KeyError:
+        w('  PrescribedForcesCoordSys: ' + d.scalar('PrescribedForcesCoord'))
+    # PrescribedForcesFile: one line per instance in the text format (blade StCs may
+    # list one file per blade; missing lines fall back to the first file). Collect
+    # every consecutive PrescribedForcesFile line: one -> scalar, several -> list.
+    frc_files = [_as_str(d.scalar('PrescribedForcesFile'))]
+    while d.cursor < len(d.lines):
+        toks = _tokens_before_keyword(d.lines[d.cursor], 'PrescribedForcesFile')
+        if toks is None or not toks:
+            break
+        frc_files.append(_as_str(toks[0]))
+        d.cursor += 1
+    if len(frc_files) == 1:
+        w('  PrescribedForcesFile: ' + frc_files[0])
+    else:
+        w('  PrescribedForcesFile: [' + ', '.join(frc_files) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
 def _quote_line(text):
     """Double-quote an arbitrary raw line of text (e.g. the .fst description),
     escaping backslashes/quotes so it is always a valid YAML scalar even when
@@ -552,17 +859,20 @@ def convert_fst(text_path, mode='per-file'):
                       (text) files, unchanged.
       'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1),
                       AeroDisk file (if CompAero == 1), EDFile (if CompElast == 3, i.e.
-                      Simplified ElastoDyn), and/or SeaStFile (if CompSeaSt == 1) are
-                      ALSO converted to YAML and their input_files entries are
-                      repointed at the new .yaml files. Other module files stay as
-                      text paths.
+                      Simplified ElastoDyn), ServoFile (if CompServo == 1, including
+                      its referenced StC sub-files as their own .yaml file type),
+                      and/or SeaStFile (if CompSeaSt == 1) are ALSO converted to YAML
+                      and their input_files entries are repointed at the new .yaml
+                      files. Other module files stay as text paths.
       'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk input
-                      (if CompAero == 1), the EDFile input (if CompElast == 3), and/or
+                      (if CompAero == 1), the EDFile input (if CompElast == 3), the
+                      ServoFile input (if CompServo == 1; its StC sub-files stay
+                      referenced by path -- StC input is never inlined), and/or
                       the SeaStFile input (if CompSeaSt == 1) are inlined as a nested
                       mapping under input_files:InflowFile / input_files:AeroFile /
-                      input_files:EDFile / input_files:SeaStFile (the uniform value
-                      rule: a mapping value is inline module input). Other modules
-                      stay as text paths.
+                      input_files:EDFile / input_files:ServoFile / input_files:SeaStFile
+                      (the uniform value rule: a mapping value is inline module input).
+                      Other modules stay as text paths.
 
     Returns (yaml_text, extra_files):
       yaml_text   - the YAML document for the .fst itself (str).
@@ -743,7 +1053,32 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  AeroFile: ' + _as_str(aero_rel))
 
-    w('  ServoFile: '   + _as_str(servo_file))
+    convert_servo = (comp_servo == 1) and (mode in ('all-yaml', 'single-file'))
+    servo_rel = _unquote(servo_file)
+    if convert_servo:
+        servo_abs = os.path.join(base_dir, servo_rel)
+        if mode == 'single-file':
+            # inline the ServoDyn input; StC sub-files are a second-order file type and
+            # always stay referenced by path (their relative paths keep resolving
+            # because paths inside an inline section resolve relative to the deck)
+            srvd_yaml_text, _ = convert_servodyn(servo_abs, stc_to_yaml=False)
+            w('  ServoFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under ServoFile:
+            srvd_lines = srvd_yaml_text.split('\n')
+            srvd_body = '\n'.join(srvd_lines[2:]) if len(srvd_lines) > 2 else srvd_yaml_text
+            w(_indent_block(srvd_body, '    '))
+        else:  # all-yaml: also convert the referenced StC sub-files to their own
+               # .yaml file type (still referenced by path from the ServoDyn deck)
+            srvd_yaml_text, stc_files = convert_servodyn(servo_abs, stc_to_yaml=True)
+            servo_dir_rel = os.path.dirname(servo_rel)
+            for stc_rel, stc_text in stc_files.items():
+                extra_files[os.path.join(servo_dir_rel, stc_rel) if servo_dir_rel else stc_rel] = stc_text
+            servo_yaml_rel = os.path.splitext(servo_rel)[0] + '.yaml'
+            extra_files[servo_yaml_rel] = srvd_yaml_text
+            w('  ServoFile: ' + _as_str(servo_yaml_rel))
+    else:
+        w('  ServoFile: ' + _as_str(servo_rel))
 
     convert_seast = (comp_seast == 1) and (mode in ('all-yaml', 'single-file'))
     seast_rel = _unquote(seast_file)

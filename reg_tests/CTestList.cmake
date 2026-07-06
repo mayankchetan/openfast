@@ -633,9 +633,21 @@ yaml_equiv("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABLE}" "si
 yaml_equiv("seastate" "seastate_1"    "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 yaml_equiv("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 
+# AWT_YFix_WSt: CompServo=1 with no DISCON DLL (all ServoDyn control modes 0), so its
+# all-yaml/single-file modes exercise ServoDyn YAML conversion and the inline ServoFile
+# glue path directly via ctest (ServoDyn has no r-test driver cases -- glue coverage only).
 yaml_equiv_openfast("AWT_YFix_WSt" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
+# StC_test_OC4Semi: CompServo=1 with no DLL (all control modes 0) and all four StC
+# groups populated (blade prescribed-force, nacelle omni, tower TLCD, two substructure
+# Z-DOF instances), so all-yaml also exercises the StC .yaml sub-file type (converted
+# as its own file type, referenced by path -- never inlined) and single-file exercises
+# an inline ServoDyn section whose StC entries stay text paths.
+yaml_equiv_openfast("StC_test_OC4Semi" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("StC_test_OC4Semi" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("StC_test_OC4Semi" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # MHK_RM1_Fixed: CompSeaSt=1 with no DISCON DLL (CompServo=0), so the inline SeaStFile
 # glue path (all-yaml/single-file) can be exercised directly via ctest, unlike AeroDisk/

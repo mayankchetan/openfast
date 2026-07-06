@@ -580,3 +580,157 @@ Excel file :download:`OutListParameters.xlsx <../../../OtherSupporting/OutListPa
 for a complete list of possible output parameters.
 
 
+
+.. _servodyn-yaml-input:
+
+YAML input file
+----------------
+
+The ServoDyn primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); see :ref:`yaml_input` for the conventions shared by all modules.
+Parameters keep their documented names, grouped into sections that mirror the
+text format's banners: ``general`` (``Echo``, ``DT``), ``pitch_control``,
+``generator_torque_control``, ``simple_variable_speed``,
+``simple_induction_generator``, ``thevenin_generator``,
+``high_speed_shaft_brake``, ``yaw_control``, ``aero_flow_control``,
+``structural_control``, ``cable_control``, ``bladed_interface``,
+``torque_speed_lookup``, and ``output``.
+
+``DT`` and ``DLL_DT`` each accept the scalar ``default`` exactly like
+``"default"`` in the text format: ``DT`` falls back to the glue-code (or
+driver) interval, and ``DLL_DT`` falls back to ``DT``.
+
+The per-blade pitch parameters -- three separate keyword lines
+(``PitNeut(1)`` .. ``PitNeut(3)``, etc.) in the text format -- are 3-entry
+lists: ``PitNeut``, ``PitSpr``, ``PitDamp``, ``TPitManS``, ``PitManRat``, and
+``BlPitchF`` (always three entries, matching the text format's fixed three
+lines even for two-bladed rotors).
+
+``NumBStC``/``NumNStC``/``NumTStC``/``NumSStC`` are not YAML keys: they derive
+from the lengths of the ``BStCfiles``/``NStCfiles``/``TStCfiles``/``SStCfiles``
+path lists (an empty list ``[]`` means no controllers of that kind). Each entry
+is a path to a Structural Control input file -- either text format or the StC
+YAML form (:ref:`stc-yaml-input`) -- resolved relative to this primary input
+file. StC input is a separate file type and is always referenced by path, never
+written inline. ``DLL_NumTrq`` likewise derives from the (equal) lengths of the
+``torque_speed_lookup:GenSpd_TLU`` and ``GenTrq_TLU`` lists (empty lists mean
+no look-up table), and ``NumOuts`` from ``output:OutList``. Values keep their
+documented units (degrees, rpm, percent) exactly as in the text format.
+
+.. code-block:: yaml
+
+   # ServoDyn primary input file (YAML form)
+   general:
+     Echo: false
+     DT: default              # or a number of seconds
+
+   pitch_control:
+     PCMode: 0
+     TPCOn: 9999.9
+     PitNeut: [-1, -1, -1]    # deg; always 3 entries
+     PitSpr: [7.0e8, 7.0e8, 7.0e8]
+     PitDamp: [2.3e5, 2.3e5, 2.3e5]
+     TPitManS: [9999.9, 9999.9, 9999.9]
+     PitManRat: [2, 2, 2]     # deg/s
+     BlPitchF: [-1, -1, -1]   # deg
+
+   generator_torque_control:
+     VSContrl: 0
+     GenModel: 1
+     GenEff: 100              # percent
+     GenTiStr: true
+     GenTiStp: true
+     SpdGenOn: 9999.9         # rpm
+     TimGenOn: 0
+     TimGenOf: 9999.9
+
+   simple_variable_speed:
+     VS_RtGnSp: 9999.9        # rpm
+     VS_RtTq: 9999.9
+     VS_Rgn2K: 9999.9         # N-m/rpm^2
+     VS_SlPc: 9999.9          # percent
+
+   simple_induction_generator:
+     SIG_SlPc: 1.5125         # percent
+     SIG_SySp: 1200           # rpm
+     SIG_RtTq: 1367.9
+     SIG_PORt: 2
+
+   thevenin_generator:
+     TEC_Freq: 60
+     TEC_NPol: 6
+     TEC_SRes: 0.0185
+     TEC_RRes: 0.017
+     TEC_VLL: 480
+     TEC_SLR: 0.034
+     TEC_RLR: 0.005
+     TEC_MR: 0.775
+
+   high_speed_shaft_brake:
+     HSSBrMode: 0
+     THSSBrDp: 9999.9
+     HSSBrDT: 0.5
+     HSSBrTqF: 6000
+
+   yaw_control:
+     YCMode: 0
+     TYCOn: 9999.9
+     YawNeut: 0               # deg
+     YawSpr: 0
+     YawDamp: 0
+     TYawManS: 9999.9
+     YawManRat: 2             # deg/s
+     NacYawF: 0               # deg
+
+   aero_flow_control:
+     AfCmode: 0
+     AfC_Mean: 0
+     AfC_Amp: 0
+     AfC_Phase: 0             # deg
+
+   structural_control:
+     BStCfiles: []                       # NumBStC = list length
+     NStCfiles: ["StC-Nac-Omni.yaml"]    # text .dat or YAML .yaml StC files
+     TStCfiles: []
+     SStCfiles: []
+
+   cable_control:
+     CCmode: 0
+
+   bladed_interface:
+     DLL_FileName: "unused"
+     DLL_InFile: "DISCON.IN"
+     DLL_ProcName: "DISCON"
+     DLL_DT: default          # or a number of seconds; default = DT
+     DLL_Ramp: false
+     BPCutoff: 9999.9
+     NacYaw_North: 0          # deg
+     Ptch_Cntrl: 0
+     Ptch_SetPnt: 0           # deg
+     Ptch_Min: 0              # deg
+     Ptch_Max: 0              # deg
+     PtchRate_Min: 0          # deg/s
+     PtchRate_Max: 0          # deg/s
+     Gain_OM: 0
+     GenSpd_MinOM: 0          # rpm
+     GenSpd_MaxOM: 0          # rpm
+     GenSpd_Dem: 0            # rpm
+     GenTrq_Dem: 0
+     GenPwr_Dem: 0
+
+   torque_speed_lookup:
+     GenSpd_TLU: []           # rpm; DLL_NumTrq = list length
+     GenTrq_TLU: []           # Nm; must match GenSpd_TLU's length
+
+   output:
+     SumPrint: true
+     OutFile: 1
+     TabDelim: true
+     OutFmt: "G0"
+     TStart: 30
+     OutList: [GenPwr, GenTq]
+
+ServoDyn's input file may also be given inline under an OpenFAST primary (.fst)
+file's ``input_files:ServoFile`` (only legal when ``CompServo`` selects
+ServoDyn; see :ref:`yaml_input`). Any relative StC or DLL paths written inside
+an inline section resolve relative to the deck file itself.

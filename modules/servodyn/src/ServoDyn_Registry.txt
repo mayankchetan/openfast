@@ -47,6 +47,7 @@ typedef	^	InitInputType	R8Ki	BladeRootOrient	{:}{:}{:}	-	-	"DCM reference orient
 typedef	^	InitInputType	R8Ki	BladeRootRefOrient	{:}{:}{:}	-	-	"DCM reference orientation of blade roots (3x3 x NumBlades)"	-
 typedef	^	InitInputType	LOGICAL	UseInputFile	-	.TRUE.	-	"read input from input file"	-
 typedef	^	InitInputType	FileInfoType	PassedPrimaryInputData	-	-	-	"Primary input file as FileInfoType (set by driver/glue code)"	-
+typedef	^	InitInputType	LOGICAL	PassedFileIsYaml	-	.FALSE.	-	"PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.]"	-
 #ADD in the TMD submodule input file passing here
 typedef	^	InitInputType	IntKi	NumCableControl	-	-	-	"Number of cable control channels requested"	-
 typedef	^	InitInputType	CHARACTER(64)	CableControlRequestor	{:}	-	-	"Array with text info about which module requested the cable control channel (size of NumCableControl).  This is just for diagnostics."	-

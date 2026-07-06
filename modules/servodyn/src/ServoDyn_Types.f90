@@ -67,6 +67,7 @@ IMPLICIT NONE
     REAL(R8Ki) , DIMENSION(:,:,:), ALLOCATABLE  :: BladeRootRefOrient      !< DCM reference orientation of blade roots (3x3 x NumBlades) [-]
     LOGICAL  :: UseInputFile = .TRUE.      !< read input from input file [-]
     TYPE(FileInfoType)  :: PassedPrimaryInputData      !< Primary input file as FileInfoType (set by driver/glue code) [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
     INTEGER(IntKi)  :: NumCableControl = 0_IntKi      !< Number of cable control channels requested [-]
     CHARACTER(64) , DIMENSION(:), ALLOCATABLE  :: CableControlRequestor      !< Array with text info about which module requested the cable control channel (size of NumCableControl).  This is just for diagnostics. [-]
     INTEGER(IntKi)  :: InterpOrder = 0_IntKi      !< Interpolation order from glue code -- required to set m%u_xStC sizes [-]
@@ -733,6 +734,7 @@ subroutine SrvD_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
    DstInitInputData%NumCableControl = SrcInitInputData%NumCableControl
    if (allocated(SrcInitInputData%CableControlRequestor)) then
       LB(1:1) = lbound(SrcInitInputData%CableControlRequestor)
@@ -819,6 +821,7 @@ subroutine SrvD_PackInitInput(RF, Indata)
    call RegPackAlloc(RF, InData%BladeRootRefOrient)
    call RegPack(RF, InData%UseInputFile)
    call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    call RegPack(RF, InData%NumCableControl)
    call RegPackAlloc(RF, InData%CableControlRequestor)
    call RegPack(RF, InData%InterpOrder)
@@ -867,6 +870,7 @@ subroutine SrvD_UnPackInitInput(RF, OutData)
    call RegUnpackAlloc(RF, OutData%BladeRootRefOrient); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
    call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%NumCableControl); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%CableControlRequestor); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%InterpOrder); if (RegCheckErr(RF, RoutineName)) return

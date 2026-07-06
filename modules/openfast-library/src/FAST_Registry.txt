@@ -541,6 +541,8 @@ typedef	^	FAST_MiscVarType	FileInfoType	SEDInlineFileInfo	-	-	-	"serialized inli
 typedef	^	FAST_MiscVarType	LOGICAL	SEDIsInline	-	.FALSE.	-	"Simplified ElastoDyn input was given inline in the YAML primary file"	-
 typedef	^	FAST_MiscVarType	FileInfoType	SeaStInlineFileInfo	-	-	-	"serialized inline SeaState input from a YAML primary file (YAML text lines with provenance)"	-
 typedef	^	FAST_MiscVarType	LOGICAL	SeaStIsInline	-	.FALSE.	-	"SeaState input was given inline in the YAML primary file"	-
+typedef	^	FAST_MiscVarType	FileInfoType	SrvDInlineFileInfo	-	-	-	"serialized inline ServoDyn input from a YAML primary file (YAML text lines with provenance)"	-
+typedef	^	FAST_MiscVarType	LOGICAL	SrvDIsInline	-	.FALSE.	-	"ServoDyn input was given inline in the YAML primary file"	-
 
 
 # ..... FAST_InitData data .......................................................................................................

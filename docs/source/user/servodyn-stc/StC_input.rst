@@ -464,3 +464,118 @@ timeseries) <ExampleFiles/PrescribedForce.txt>`:
       :language: none
 
 
+
+.. _stc-yaml-input:
+
+YAML input file
+----------------
+
+A Structural Control input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); see :ref:`yaml_input` for the conventions shared by
+all modules. StC input is its own file type: it is always referenced by path
+from the ServoDyn deck (text or YAML, via ``BStCfiles``/``NStCfiles``/
+``TStCfiles``/``SStCfiles``), never written inline. Parameters keep their
+documented names, grouped into sections that mirror the text format's banners:
+``general`` (``Echo``), ``degrees_of_freedom``, ``location``,
+``initial_conditions``, ``configuration``, ``mass_stiffness_damping``,
+``user_defined_spring_forces``, ``control``, ``tlcd``, and
+``prescribed_time_series``.
+
+``StC_Z_PreLd`` is a variant field exactly as in the text format: the string
+``"gravity"``, the string ``"none"``, or a number (as a string or bare
+scalar). ``NKInpSt`` is not a YAML key: it derives from the number of rows of
+the ``F_TBL`` matrix, where each row holds the text-format table's six columns
+``X``, ``F_X``, ``Y``, ``F_Y``, ``Z``, ``F_Z`` (an empty list ``[]`` means no
+table). ``StC_CChan`` and ``PrescribedForcesFile`` mirror the text reader's
+array-then-scalar fallback: each accepts a single value (used for every mesh
+point/blade) or a per-instance list; missing trailing ``PrescribedForcesFile``
+entries fall back to the first file. Relative paths (the prescribed-force
+time-series file stays a text file) resolve relative to this StC input file.
+
+.. code-block:: yaml
+
+   # Structural Control (StC) input file (YAML form)
+   general:
+     Echo: false
+
+   degrees_of_freedom:
+     StC_DOF_MODE: 2
+     StC_X_DOF: true
+     StC_Y_DOF: true
+     StC_Z_DOF: false
+
+   location:
+     StC_P_X: 3
+     StC_P_Y: 0
+     StC_P_Z: 2
+
+   initial_conditions:
+     StC_X_DSP: 1
+     StC_Y_DSP: 1
+     StC_Z_DSP: 0
+     StC_Z_PreLd: "none"      # "gravity", "none", or a number (N)
+
+   configuration:
+     StC_X_PSP: 10
+     StC_X_NSP: -10
+     StC_Y_PSP: 10
+     StC_Y_NSP: -10
+     StC_Z_PSP: 10
+     StC_Z_NSP: -10
+
+   mass_stiffness_damping:
+     StC_X_M: 20000
+     StC_Y_M: 20000
+     StC_Z_M: 0
+     StC_Omni_M: 20000
+     StC_X_K: 28000
+     StC_Y_K: 28000
+     StC_Z_K: 0
+     StC_X_C: 2800
+     StC_Y_C: 2800
+     StC_Z_C: 0
+     StC_X_KS: 15000
+     StC_Y_KS: 15000
+     StC_Z_KS: 0
+     StC_X_CS: 10000
+     StC_Y_CS: 10000
+     StC_Z_CS: 0
+
+   user_defined_spring_forces:
+     Use_F_TBL: false
+     F_TBL:                    # NKInpSt = number of rows; columns X, F_X, Y, F_Y, Z, F_Z
+       - [-6.0, -4.8E+06, -6.0, -4.8E+06, -6.0, -4.8E+06]
+       - [ 0.0,  0.0,      0.0,  0.0,      0.0,  0.0    ]
+       - [ 6.0,  4.8E+06,  6.0,  4.8E+06,  6.0,  4.8E+06]
+
+   control:
+     StC_CMODE: 0
+     StC_CChan: 0              # single value, or a per-instance list for blade StCs
+     StC_SA_MODE: 1
+     StC_X_C_HIGH: 0
+     StC_X_C_LOW: 0
+     StC_Y_C_HIGH: 0
+     StC_Y_C_LOW: 0
+     StC_Z_C_HIGH: 0
+     StC_Z_C_LOW: 0
+     StC_X_C_BRAKE: 0
+     StC_Y_C_BRAKE: 0
+     StC_Z_C_BRAKE: 0
+
+   tlcd:
+     L_X: 7.9325
+     B_X: 6.5929
+     area_X: 2.0217
+     area_ratio_X: 0.913
+     headLossCoeff_X: 2.5265
+     rho_X: 1000
+     L_Y: 3.5767
+     B_Y: 2.1788
+     area_Y: 1.2252
+     area_ratio_Y: 2.7232
+     headLossCoeff_Y: 0.6433
+     rho_Y: 1000
+
+   prescribed_time_series:
+     PrescribedForcesCoordSys: 0
+     PrescribedForcesFile: "TimeForceSeries.dat"   # single path, or a per-blade list

@@ -26,8 +26,10 @@ set(SERVODYN_SRCS
   src/UserSubs.f90
   src/PitchCntrl_ACH.f90
   src/StrucCtrl.f90
+  src/StrucCtrl_Yaml.f90
   src/UserVSCont_KP.f90
   src/ServoDyn_IO.f90
+  src/ServoDyn_Yaml.f90
   src/StrucCtrl_Types.f90
   src/ServoDyn_Types.f90
 )

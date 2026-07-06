@@ -25,7 +25,9 @@ MODULE ServoDyn
    USE BladedInterface
    USE StrucCtrl
    USE ServoDyn_IO
-   
+   USE ServoDyn_Yaml
+   USE YamlInput, only: IsYamlExt
+
    USE UserVSCont_KP    ! <- module not in the FAST Framework!
    USE PitchCntrl_ACH   ! <- module not in the FAST Framework!
    USE UserSubs         ! <- module not in the FAST Framework!
@@ -161,22 +163,49 @@ SUBROUTINE SrvD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitO
    p%NumBl    = InitInp%NumBl         
       
    if (InitInp%UseInputFile) then
-      ! Read the entire input file, minus any comment lines, into the FileInfo_In
-      ! data structure in memory for further processing.
-      call ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
-   else
-         ! put passed string info into the FileInfo_In -- FileInfo structure
-      call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
-   endif
-   if (Failed())  return;
-  
-   ! For diagnostic purposes, the following can be used to display the contents
-   ! of the FileInfo_In data structure.
-   ! call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
 
-     !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
-   CALL ParseInputFileInfo( PriPath, InitInp%InputFile, TRIM(InitInp%RootName), FileInfo_In, InputFileData, Interval, ErrStat2, ErrMsg2 )
-      if (Failed())  return;
+      if ( IsYamlExt( InitInp%InputFile ) ) then       ! YAML-format input file (.yaml/.yml)
+
+         call SrvD_ParseYamlFile( InitInp%InputFile, PriPath, TRIM(InitInp%RootName), Interval, InputFileData, ErrStat2, ErrMsg2 )
+         if (Failed())  return;
+
+      else                                             ! text-format input file
+
+         ! Read the entire input file, minus any comment lines, into the FileInfo_In
+         ! data structure in memory for further processing.
+         call ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+         if (Failed())  return;
+
+         ! For diagnostic purposes, the following can be used to display the contents
+         ! of the FileInfo_In data structure.
+         ! call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
+
+         !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
+         CALL ParseInputFileInfo( PriPath, InitInp%InputFile, TRIM(InitInp%RootName), FileInfo_In, InputFileData, Interval, ErrStat2, ErrMsg2 )
+         if (Failed())  return;
+
+      endif
+
+   else
+
+      if ( InitInp%PassedFileIsYaml ) then             ! YAML content (e.g. inline module input from a YAML primary file)
+
+         call SrvD_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, PriPath, TRIM(InitInp%RootName), Interval, InputFileData, ErrStat2, ErrMsg2 )
+         if (Failed())  return;
+
+      else
+
+         ! put passed string info into the FileInfo_In -- FileInfo structure
+         call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed())  return;
+
+         !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
+         CALL ParseInputFileInfo( PriPath, InitInp%InputFile, TRIM(InitInp%RootName), FileInfo_In, InputFileData, Interval, ErrStat2, ErrMsg2 )
+         if (Failed())  return;
+
+      endif
+
+   endif
 
    CALL ValidatePrimaryData( InitInp, InputFileData, ErrStat2, ErrMsg2 )
       if (Failed())  return;

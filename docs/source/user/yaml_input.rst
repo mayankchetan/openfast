@@ -110,12 +110,14 @@ the inlined sections accordingly.
 Formats mix freely: one deck may combine text files, YAML files, and inline
 sections. Inline input is available for modules whose YAML schema exists
 (currently InflowWind; AeroDisk when ``CompAero`` selects AeroDisk;
-Simplified ElastoDyn when ``CompElast`` selects it; and SeaState when
-``CompSeaSt`` selects it); an inline mapping for any other module -- or for
-``AeroFile``/``EDFile`` when the corresponding switch selects a module without
-a YAML schema (AeroDyn, or ElastoDyn) -- is a clear fatal error suggesting a
-file path instead. Combined with ``!include`` and anchors, this supports
-fully single-file models.
+Simplified ElastoDyn when ``CompElast`` selects it; ServoDyn when
+``CompServo`` selects it; and SeaState when ``CompSeaSt`` selects it); an
+inline mapping for any other module -- or for ``AeroFile``/``EDFile`` when the
+corresponding switch selects a module without a YAML schema (AeroDyn, or
+ElastoDyn) -- is a clear fatal error suggesting a file path instead. Combined
+with ``!include`` and anchors, this supports fully single-file models.
+Second-order files (e.g. Structural Control files under ServoDyn) are never
+inlined: they stay referenced by path, in text or YAML form.
 
 OpenFAST primary file (.fst)
 ----------------------------
@@ -196,5 +198,9 @@ supported:
 - Simplified ElastoDyn (SED) primary input file (:ref:`sed-yaml-input`),
   including inline use under ``input_files:EDFile`` (when ``CompElast`` selects
   Simplified ElastoDyn)
+- ServoDyn primary input file (:ref:`servodyn-yaml-input`), including inline
+  use under ``input_files:ServoFile`` (when ``CompServo`` selects ServoDyn)
+- Structural Control (StC) input file (:ref:`stc-yaml-input`), referenced by
+  path from a ServoDyn deck (never inlined)
 - SeaState primary input file (:ref:`seastate-yaml-input`), including inline
   use under ``input_files:SeaStFile`` (when ``CompSeaSt`` selects SeaState)

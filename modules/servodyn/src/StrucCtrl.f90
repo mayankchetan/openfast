@@ -5,8 +5,10 @@
 MODULE StrucCtrl
 
    USE StrucCtrl_Types
+   USE StrucCtrl_Yaml
    USE NWTC_Library
    USE UserSubs, ONLY: UserStC
+   USE YamlInput, ONLY: IsYamlExt
 
    IMPLICIT NONE
 
@@ -132,23 +134,32 @@ SUBROUTINE StC_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOu
 
    CALL GetPath( InitInp%InputFile, PriPath )     ! Input files will be relative to the path where the primary input file is located.
 
-   if (InitInp%UseInputFile) then
-      ! Read the entire input file, minus any comment lines, into the FileInfo_In
-      ! data structure in memory for further processing.
-      call ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
-   else
-         ! put passed string info into the FileInfo_In -- FileInfo structure
-      call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+   if (InitInp%UseInputFile .and. IsYamlExt( InitInp%InputFile )) then    ! YAML-format StC input file (.yaml/.yml)
+
+      call StC_ParseYamlFile( InitInp%InputFile, PriPath, TRIM(InitInp%RootName), InitInp%NumMeshPts, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
+      if (Failed())  return;
+
+   else                                                                   ! text-format StC input (file or passed data)
+
+      if (InitInp%UseInputFile) then
+         ! Read the entire input file, minus any comment lines, into the FileInfo_In
+         ! data structure in memory for further processing.
+         call ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+      else
+            ! put passed string info into the FileInfo_In -- FileInfo structure
+         call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+      endif
+      if (Failed())  return;
+
+      ! For diagnostic purposes, the following can be used to display the contents
+      ! of the FileInfo_In data structure.
+      ! call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
+
+         !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
+      CALL StC_ParseInputFileInfo( PriPath, InitInp%InputFile, TRIM(InitInp%RootName), InitInp%NumMeshPts, FileInfo_In, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
+      if (Failed())  return;
+
    endif
-   if (Failed())  return;
-
-   ! For diagnostic purposes, the following can be used to display the contents
-   ! of the FileInfo_In data structure.
-   ! call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
-
-      !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
-   CALL StC_ParseInputFileInfo( PriPath, InitInp%InputFile, TRIM(InitInp%RootName), InitInp%NumMeshPts, FileInfo_In, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
-   if (Failed())  return;
 
       ! Using the InputFileData structure, check that it makes sense
    CALL StC_ValidatePrimaryData( InputFileData, InitInp, ErrStat2, ErrMsg2 )

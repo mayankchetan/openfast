@@ -1398,6 +1398,16 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       do iRot = 1, p_FAST%NRotors
 
          Init%InData_SrvD%InputFile     = p_FAST%ServoFile(iRot)
+         ! inline ServoDyn input from a YAML primary file applies to rotor 1's ServoFile
+         ! only (input_files:ServoFile); additional rotors always give a file path
+         Init%InData_SrvD%UseInputFile  = .not. (m_FAST%SrvDIsInline .and. iRot == 1)
+         IF ( m_FAST%SrvDIsInline .and. iRot == 1 ) THEN
+            Init%InData_SrvD%PassedFileIsYaml = .TRUE.
+            CALL NWTC_Library_CopyFileInfoType( m_FAST%SrvDInlineFileInfo, Init%InData_SrvD%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+            if (Failed()) return
+         ELSE
+            Init%InData_SrvD%PassedFileIsYaml = .FALSE.   ! Init%InData_SrvD is reused across the rotor loop
+         END IF
          Init%InData_SrvD%RootName      = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_SrvD))
          Init%InData_SrvD%TightED       = (p_FAST%ModCoupling == TightCouplingFixed) .or. (p_FAST%ModCoupling == TightCouplingAdaptive)
          Init%InData_SrvD%NumBl         = p_FAST%RotNumBld(iRot)
