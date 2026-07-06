@@ -257,6 +257,7 @@
 			</File>
 			<File RelativePath="..\..\modules\nwtc-library\src\VTK.f90"/>
 			<File RelativePath="..\..\modules\nwtc-library\src\YAML.f90"/>
+			<File RelativePath="..\..\modules\nwtc-library\src\YamlInput.f90"/>
 			<File RelativePath="..\..\modules\nwtc-library\src\GridInterp.f90"/>
 			<File RelativePath="..\..\modules\nwtc-library\src\GridInterp_Types.f90"/>
 		</Filter>
