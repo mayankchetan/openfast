@@ -81,6 +81,20 @@ module YamlInput
    public :: Yaml_NumChildren
    public :: Yaml_Child
    public :: Yaml_ChildByKey
+   public :: YamlGet
+   public :: YamlGetNode
+   public :: Yaml_MarkUsed
+   public :: Yaml_WarnUnused
+
+   !> Path-addressed, order-independent, case-insensitive typed lookups. Paths are
+   !! ':'-separated (e.g. 'simulation_control:TMax'); Default= supplies a value for a
+   !! missing key or an explicit 'default' scalar; Found= makes a key optional; From=
+   !! roots the path at a subtree node instead of the document root.
+   interface YamlGet
+      module procedure YamlGetR8Var, YamlGetSiVar, YamlGetInVar, YamlGetLoVar, YamlGetChVar
+      module procedure YamlGetInAry, YamlGetSiAry, YamlGetR8Ary, YamlGetChAry
+      module procedure YamlGetSiMat, YamlGetR8Mat
+   end interface YamlGet
 
    !> One significant source line after scanning: physical position plus decommented text
    !! with the indentation removed. Blank and comment-only lines never reach the parser.
@@ -167,6 +181,682 @@ integer(IntKi) function Yaml_ChildByKey(Doc, iNode, Key) result(iChild)
       iChild = Doc%Nodes(iChild)%NextSibling
    end do
 end function Yaml_ChildByKey
+
+!----------------------------------------------------------------------------------------------------------------------------------
+! Lookups (the YamlGet family)
+!----------------------------------------------------------------------------------------------------------------------------------
+
+!> Case-insensitive key comparison (trimmed).
+logical function KeyMatch(A, B) result(Match)
+   character(*), intent(in) :: A, B
+   character(len(A)) :: UA
+   character(len(B)) :: UB
+   Match = .false.
+   if (len_trim(A) /= len_trim(B)) return
+   UA = A
+   UB = B
+   call Conv2UC(UA)
+   call Conv2UC(UB)
+   Match = (trim(UA) == trim(UB))
+end function KeyMatch
+
+!> " on line #N of "file"" fragment for a node (post-parse errors).
+function NodeRef(Doc, iNode) result(Ref)
+   type(YamlDoc),  intent(in) :: Doc
+   integer(IntKi), intent(in) :: iNode
+   character(:), allocatable  :: Ref
+   Ref = 'on line #'//trim(Num2LStr(Doc%Nodes(iNode)%FileLine))//' of "'// &
+         trim(Doc%FileList(Doc%Nodes(iNode)%FileIndx))//'"'
+end function NodeRef
+
+!> Resolve a ':'-separated path from iStart, marking traversed nodes Used. On a miss,
+!! iNode is 0 and iContext is the deepest mapping that did match (for error location).
+subroutine FindPath(Doc, Path, iStart, iNode, iContext)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   integer(IntKi), intent(in   ) :: iStart
+   integer(IntKi), intent(  out) :: iNode
+   integer(IntKi), intent(  out) :: iContext
+
+   integer        :: SegBeg, SegEnd
+   integer(IntKi) :: iCur, iChild
+
+   iCur = iStart
+   Doc%Nodes(iCur)%Used = .true.
+   iContext = iCur
+   iNode    = 0
+
+   SegBeg = 1
+   do while (SegBeg <= len_trim(Path))
+      SegEnd = index(Path(SegBeg:), ':')
+      if (SegEnd == 0) then
+         SegEnd = len_trim(Path)
+      else
+         SegEnd = SegBeg + SegEnd - 2
+      end if
+
+      if (Doc%Nodes(iCur)%Kind /= YAML_MAP) return    ! can't descend into a scalar/sequence
+
+      iChild = Doc%Nodes(iCur)%FirstChild
+      do while (iChild > 0)
+         if (allocated(Doc%Nodes(iChild)%Key)) then
+            if (KeyMatch(Doc%Nodes(iChild)%Key, Path(SegBeg:SegEnd))) exit
+         end if
+         iChild = Doc%Nodes(iChild)%NextSibling
+      end do
+      if (iChild == 0) return                         ! segment not found; iContext holds the mapping
+
+      iCur = iChild
+      Doc%Nodes(iCur)%Used = .true.
+      iContext = iCur
+      SegBeg = SegEnd + 2                             ! skip the ':'
+   end do
+
+   iNode = iCur
+end subroutine FindPath
+
+!> Shared front half of every typed getter: resolve the path and apply the
+!! missing-key policy. On return: iNode > 0 means proceed with conversion;
+!! iNode == 0 with ErrStat==None means the caller should apply Default/Found handling
+!! (UseDefault tells it to assign Default); fatal otherwise.
+subroutine LookupCommon(Doc, Path, From, HasDefault, HasFound, Found, iNode, UseDefault, ErrStat, ErrMsg)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   integer(IntKi), intent(in   ), optional :: From
+   logical,        intent(in   ) :: HasDefault
+   logical,        intent(in   ) :: HasFound
+   logical,        intent(  out) :: Found
+   integer(IntKi), intent(  out) :: iNode
+   logical,        intent(  out) :: UseDefault
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+
+   character(*), parameter :: RoutineName = 'YamlGet'
+   integer(IntKi)          :: iStart, iContext
+
+   ErrStat    = ErrID_None
+   ErrMsg     = ""
+   UseDefault = .false.
+
+   iStart = 1
+   if (present(From)) iStart = From
+
+   call FindPath(Doc, Path, iStart, iNode, iContext)
+   Found = (iNode > 0)
+   if (Found) return
+
+   if (HasDefault) then
+      UseDefault = .true.
+   else if (.not. HasFound) then
+      call SetErrStat(ErrID_Fatal, '>> The required key "'//trim(Path)//'" was not found in "'// &
+         trim(Doc%FileList(Doc%Nodes(iContext)%FileIndx))//'" (mapping starting on line #'// &
+         trim(Num2LStr(Doc%Nodes(iContext)%FileLine))//').', ErrStat, ErrMsg, RoutineName)
+   end if
+end subroutine LookupCommon
+
+!> Fetch the raw scalar text of a resolved node, handling the 'default' keyword and
+!! kind errors. UseDefault comes back true when the scalar says 'default' and a
+!! Default= was supplied; fatal when it says 'default' without one.
+subroutine ScalarText(Doc, Path, iNode, HasDefault, Text, UseDefault, ErrStat, ErrMsg)
+   type(YamlDoc),             intent(in   ) :: Doc
+   character(*),              intent(in   ) :: Path
+   integer(IntKi),            intent(in   ) :: iNode
+   logical,                   intent(in   ) :: HasDefault
+   character(:), allocatable, intent(  out) :: Text
+   logical,                   intent(  out) :: UseDefault
+   integer(IntKi),            intent(  out) :: ErrStat
+   character(*),              intent(  out) :: ErrMsg
+
+   character(*), parameter :: RoutineName = 'YamlGet'
+   character(16)           :: UText
+
+   ErrStat    = ErrID_None
+   ErrMsg     = ""
+   UseDefault = .false.
+   Text       = ''
+
+   if (Doc%Nodes(iNode)%Kind /= YAML_SCALAR) then
+      call SetErrStat(ErrID_Fatal, '>> The key "'//trim(Path)//'" '//NodeRef(Doc, iNode)// &
+         ' is not a scalar value.', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   Text = Doc%Nodes(iNode)%Scalar
+   if (len(Text) <= 16) then
+      UText = Text
+      call Conv2UC(UText)
+      if (trim(UText) == 'DEFAULT') then
+         if (HasDefault) then
+            UseDefault = .true.
+         else
+            call SetErrStat(ErrID_Fatal, '>> The key "'//trim(Path)//'" '//NodeRef(Doc, iNode)// &
+               ' is set to "default" but no default exists for it.', ErrStat, ErrMsg, RoutineName)
+         end if
+      end if
+   end if
+end subroutine ScalarText
+
+!> Uniform conversion-failure message.
+subroutine ConvFail(Doc, Path, iNode, TypeName, Text, ErrStat, ErrMsg)
+   type(YamlDoc),  intent(in   ) :: Doc
+   character(*),   intent(in   ) :: Path
+   integer(IntKi), intent(in   ) :: iNode
+   character(*),   intent(in   ) :: TypeName
+   character(*),   intent(in   ) :: Text
+   integer(IntKi), intent(inout) :: ErrStat
+   character(*),   intent(inout) :: ErrMsg
+
+   call SetErrStat(ErrID_Fatal, '>> The key "'//trim(Path)//'" '//NodeRef(Doc, iNode)// &
+      ' was not assigned a valid '//TypeName//' value. Text: "'//trim(Text)//'"', &
+      ErrStat, ErrMsg, 'YamlGet')
+end subroutine ConvFail
+
+subroutine YamlGetR8Var(Doc, Path, Var, ErrStat, ErrMsg, Default, Found, From)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   real(R8Ki),     intent(inout) :: Var
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+   real(R8Ki),     intent(in   ), optional :: Default
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   character(:), allocatable :: Text
+   integer(IntKi) :: iNode
+   logical        :: WasFound, UseDefault
+   integer        :: ios
+
+   call LookupCommon(Doc, Path, From, present(Default), present(Found), WasFound, iNode, UseDefault, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev) return
+   if (.not. UseDefault .and. iNode > 0) then
+      call ScalarText(Doc, Path, iNode, present(Default), Text, UseDefault, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+   end if
+   if (UseDefault) then
+      Var = Default
+   else if (iNode > 0) then
+      read(Text, *, iostat=ios) Var
+      if (ios /= 0) call ConvFail(Doc, Path, iNode, 'REAL', Text, ErrStat, ErrMsg)
+   end if
+end subroutine YamlGetR8Var
+
+subroutine YamlGetSiVar(Doc, Path, Var, ErrStat, ErrMsg, Default, Found, From)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   real(SiKi),     intent(inout) :: Var
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+   real(SiKi),     intent(in   ), optional :: Default
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   character(:), allocatable :: Text
+   integer(IntKi) :: iNode
+   logical        :: WasFound, UseDefault
+   integer        :: ios
+
+   call LookupCommon(Doc, Path, From, present(Default), present(Found), WasFound, iNode, UseDefault, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev) return
+   if (.not. UseDefault .and. iNode > 0) then
+      call ScalarText(Doc, Path, iNode, present(Default), Text, UseDefault, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+   end if
+   if (UseDefault) then
+      Var = Default
+   else if (iNode > 0) then
+      read(Text, *, iostat=ios) Var
+      if (ios /= 0) call ConvFail(Doc, Path, iNode, 'REAL', Text, ErrStat, ErrMsg)
+   end if
+end subroutine YamlGetSiVar
+
+subroutine YamlGetInVar(Doc, Path, Var, ErrStat, ErrMsg, Default, Found, From)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   integer(IntKi), intent(inout) :: Var
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+   integer(IntKi), intent(in   ), optional :: Default
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   character(:), allocatable :: Text
+   integer(IntKi) :: iNode
+   logical        :: WasFound, UseDefault
+   integer        :: ios
+
+   call LookupCommon(Doc, Path, From, present(Default), present(Found), WasFound, iNode, UseDefault, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev) return
+   if (.not. UseDefault .and. iNode > 0) then
+      call ScalarText(Doc, Path, iNode, present(Default), Text, UseDefault, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+   end if
+   if (UseDefault) then
+      Var = Default
+   else if (iNode > 0) then
+      read(Text, *, iostat=ios) Var
+      if (ios /= 0) call ConvFail(Doc, Path, iNode, 'INTEGER', Text, ErrStat, ErrMsg)
+   end if
+end subroutine YamlGetInVar
+
+subroutine YamlGetLoVar(Doc, Path, Var, ErrStat, ErrMsg, Default, Found, From)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   logical,        intent(inout) :: Var
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+   logical,        intent(in   ), optional :: Default
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   character(:), allocatable :: Text
+   character(8)   :: UText
+   integer(IntKi) :: iNode
+   logical        :: WasFound, UseDefault
+
+   call LookupCommon(Doc, Path, From, present(Default), present(Found), WasFound, iNode, UseDefault, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev) return
+   if (.not. UseDefault .and. iNode > 0) then
+      call ScalarText(Doc, Path, iNode, present(Default), Text, UseDefault, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+   end if
+   if (UseDefault) then
+      Var = Default
+   else if (iNode > 0) then
+      if (len_trim(Text) > 8) then
+         call ConvFail(Doc, Path, iNode, 'LOGICAL', Text, ErrStat, ErrMsg)
+         return
+      end if
+      UText = Text
+      call Conv2UC(UText)
+      select case (trim(UText))
+      case ('TRUE', 'T', '.TRUE.')
+         Var = .true.
+      case ('FALSE', 'F', '.FALSE.')
+         Var = .false.
+      case default
+         call ConvFail(Doc, Path, iNode, 'LOGICAL', Text, ErrStat, ErrMsg)
+      end select
+   end if
+end subroutine YamlGetLoVar
+
+subroutine YamlGetChVar(Doc, Path, Var, ErrStat, ErrMsg, Default, Found, From)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   character(*),   intent(inout) :: Var
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+   character(*),   intent(in   ), optional :: Default
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   character(:), allocatable :: Text
+   integer(IntKi) :: iNode
+   logical        :: WasFound, UseDefault
+
+   call LookupCommon(Doc, Path, From, present(Default), present(Found), WasFound, iNode, UseDefault, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev) return
+   if (.not. UseDefault .and. iNode > 0) then
+      call ScalarText(Doc, Path, iNode, present(Default), Text, UseDefault, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+   end if
+   if (UseDefault) then
+      Var = Default
+   else if (iNode > 0) then
+      if (len_trim(Text) > len(Var)) then
+         call SetErrStat(ErrID_Fatal, '>> The value of key "'//trim(Path)//'" '//NodeRef(Doc, iNode)// &
+            ' is longer than the '//trim(Num2LStr(len(Var)))//'-character limit: "'//trim(Text)//'"', &
+            ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      Var = Text
+   end if
+end subroutine YamlGetChVar
+
+!> Shared front half of the array getters: resolve, apply missing policy, and verify the
+!! node is a sequence. iSeq==0 with ErrStat==None means "missing but optional" (Found=).
+subroutine LookupSeq(Doc, Path, From, HasFound, Found, iSeq, ErrStat, ErrMsg)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   integer(IntKi), intent(in   ), optional :: From
+   logical,        intent(in   ) :: HasFound
+   logical,        intent(  out) :: Found
+   integer(IntKi), intent(  out) :: iSeq
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+
+   logical :: UseDefault
+
+   call LookupCommon(Doc, Path, From, .false., HasFound, Found, iSeq, UseDefault, ErrStat, ErrMsg)
+   if (ErrStat >= AbortErrLev .or. iSeq == 0) return
+
+   if (Doc%Nodes(iSeq)%Kind /= YAML_SEQ) then
+      call SetErrStat(ErrID_Fatal, '>> The key "'//trim(Path)//'" '//NodeRef(Doc, iSeq)// &
+         ' must be a sequence ("[...]" or "- item" list).', ErrStat, ErrMsg, 'YamlGet')
+      iSeq = 0
+   end if
+end subroutine LookupSeq
+
+subroutine YamlGetInAry(Doc, Path, Ary, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),               intent(inout) :: Doc
+   character(*),                intent(in   ) :: Path
+   integer(IntKi), allocatable, intent(  out) :: Ary(:)
+   integer(IntKi),              intent(  out) :: ErrStat
+   character(*),                intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   integer(IntKi) :: iSeq, iItem
+   logical        :: WasFound
+   integer        :: k, ios
+
+   call LookupSeq(Doc, Path, From, present(Found), WasFound, iSeq, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev .or. iSeq == 0) return
+
+   allocate(Ary(Doc%Nodes(iSeq)%NumChildren))
+   iItem = Doc%Nodes(iSeq)%FirstChild
+   k = 0
+   do while (iItem > 0)
+      k = k + 1
+      Doc%Nodes(iItem)%Used = .true.
+      if (Doc%Nodes(iItem)%Kind /= YAML_SCALAR) then
+         call SetErrStat(ErrID_Fatal, '>> Element '//trim(Num2LStr(k))//' of "'//trim(Path)//'" '// &
+            NodeRef(Doc, iItem)//' is not a scalar.', ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      read(Doc%Nodes(iItem)%Scalar, *, iostat=ios) Ary(k)
+      if (ios /= 0) then
+         call ConvFail(Doc, Path, iItem, 'INTEGER', Doc%Nodes(iItem)%Scalar, ErrStat, ErrMsg)
+         return
+      end if
+      iItem = Doc%Nodes(iItem)%NextSibling
+   end do
+end subroutine YamlGetInAry
+
+subroutine YamlGetSiAry(Doc, Path, Ary, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),           intent(inout) :: Doc
+   character(*),            intent(in   ) :: Path
+   real(SiKi), allocatable, intent(  out) :: Ary(:)
+   integer(IntKi),          intent(  out) :: ErrStat
+   character(*),            intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   integer(IntKi) :: iSeq, iItem
+   logical        :: WasFound
+   integer        :: k, ios
+
+   call LookupSeq(Doc, Path, From, present(Found), WasFound, iSeq, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev .or. iSeq == 0) return
+
+   allocate(Ary(Doc%Nodes(iSeq)%NumChildren))
+   iItem = Doc%Nodes(iSeq)%FirstChild
+   k = 0
+   do while (iItem > 0)
+      k = k + 1
+      Doc%Nodes(iItem)%Used = .true.
+      if (Doc%Nodes(iItem)%Kind /= YAML_SCALAR) then
+         call SetErrStat(ErrID_Fatal, '>> Element '//trim(Num2LStr(k))//' of "'//trim(Path)//'" '// &
+            NodeRef(Doc, iItem)//' is not a scalar.', ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      read(Doc%Nodes(iItem)%Scalar, *, iostat=ios) Ary(k)
+      if (ios /= 0) then
+         call ConvFail(Doc, Path, iItem, 'REAL', Doc%Nodes(iItem)%Scalar, ErrStat, ErrMsg)
+         return
+      end if
+      iItem = Doc%Nodes(iItem)%NextSibling
+   end do
+end subroutine YamlGetSiAry
+
+subroutine YamlGetR8Ary(Doc, Path, Ary, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),           intent(inout) :: Doc
+   character(*),            intent(in   ) :: Path
+   real(R8Ki), allocatable, intent(  out) :: Ary(:)
+   integer(IntKi),          intent(  out) :: ErrStat
+   character(*),            intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   integer(IntKi) :: iSeq, iItem
+   logical        :: WasFound
+   integer        :: k, ios
+
+   call LookupSeq(Doc, Path, From, present(Found), WasFound, iSeq, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev .or. iSeq == 0) return
+
+   allocate(Ary(Doc%Nodes(iSeq)%NumChildren))
+   iItem = Doc%Nodes(iSeq)%FirstChild
+   k = 0
+   do while (iItem > 0)
+      k = k + 1
+      Doc%Nodes(iItem)%Used = .true.
+      if (Doc%Nodes(iItem)%Kind /= YAML_SCALAR) then
+         call SetErrStat(ErrID_Fatal, '>> Element '//trim(Num2LStr(k))//' of "'//trim(Path)//'" '// &
+            NodeRef(Doc, iItem)//' is not a scalar.', ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      read(Doc%Nodes(iItem)%Scalar, *, iostat=ios) Ary(k)
+      if (ios /= 0) then
+         call ConvFail(Doc, Path, iItem, 'REAL', Doc%Nodes(iItem)%Scalar, ErrStat, ErrMsg)
+         return
+      end if
+      iItem = Doc%Nodes(iItem)%NextSibling
+   end do
+end subroutine YamlGetR8Ary
+
+subroutine YamlGetChAry(Doc, Path, Ary, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),             intent(inout) :: Doc
+   character(*),              intent(in   ) :: Path
+   character(:), allocatable, intent(  out) :: Ary(:)
+   integer(IntKi),            intent(  out) :: ErrStat
+   character(*),              intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   integer(IntKi) :: iSeq, iItem
+   logical        :: WasFound
+   integer        :: k, MaxLen
+
+   call LookupSeq(Doc, Path, From, present(Found), WasFound, iSeq, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev .or. iSeq == 0) return
+
+   MaxLen = 1
+   iItem = Doc%Nodes(iSeq)%FirstChild
+   do while (iItem > 0)
+      if (Doc%Nodes(iItem)%Kind == YAML_SCALAR) MaxLen = max(MaxLen, len_trim(Doc%Nodes(iItem)%Scalar))
+      iItem = Doc%Nodes(iItem)%NextSibling
+   end do
+
+   allocate(character(MaxLen) :: Ary(Doc%Nodes(iSeq)%NumChildren))
+   iItem = Doc%Nodes(iSeq)%FirstChild
+   k = 0
+   do while (iItem > 0)
+      k = k + 1
+      Doc%Nodes(iItem)%Used = .true.
+      if (Doc%Nodes(iItem)%Kind /= YAML_SCALAR) then
+         call SetErrStat(ErrID_Fatal, '>> Element '//trim(Num2LStr(k))//' of "'//trim(Path)//'" '// &
+            NodeRef(Doc, iItem)//' is not a scalar.', ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      Ary(k) = Doc%Nodes(iItem)%Scalar
+      iItem = Doc%Nodes(iItem)%NextSibling
+   end do
+end subroutine YamlGetChAry
+
+subroutine YamlGetSiMat(Doc, Path, Mat, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),           intent(inout) :: Doc
+   character(*),            intent(in   ) :: Path
+   real(SiKi), allocatable, intent(  out) :: Mat(:,:)
+   integer(IntKi),          intent(  out) :: ErrStat
+   character(*),            intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   real(R8Ki), allocatable :: Mat8(:,:)
+
+   call YamlGetR8Mat(Doc, Path, Mat8, ErrStat, ErrMsg, Found, From)
+   if (ErrStat >= AbortErrLev .or. .not. allocated(Mat8)) return
+   allocate(Mat(size(Mat8,1), size(Mat8,2)))
+   Mat = real(Mat8, SiKi)
+end subroutine YamlGetSiMat
+
+subroutine YamlGetR8Mat(Doc, Path, Mat, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),           intent(inout) :: Doc
+   character(*),            intent(in   ) :: Path
+   real(R8Ki), allocatable, intent(  out) :: Mat(:,:)
+   integer(IntKi),          intent(  out) :: ErrStat
+   character(*),            intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   integer(IntKi) :: iSeq, iRow, iCell
+   logical        :: WasFound
+   integer        :: r, c, NRows, NCols, ios
+
+   call LookupSeq(Doc, Path, From, present(Found), WasFound, iSeq, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+   if (ErrStat >= AbortErrLev .or. iSeq == 0) return
+
+   NRows = Doc%Nodes(iSeq)%NumChildren
+   NCols = 0
+   if (NRows > 0) NCols = Doc%Nodes(Doc%Nodes(iSeq)%FirstChild)%NumChildren
+   allocate(Mat(NRows, NCols))
+
+   iRow = Doc%Nodes(iSeq)%FirstChild
+   r = 0
+   do while (iRow > 0)
+      r = r + 1
+      Doc%Nodes(iRow)%Used = .true.
+      if (Doc%Nodes(iRow)%Kind /= YAML_SEQ) then
+         call SetErrStat(ErrID_Fatal, '>> Row '//trim(Num2LStr(r))//' of "'//trim(Path)//'" '// &
+            NodeRef(Doc, iRow)//' must be a flow sequence ("[...]").', ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      if (Doc%Nodes(iRow)%NumChildren /= NCols) then
+         call SetErrStat(ErrID_Fatal, '>> Row '//trim(Num2LStr(r))//' of "'//trim(Path)//'" '// &
+            NodeRef(Doc, iRow)//' has '//trim(Num2LStr(Doc%Nodes(iRow)%NumChildren))// &
+            ' columns; expected '//trim(Num2LStr(NCols))//' (from the first row).', ErrStat, ErrMsg, 'YamlGet')
+         return
+      end if
+      iCell = Doc%Nodes(iRow)%FirstChild
+      c = 0
+      do while (iCell > 0)
+         c = c + 1
+         Doc%Nodes(iCell)%Used = .true.
+         read(Doc%Nodes(iCell)%Scalar, *, iostat=ios) Mat(r, c)
+         if (ios /= 0) then
+            call ConvFail(Doc, Path, iCell, 'REAL', Doc%Nodes(iCell)%Scalar, ErrStat, ErrMsg)
+            return
+         end if
+         iCell = Doc%Nodes(iCell)%NextSibling
+      end do
+      iRow = Doc%Nodes(iRow)%NextSibling
+   end do
+end subroutine YamlGetR8Mat
+
+!> Resolve a path to a node index (for custom shapes: tables, module sections). The node
+!! is marked Used; walk it with Yaml_Child/Yaml_ChildByKey/Yaml_NumChildren and mark
+!! consumed descendants via Yaml_MarkUsed.
+subroutine YamlGetNode(Doc, Path, iNode, ErrStat, ErrMsg, Found, From)
+   type(YamlDoc),  intent(inout) :: Doc
+   character(*),   intent(in   ) :: Path
+   integer(IntKi), intent(  out) :: iNode
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+   logical,        intent(  out), optional :: Found
+   integer(IntKi), intent(in   ), optional :: From
+
+   logical :: WasFound, UseDefault
+
+   call LookupCommon(Doc, Path, From, .false., present(Found), WasFound, iNode, UseDefault, ErrStat, ErrMsg)
+   if (present(Found)) Found = WasFound
+end subroutine YamlGetNode
+
+!> Mark a node (and, when Recurse, its whole subtree) as consumed, so Yaml_WarnUnused
+!! does not flag content read through the raw walking helpers.
+recursive subroutine Yaml_MarkUsed(Doc, iNode, Recurse)
+   type(YamlDoc),  intent(inout) :: Doc
+   integer(IntKi), intent(in   ) :: iNode
+   logical,        intent(in   ) :: Recurse
+
+   integer(IntKi) :: iChild
+
+   Doc%Nodes(iNode)%Used = .true.
+   if (.not. Recurse) return
+   iChild = Doc%Nodes(iNode)%FirstChild
+   do while (iChild > 0)
+      call Yaml_MarkUsed(Doc, iChild, .true.)
+      iChild = Doc%Nodes(iChild)%NextSibling
+   end do
+end subroutine Yaml_MarkUsed
+
+!> After a consumer finishes its lookups, warn (ErrID_Warn) about any key it never read —
+!! the typo detector. Only the topmost unused node of a subtree is reported.
+subroutine Yaml_WarnUnused(Doc, ErrStat, ErrMsg)
+   type(YamlDoc),  intent(in   ) :: Doc
+   integer(IntKi), intent(  out) :: ErrStat
+   character(*),   intent(  out) :: ErrMsg
+
+   character(*), parameter :: RoutineName = 'Yaml_WarnUnused'
+   character(ErrMsgLen)    :: List
+   integer                 :: Count
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+   List    = ""
+   Count   = 0
+
+   if (Doc%NumNodes < 1) return
+   call Walk(1_IntKi, '')
+
+   if (Count > 0) then
+      call SetErrStat(ErrID_Warn, 'The following input keys were not recognized and were ignored:'// &
+         trim(List), ErrStat, ErrMsg, RoutineName)
+   end if
+
+contains
+
+   recursive subroutine Walk(iNode, Prefix)
+      integer(IntKi), intent(in) :: iNode
+      character(*),   intent(in) :: Prefix
+
+      integer(IntKi)            :: iChild
+      character(:), allocatable :: Name
+      integer                   :: k
+
+      iChild = Doc%Nodes(iNode)%FirstChild
+      k = 0
+      do while (iChild > 0)
+         k = k + 1
+         if (allocated(Doc%Nodes(iChild)%Key)) then
+            Name = Doc%Nodes(iChild)%Key
+         else
+            Name = '['//trim(Num2LStr(k))//']'
+         end if
+         if (.not. Doc%Nodes(iChild)%Used) then
+            Count = Count + 1
+            if (len_trim(List) < len(List) - 200) then
+               List = trim(List)//new_line('a')//'   '//Prefix//Name//' ('// &
+                      trim(Doc%FileList(Doc%Nodes(iChild)%FileIndx))//':'// &
+                      trim(Num2LStr(Doc%Nodes(iChild)%FileLine))//')'
+            end if
+         else
+            call Walk(iChild, Prefix//Name//':')
+         end if
+         iChild = Doc%Nodes(iChild)%NextSibling
+      end do
+   end subroutine Walk
+
+end subroutine Yaml_WarnUnused
 
 !> Parse a YAML file (and any !include'd files) into Doc. When UnEc > 0, each physical
 !! file is echoed verbatim (comments included) under a banner naming the file.

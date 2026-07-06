@@ -39,8 +39,275 @@ subroutine test_YamlInput_suite(testsuite)
                new_unittest("test_include_nested_relative", test_include_nested_relative), &
                new_unittest("test_include_cycle_fatal", test_include_cycle_fatal), &
                new_unittest("test_include_missing_fatal", test_include_missing_fatal), &
-               new_unittest("test_echo_verbatim", test_echo_verbatim) &
+               new_unittest("test_echo_verbatim", test_echo_verbatim), &
+               new_unittest("test_get_scalars", test_get_scalars), &
+               new_unittest("test_get_default_and_found", test_get_default_and_found), &
+               new_unittest("test_get_missing_fatal", test_get_missing_fatal), &
+               new_unittest("test_get_badtype_fatal", test_get_badtype_fatal), &
+               new_unittest("test_get_arrays", test_get_arrays), &
+               new_unittest("test_get_matrix", test_get_matrix), &
+               new_unittest("test_get_node_rooted", test_get_node_rooted), &
+               new_unittest("test_warn_unused", test_warn_unused) &
                ]
+end subroutine
+
+!> Shared fixture for lookup tests.
+subroutine LoadLookupDoc(Doc, ErrStat, ErrMsg)
+   type(YamlDoc),        intent(out) :: Doc
+   integer(IntKi),       intent(out) :: ErrStat
+   character(ErrMsgLen), intent(out) :: ErrMsg
+
+   character(64) :: Lines(16)
+   Lines( 1) = "simulation_control:"
+   Lines( 2) = "  TMax: 60.0"
+   Lines( 3) = "  DT: 0.0125"
+   Lines( 4) = "  NumCrctn: 3"
+   Lines( 5) = "  Linearize: false"
+   Lines( 6) = "  OutFmt: ES10.3E2"
+   Lines( 7) = "  CompElast: default"
+   Lines( 8) = "outputs:"
+   Lines( 9) = "  OutList:"
+   Lines(10) = "    - RotSpeed"
+   Lines(11) = "    - GenPwr"
+   Lines(12) = "  amps: [1, 2, 3, 5]"
+   Lines(13) = "tower_stations:"
+   Lines(14) = "  rows:"
+   Lines(15) = "    - [0.0, 5590.87]"
+   Lines(16) = "    - [1.0, 1086.71]"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+end subroutine LoadLookupDoc
+
+subroutine test_get_scalars(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki) :: TMax, DTRef, DTGot
+   real(SiKi) :: DT4
+   integer(IntKi) :: NumCrctn
+   logical :: Linearize
+   character(20) :: OutFmt
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "simulation_control:TMax", TMax, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, TMax, 60.0_R8Ki)
+   if (allocated(error)) return
+
+   ! numeric equivalence with the text pipeline: same internal READ
+   call YamlGet(Doc, "simulation_control:DT", DTGot, ErrStat, ErrMsg)
+   OutFmt = "0.0125"
+   read(OutFmt, *) DTRef
+   call check(error, DTGot, DTRef)
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "simulation_control:DT", DT4, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "simulation_control:NumCrctn", NumCrctn, ErrStat, ErrMsg)
+   call check(error, int(NumCrctn), 3)
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "simulation_control:Linearize", Linearize, ErrStat, ErrMsg)
+   call check(error, Linearize, .false.)
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "simulation_control:OutFmt", OutFmt, ErrStat, ErrMsg)
+   call check(error, trim(OutFmt), "ES10.3E2")
+   if (allocated(error)) return
+
+   ! paths are case-insensitive
+   call YamlGet(Doc, "SIMULATION_CONTROL:tmax", TMax, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, TMax, 60.0_R8Ki)
+end subroutine
+
+subroutine test_get_default_and_found(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki) :: Gravity
+   integer(IntKi) :: CompElast
+   logical :: WasFound
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+
+   ! missing key + Default => default value, no error
+   call YamlGet(Doc, "environment:Gravity", Gravity, ErrStat, ErrMsg, Default=9.80665_R8Ki)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, Gravity, 9.80665_R8Ki)
+   if (allocated(error)) return
+
+   ! the scalar 'default' + Default arg => default value
+   call YamlGet(Doc, "simulation_control:CompElast", CompElast, ErrStat, ErrMsg, Default=1_IntKi)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, int(CompElast), 1)
+   if (allocated(error)) return
+
+   ! the scalar 'default' with no Default arg => fatal
+   call YamlGet(Doc, "simulation_control:CompElast", CompElast, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+
+   ! Found= makes a missing key non-fatal
+   call YamlGet(Doc, "environment:WtrDpth", Gravity, ErrStat, ErrMsg, Found=WasFound)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, WasFound, .false.)
+   if (allocated(error)) return
+   call YamlGet(Doc, "simulation_control:TMax", Gravity, ErrStat, ErrMsg, Found=WasFound)
+   call check(error, WasFound, .true.)
+end subroutine
+
+subroutine test_get_missing_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki) :: V
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+   call YamlGet(Doc, "simulation_control:Gravity", V, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "simulation_control:Gravity") > 0, .true., &
+              "error must name the full key path: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #1") > 0, .true., &
+              "error must locate the enclosing mapping: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_get_badtype_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: V
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+   call YamlGet(Doc, "simulation_control:OutFmt", V, ErrStat, ErrMsg)   ! string into integer
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "ES10.3E2") > 0, .true., "error must quote the text: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #6") > 0, .true., "error must name the line: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "INTEGER") > 0, .true., "error must name the type: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_get_arrays(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi), allocatable :: Amps(:)
+   character(:), allocatable :: OutList(:)
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+
+   call YamlGet(Doc, "outputs:amps", Amps, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, size(Amps), 4)
+   if (allocated(error)) return
+   call check(error, int(Amps(4)), 5)
+   if (allocated(error)) return
+
+   call YamlGet(Doc, "outputs:OutList", OutList, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, size(OutList), 2)
+   if (allocated(error)) return
+   call check(error, trim(OutList(2)), "GenPwr")
+end subroutine
+
+subroutine test_get_matrix(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki), allocatable :: Rows(:,:)
+   character(64) :: Bad(3)
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+
+   call YamlGet(Doc, "tower_stations:rows", Rows, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, size(Rows, 1), 2)
+   if (allocated(error)) return
+   call check(error, size(Rows, 2), 2)
+   if (allocated(error)) return
+   call check(error, Rows(2,2), 1086.71_R8Ki)
+   if (allocated(error)) return
+
+   ! ragged rows are fatal, naming the offending row's line
+   Bad(1) = "rows:"
+   Bad(2) = "  - [1.0, 2.0]"
+   Bad(3) = "  - [3.0]"
+   call Yaml_LoadString(Bad, Doc, ErrStat, ErrMsg)
+   call YamlGet(Doc, "rows", Rows, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #3") > 0, .true., "must name the ragged row: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_get_node_rooted(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iSC
+   real(R8Ki) :: TMax
+
+   call LoadLookupDoc(Doc, ErrStat, ErrMsg)
+
+   call YamlGetNode(Doc, "simulation_control", iSC, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, iSC > 0, .true.)
+   if (allocated(error)) return
+
+   ! lookups can be rooted at a subtree node via From=
+   call YamlGet(Doc, "TMax", TMax, ErrStat, ErrMsg, From=iSC)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, TMax, 60.0_R8Ki)
+end subroutine
+
+subroutine test_warn_unused(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   real(R8Ki) :: TMax
+
+   character(64) :: Lines(3)
+   Lines(1) = "simulation_control:"
+   Lines(2) = "  TMax: 60.0"
+   Lines(3) = "  TMaks: 99.0"        ! deliberate typo, never looked up
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call YamlGet(Doc, "simulation_control:TMax", TMax, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   call Yaml_WarnUnused(Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Warn)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "TMaks") > 0, .true., "warning must name the unused key: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "TMax:") == 0, .true., "used keys must not be flagged")
 end subroutine
 
 !> Write Lines to a fresh file named FName (test helper).
