@@ -163,3 +163,74 @@ The write outputs are:
  -  "ADMx, ADMy, ADMz":   Actuator disk aerodynamic moment loads in the local coordinate system (N-m)
  -  "ADPower":   Actuator disk power   (W)
 
+
+.. _adsk-yaml-input:
+
+YAML input file
+----------------
+
+The AeroDisk primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); see :ref:`yaml_input` for the conventions shared by all modules.
+Parameters keep their documented names, grouped into sections that mirror the
+text format's banners: ``general`` (``Echo``, ``DT``), ``environmental_conditions``
+(``AirDens``), ``actuator_disk`` (``RotorRad`` and the rotor-performance table),
+and ``output`` (``OutList``). ``DT``, ``AirDens``, and ``RotorRad`` each accept
+the scalar ``default`` exactly like ``"default"``/``DEFAULT`` in the text format,
+falling back to the value the glue code (or driver) supplies.
+
+The Actuator Disk Properties table is written under ``actuator_disk:table`` using
+the ``columns``/``rows`` convention (:ref:`yaml_input`):
+
+- ``columns`` lists the index-variable names actually used, in any order/subset
+  of ``TSR``, ``RtSpd``, ``VRel``, ``Pitch``, ``Skew`` — the text format's
+  ``InColNames``. ``TSR`` and ``RtSpd`` are mutually exclusive, exactly as in the
+  text format.
+- ``dims`` gives the number of unique values expected for each name in
+  ``columns`` (same order/length) — the text format's ``InColDims``. The number
+  of rows in the table must equal the product of these counts.
+- ``rows`` is the full data grid: one row per combination of the index values,
+  each row holding the ``columns`` values (in that order) followed by the six
+  fixed coefficient columns ``C_Fx``, ``C_Fy``, ``C_Fz``, ``C_Mx``, ``C_My``,
+  ``C_Mz`` — the same column layout as the text-format table body.
+
+.. code-block:: yaml
+
+   # AeroDisk primary input file (YAML form)
+   general:
+     Echo: false
+     DT: default             # or a number of seconds
+
+   environmental_conditions:
+     AirDens: default        # or a value in kg/m^3
+
+   actuator_disk:
+     RotorRad: default        # or a value in meters
+     table:
+       columns: [RtSpd, VRel]
+       dims: [9, 2]
+       rows:
+         - [3.0,   9.0, 0.2347, 0.0, 0.0, 0.0306, 0.0, 0.0]
+         - [4.0,   9.0, 0.2349, 0.0, 0.0, 0.0314, 0.0, 0.0]
+         - [5.0,   9.0, 0.2350, 0.0, 0.0, 0.0322, 0.0, 0.0]
+         - [6.0,   9.0, 0.2351, 0.0, 0.0, 0.0330, 0.0, 0.0]
+         - [7.0,   9.0, 0.2352, 0.0, 0.0, 0.0338, 0.0, 0.0]
+         - [8.0,   9.0, 0.2352, 0.0, 0.0, 0.0346, 0.0, 0.0]
+         - [9.0,   9.0, 0.2351, 0.0, 0.0, 0.0353, 0.0, 0.0]
+         - [10.0,  9.0, 0.2350, 0.0, 0.0, 0.0361, 0.0, 0.0]
+         - [11.0,  9.0, 0.2349, 0.0, 0.0, 0.0368, 0.0, 0.0]
+         - [3.0,  12.0, 0.7837, 0.0, 0.0, 0.0663, 0.0, 0.0]
+         - [4.0,  12.0, 0.7733, 0.0, 0.0, 0.0663, 0.0, 0.0]
+         - [5.0,  12.0, 0.7628, 0.0, 0.0, 0.0663, 0.0, 0.0]
+         - [6.0,  12.0, 0.7520, 0.0, 0.0, 0.0662, 0.0, 0.0]
+         - [7.0,  12.0, 0.7409, 0.0, 0.0, 0.0660, 0.0, 0.0]
+         - [8.0,  12.0, 0.7297, 0.0, 0.0, 0.0658, 0.0, 0.0]
+         - [9.0,  12.0, 0.7182, 0.0, 0.0, 0.0656, 0.0, 0.0]
+         - [10.0, 12.0, 0.7066, 0.0, 0.0, 0.0653, 0.0, 0.0]
+         - [11.0, 12.0, 0.6947, 0.0, 0.0, 0.0649, 0.0, 0.0]
+
+   output:
+     OutList: [ADSpeed, ADTSR, ADPitch, ADCp, ADCt, ADCq]
+
+AeroDisk's input file may also be given inline under an OpenFAST primary (.fst)
+file's ``input_files:AeroFile`` (only legal when ``CompAero`` selects AeroDisk;
+see :ref:`yaml_input`).

@@ -58,6 +58,7 @@ typedef  ^        InitInputType     ReKi                 defAirDens        -  - 
 typedef  ^        InitInputType     LOGICAL              Linearize         - .false. - "this module cannot be linearized at present" -
 typedef  ^        InitInputType     LOGICAL              UseInputFile      - .TRUE.  - "Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller"    -
 typedef  ^        InitInputType     FileInfoType         PassedFileData    -  - -   "If we don't use the input file, pass everything through this"   -
+typedef  ^        InitInputType     LOGICAL              PassedFileIsYaml  - .FALSE. - "PassedFileData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.]" -
 typedef  ^        InitInputType     FlowFieldType        *FlowField        -  - -   "Pointer of InflowWinds flow field data type" -
 
 

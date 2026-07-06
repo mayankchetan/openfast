@@ -315,7 +315,14 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    call GetModFile( 'EDFile',      p%EDFile(1),    Required=.true. ); if (ErrStat >= AbortErrLev) return
    call GetBDBldFiles( iFiles, 1 );                                   if (ErrStat >= AbortErrLev) return
    call GetModFile( 'InflowFile',  p%InflowFile,   Required=(p%CompInflow  == Module_IfW), InlineTarget='InflowWind' ); if (ErrStat >= AbortErrLev) return
-   call GetModFile( 'AeroFile',    p%AeroFile,     Required=(p%CompAero    /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   ! inline AeroFile is legal only when CompAero selects AeroDisk; for any other CompAero
+   ! value (AeroDyn, ExtLoads, or none) a mapping value hits GetModFile's "does not (yet)
+   ! support inline YAML input" fatal below, since InlineTarget is then not passed at all
+   if (p%CompAero == Module_ADsk) then
+      call GetModFile( 'AeroFile', p%AeroFile, Required=(p%CompAero /= Module_NONE), InlineTarget='AeroDisk' ); if (ErrStat >= AbortErrLev) return
+   else
+      call GetModFile( 'AeroFile', p%AeroFile, Required=(p%CompAero /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   end if
    call GetModFile( 'ServoFile',   p%ServoFile(1), Required=(p%CompServo   == Module_SrvD) ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'SeaStFile',   p%SeaStFile,    Required=(p%CompSeaSt   == Module_SeaSt) ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'HydroFile',   p%HydroFile,    Required=(p%CompHydro   == Module_HD) ); if (ErrStat >= AbortErrLev) return
@@ -485,7 +492,7 @@ contains
 
    !> Uniform value rule for one input_files entry: a string is a path (resolved
    !! relative to the .fst); a mapping is inline module input, legal only for modules
-   !! that support it (currently InflowWind).
+   !! that support it (currently InflowWind and AeroDisk).
    subroutine GetModFile( KeyName, FileVar, Required, InlineTarget )
       character(*), intent(in   )           :: KeyName
       character(*), intent(inout)           :: FileVar
@@ -521,6 +528,13 @@ contains
                m_FAST%IfWIsInline = .true.
                ! pseudo path: used only for PriPath derivation and messages downstream
                FileVar = trim(PriPath)//'inline_InflowWind.yaml'
+            case ('AeroDisk')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%ADskInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%ADskIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               FileVar = trim(PriPath)//'inline_AeroDisk.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

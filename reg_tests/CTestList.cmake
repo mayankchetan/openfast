@@ -612,6 +612,12 @@ yaml_equiv("inflowwind" "ifw_uniform"      "${CTEST_INFLOWWIND_EXECUTABLE}" "inf
 yaml_equiv("inflowwind" "ifw_HAWC"         "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 yaml_equiv("inflowwind" "ifw_nativeBladed" "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 
+# NOTE: no yaml_equiv_openfast registration for AeroDisk -- the only two CompAero==1
+# glue-code cases in r-test (5MW_Land_DLL_WTurb_ADsk, 5MW_Land_DLL_WTurb_ADsk_SED) both
+# require a Bladed DISCON DLL, so neither is a suitable DLL-free target; standalone
+# driver-level coverage (below) is what's available today.
+yaml_equiv("aerodisk" "adsk_timeseries_shutdown" "${CTEST_AERODISK_EXECUTABLE}" "aerodisk;yaml")
+
 yaml_equiv_openfast("AWT_YFix_WSt" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")

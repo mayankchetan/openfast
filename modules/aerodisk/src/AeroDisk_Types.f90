@@ -78,6 +78,7 @@ IMPLICIT NONE
     LOGICAL  :: Linearize = .false.      !< this module cannot be linearized at present [-]
     LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
     TYPE(FileInfoType)  :: PassedFileData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedFileData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
     TYPE(FlowFieldType) , POINTER :: FlowField => NULL()      !< Pointer of InflowWinds flow field data type [-]
   END TYPE ADsk_InitInputType
 ! =======================
@@ -534,6 +535,7 @@ subroutine ADsk_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedFileData, DstInitInputData%PassedFileData, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
    DstInitInputData%FlowField => SrcInitInputData%FlowField
 end subroutine
 
@@ -566,6 +568,7 @@ subroutine ADsk_PackInitInput(RF, Indata)
    call RegPack(RF, InData%Linearize)
    call RegPack(RF, InData%UseInputFile)
    call NWTC_Library_PackFileInfoType(RF, InData%PassedFileData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    call RegPack(RF, associated(InData%FlowField))
    if (associated(InData%FlowField)) then
       call RegPackPointer(RF, c_loc(InData%FlowField), PtrInIndex)
@@ -595,6 +598,7 @@ subroutine ADsk_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%Linearize); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
    call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedFileData) ! PassedFileData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
    if (associated(OutData%FlowField)) deallocate(OutData%FlowField)
    call RegUnpack(RF, IsAllocAssoc); if (RegCheckErr(RF, RoutineName)) return
    if (IsAllocAssoc) then

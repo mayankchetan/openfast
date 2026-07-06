@@ -26,8 +26,10 @@ MODULE AeroDisk
 
    USE AeroDisk_Types
    USE AeroDisk_IO
+   USE AeroDisk_Yaml
    USE NWTC_Library
    use IfW_FlowField, only: IfW_FlowField_GetVelAcc
+   use YamlInput, only: IsYamlExt
 
 
    implicit none
@@ -95,19 +97,45 @@ SUBROUTINE ADsk_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitO
 
    ! Get primary input file
    if ( InitInp%UseInputFile ) then
-      CALL ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+
+      if ( IsYamlExt( InitInp%InputFile ) ) then      ! YAML-format input file (.yaml/.yml)
+
+         call ADsk_ParseYamlFile( InitInp%InputFile, InitInp, p%RootName, Interval, InputFileData, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      else                                             ! text-format input file
+
+         CALL ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+         ! For diagnostic purposes, the following can be used to display the contents
+         ! of the FileInfo_In data structure.
+         !call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
+
+         ! Parse all ADsk-related input and populate the InputFileData structure
+         call ADsk_ParsePrimaryFileData( InitInp, p%RootName, Interval, FileInfo_In, InputFileData, UnEc, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      endif
+
    else
-      CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+
+      if ( InitInp%PassedFileIsYaml ) then             ! YAML content (e.g. inline module input from a YAML primary file)
+
+         call ADsk_ParseYamlFileInfo( InitInp%PassedFileData, InitInp, p%RootName, Interval, InputFileData, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      else
+
+         CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+         call ADsk_ParsePrimaryFileData( InitInp, p%RootName, Interval, FileInfo_In, InputFileData, UnEc, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      endif
+
    endif
-   if (Failed()) return
-
-   ! For diagnostic purposes, the following can be used to display the contents
-   ! of the FileInfo_In data structure.
-   !call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
-
-   ! Parse all ADsk-related input and populate the InputFileData structure
-   call ADsk_ParsePrimaryFileData( InitInp, p%RootName, Interval, FileInfo_In, InputFileData, UnEc, ErrStat2, ErrMsg2 )
-   if (Failed()) return;
 
    ! Verify all the necessary initialization and input file data
    CALL ADskInput_ValidateInput( InitInp, InputFileData, ErrStat2, ErrMsg2 )

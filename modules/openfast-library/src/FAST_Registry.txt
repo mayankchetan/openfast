@@ -535,6 +535,8 @@ typedef	^	FAST_MiscVarType	FAST_ExternInputType	ExternInput	-	-	-	"external inpu
 typedef	^	FAST_MiscVarType	FAST_MiscLinType	Lin	-	-	-	"misc data for linearization analysis"	-
 typedef	^	FAST_MiscVarType	FileInfoType	IfWInlineFileInfo	-	-	-	"serialized inline InflowWind input from a YAML primary file (YAML text lines with provenance)"	-
 typedef	^	FAST_MiscVarType	LOGICAL	IfWIsInline	-	.FALSE.	-	"InflowWind input was given inline in the YAML primary file"	-
+typedef	^	FAST_MiscVarType	FileInfoType	ADskInlineFileInfo	-	-	-	"serialized inline AeroDisk input from a YAML primary file (YAML text lines with provenance)"	-
+typedef	^	FAST_MiscVarType	LOGICAL	ADskIsInline	-	.FALSE.	-	"AeroDisk input was given inline in the YAML primary file"	-
 
 
 # ..... FAST_InitData data .......................................................................................................

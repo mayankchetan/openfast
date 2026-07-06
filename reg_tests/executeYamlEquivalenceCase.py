@@ -10,9 +10,10 @@
 
     Supported modules:
       inflowwind - standalone InflowWind driver case.
+      aerodisk   - standalone AeroDisk driver case.
       openfast   - full glue-code (.fst) case; requires a mode (per-file | all-yaml |
                    single-file) selecting how convert_fst() should transform
-                   input_files:InflowFile.
+                   input_files:InflowFile / input_files:AeroFile.
 
     Usage: `executeYamlEquivalenceCase.py -h`
 """
@@ -31,7 +32,7 @@ import pass_fail
 import yamlDeckConverter
 
 parser = argparse.ArgumentParser(description="Runs a case in text and YAML input formats and verifies identical output.")
-parser.add_argument("module", metavar="Module", type=str, nargs=1, help="Module under test (inflowwind | openfast).")
+parser.add_argument("module", metavar="Module", type=str, nargs=1, help="Module under test (inflowwind | aerodisk | openfast).")
 parser.add_argument("caseName", metavar="Case-Name", type=str, nargs=1, help="The name of the test case.")
 parser.add_argument("executable", metavar="Driver", type=str, nargs=1, help="The path to the driver executable.")
 parser.add_argument("sourceDirectory", metavar="path/to/openfast_repo", type=str, nargs=1, help="The path to the OpenFAST repository.")
@@ -50,8 +51,35 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "openfast"):
+if module not in ("inflowwind", "aerodisk", "openfast"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
+
+
+def compareBitIdentical(textOut, yamlOut):
+    """Require bit-identical output between the text and YAML variants; on a mismatch,
+    report the magnitude of the divergence (diagnostic only) before failing."""
+    rtl.validateFileOrExit(textOut)
+    rtl.validateFileOrExit(yamlOut)
+
+    textData, textInfo, _ = pass_fail.readFASTOut(textOut)
+    yamlData, yamlInfo, _ = pass_fail.readFASTOut(yamlOut)
+
+    if textData.shape != yamlData.shape:
+        rtl.exitWithError("Output shapes differ: text {} vs yaml {}.".format(textData.shape, yamlData.shape))
+
+    if np.array_equal(textData, yamlData):
+        sys.exit(0)
+
+    # not bit-identical: report the magnitude of the divergence, then fail
+    diff = np.abs(textData - yamlData)
+    worst = np.unravel_index(np.argmax(diff), diff.shape)
+    print("YAML-equivalence FAILURE: outputs are not bit-identical.")
+    print("  max |text - yaml| = {} at row {}, channel '{}'".format(
+        diff[worst], worst[0], textInfo["attribute_names"][worst[1]]))
+    passing = pass_fail.passing_channels(textData.T, yamlData.T, 2.0, 1.9)
+    print("  channels within standard regression tolerance: {}/{}".format(np.sum(passing), passing.size))
+    sys.exit(1)
+
 
 if module == "openfast":
     if mode not in ("per-file", "all-yaml", "single-file"):
@@ -96,7 +124,7 @@ if module == "openfast":
     textDir = stageOpenfastVariant("text")
 
     ### yaml variant: convert the primary file (and, for all-yaml, the referenced
-    ### InflowWind file) per the requested mode
+    ### InflowWind/AeroDisk files) per the requested mode
     yamlDir = stageOpenfastVariant(mode)
     yamlPrimary = caseName + ".yaml"
     yamlText, extraFiles = yamlDeckConverter.convert_fst(os.path.join(yamlDir, PRIMARY), mode)
@@ -117,102 +145,112 @@ if module == "openfast":
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 
     ### compare: bit-identical required
-    textOut = os.path.join(textDir, OUTPUT)
-    yamlOut = os.path.join(yamlDir, OUTPUT)
-    rtl.validateFileOrExit(textOut)
-    rtl.validateFileOrExit(yamlOut)
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
 
-    textData, textInfo, _ = pass_fail.readFASTOut(textOut)
-    yamlData, yamlInfo, _ = pass_fail.readFASTOut(yamlOut)
+elif module == "inflowwind":
+    #### inflowwind (standalone driver) case #########################################
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
 
-    if textData.shape != yamlData.shape:
-        rtl.exitWithError("Output shapes differ: text {} vs yaml {}.".format(textData.shape, yamlData.shape))
+    INPUT_GLOBS = ("*.inp", "*.bts", "*.bin", "*.wnd", "*.hh", "*.sum")
+    PRIMARY = "ifw_primary.inp"
+    DRIVER = "ifw_driver.inp"
+    OUTPUT = "Points.Velocity.dat"
 
-    if np.array_equal(textData, yamlData):
-        sys.exit(0)
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit at the same depth as a normally-staged case so that relative
+        paths in the inputs (e.g. ../../../glue-codes/...) resolve identically."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        return d
 
-    # not bit-identical: report the magnitude of the divergence, then fail
-    diff = np.abs(textData - yamlData)
-    worst = np.unravel_index(np.argmax(diff), diff.shape)
-    print("YAML-equivalence FAILURE: outputs are not bit-identical.")
-    print("  max |text - yaml| = {} at row {}, channel '{}'".format(
-        diff[worst], worst[0], textInfo["attribute_names"][worst[1]]))
-    passing = pass_fail.passing_channels(textData.T, yamlData.T, 2.0, 1.9)
-    print("  channels within standard regression tolerance: {}/{}".format(np.sum(passing), passing.size))
-    sys.exit(1)
+    ### text variant
+    textDir = stage("text")
 
-#### inflowwind (standalone driver) case #########################################
-moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
-inputsDirectory = os.path.join(moduleDirectory, caseName)
-if not os.path.isdir(inputsDirectory):
-    rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+    ### yaml variant: convert the primary file, repoint the driver at it
+    yamlDir = stage("yaml")
+    yamlPrimary = PRIMARY.replace(".inp", ".yaml")
+    yamlText = yamlDeckConverter.convert_inflowwind(os.path.join(yamlDir, PRIMARY))
+    with open(os.path.join(yamlDir, yamlPrimary), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, PRIMARY))
 
-INPUT_GLOBS = ("*.inp", "*.bts", "*.bin", "*.wnd", "*.hh", "*.sum")
-PRIMARY = "ifw_primary.inp"
-DRIVER = "ifw_driver.inp"
-OUTPUT = "Points.Velocity.dat"
+    driverFile = os.path.join(yamlDir, DRIVER)
+    with open(driverFile) as f:
+        driverText = f.read()
+    if PRIMARY not in driverText:
+        rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, PRIMARY))
+    with open(driverFile, "w") as f:
+        f.write(driverText.replace(PRIMARY, yamlPrimary))
 
+    ### run both
+    for d in (textDir, yamlDir):
+        returnCode = openfastDrivers.runInflowwindDriverCase(os.path.join(d, DRIVER), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 
-def stage(variant):
-    """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
-    Variant dirs sit at the same depth as a normally-staged case so that relative
-    paths in the inputs (e.g. ../../../glue-codes/...) resolve identically."""
-    d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
-    if os.path.isdir(d):
-        shutil.rmtree(d)
-    os.makedirs(d)
-    for pattern in INPUT_GLOBS:
-        for f in glob.glob(os.path.join(inputsDirectory, pattern)):
-            shutil.copy(f, os.path.join(d, os.path.basename(f)))
-    return d
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
 
+elif module == "aerodisk":
+    #### aerodisk (standalone driver) case ###########################################
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
 
-### text variant
-textDir = stage("text")
+    # *.inp is the ADsk primary file; *.dvr is the driver file; *.csv covers the
+    # @-included rotor-performance table and time-series files the r-test case uses
+    INPUT_GLOBS = ("*.inp", "*.dvr", "*.csv")
+    PRIMARY = "adsk_primary.inp"
+    DRIVER = "adsk_driver.dvr"
+    OUTPUT = "adsk_driver.out"
 
-### yaml variant: convert the primary file, repoint the driver at it
-yamlDir = stage("yaml")
-yamlPrimary = PRIMARY.replace(".inp", ".yaml")
-yamlText = yamlDeckConverter.convert_inflowwind(os.path.join(yamlDir, PRIMARY))
-with open(os.path.join(yamlDir, yamlPrimary), "w") as f:
-    f.write(yamlText)
-os.remove(os.path.join(yamlDir, PRIMARY))
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit at the same depth as a normally-staged case so that relative
+        paths in the inputs resolve identically."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        return d
 
-driverFile = os.path.join(yamlDir, DRIVER)
-with open(driverFile) as f:
-    driverText = f.read()
-if PRIMARY not in driverText:
-    rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, PRIMARY))
-with open(driverFile, "w") as f:
-    f.write(driverText.replace(PRIMARY, yamlPrimary))
+    ### text variant
+    textDir = stage("text")
 
-### run both
-for d in (textDir, yamlDir):
-    returnCode = openfastDrivers.runInflowwindDriverCase(os.path.join(d, DRIVER), executable)
-    if returnCode != 0:
-        rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+    ### yaml variant: convert the primary file, repoint the driver at it
+    yamlDir = stage("yaml")
+    yamlPrimary = PRIMARY.replace(".inp", ".yaml")
+    yamlText = yamlDeckConverter.convert_aerodisk(os.path.join(yamlDir, PRIMARY))
+    with open(os.path.join(yamlDir, yamlPrimary), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, PRIMARY))
 
-### compare: bit-identical required
-textOut = os.path.join(textDir, OUTPUT)
-yamlOut = os.path.join(yamlDir, OUTPUT)
-rtl.validateFileOrExit(textOut)
-rtl.validateFileOrExit(yamlOut)
+    driverFile = os.path.join(yamlDir, DRIVER)
+    with open(driverFile) as f:
+        driverText = f.read()
+    if PRIMARY not in driverText:
+        rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, PRIMARY))
+    with open(driverFile, "w") as f:
+        f.write(driverText.replace(PRIMARY, yamlPrimary))
 
-textData, textInfo, _ = pass_fail.readFASTOut(textOut)
-yamlData, yamlInfo, _ = pass_fail.readFASTOut(yamlOut)
+    ### run both
+    for d in (textDir, yamlDir):
+        returnCode = openfastDrivers.runAerodiskDriverCase(os.path.join(d, DRIVER), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 
-if textData.shape != yamlData.shape:
-    rtl.exitWithError("Output shapes differ: text {} vs yaml {}.".format(textData.shape, yamlData.shape))
-
-if np.array_equal(textData, yamlData):
-    sys.exit(0)
-
-# not bit-identical: report the magnitude of the divergence, then fail
-diff = np.abs(textData - yamlData)
-worst = np.unravel_index(np.argmax(diff), diff.shape)
-print("YAML-equivalence FAILURE: outputs are not bit-identical.")
-print("  max |text - yaml| = {} at row {}, channel '{}'".format(
-    diff[worst], worst[0], textInfo["attribute_names"][worst[1]]))
-passing = pass_fail.passing_channels(textData.T, yamlData.T, 2.0, 1.9)
-print("  channels within standard regression tolerance: {}/{}".format(np.sum(passing), passing.size))
-sys.exit(1)
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))

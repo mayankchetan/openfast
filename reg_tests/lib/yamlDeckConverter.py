@@ -9,6 +9,7 @@
 
     Converters:
         convert_inflowwind(text_path) -> str   (YAML document)
+        convert_aerodisk(text_path) -> str      (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -38,12 +39,49 @@ def _as_bool(tok):
     return 'true' if _unquote(tok).strip().lower() in ('true', 't', '.true.') else 'false'
 
 
+def _list_join(toks):
+    """Join value tokens for a flow-sequence entry, stripping any trailing comma each
+    token may carry (comma-separated text-format lists tokenize as e.g. "0," "0," "0";
+    left as-is these would double up with the ', ' separator and produce an empty
+    flow-collection item, e.g. "[0,, 0,, 0]")."""
+    return ', '.join(t.rstrip(',') for t in toks)
+
+
 def _as_str(tok):
     s = _unquote(tok)
     # escape backslashes/quotes so paths like Windows-style "a\b" (as seen in some
     # unused placeholder fields) remain valid double-quoted YAML scalars
     s = s.replace('\\', '\\\\').replace('"', '\\"')
     return '"' + s + '"'
+
+
+def _default_or_num(tok):
+    """Several keys (DT_Out, and AeroDisk's DT/AirDens/RotorRad) accept a literal
+    "default"/"DEFAULT" token in the text format; YamlGet's ScalarText helper
+    special-cases that keyword (quoted or bare) identically, so pass it through
+    bare. Otherwise keep the numeric literal verbatim."""
+    unquoted = _unquote(tok)
+    if unquoted.strip().lower() == 'default':
+        return 'default'
+    return unquoted
+
+
+def _is_comment_or_blank(line):
+    """NWTC_IO's ReadLine/ScanComFile treat '!', '#', and '%' as comment characters and
+    drop blank or comment-only lines entirely (they are never counted/stored)."""
+    s = line.strip()
+    return (not s) or (s[0] in '!#%')
+
+
+def _strip_inline_comment(line):
+    """Truncate at the first comment character, mirroring ReadLine (which returns only
+    what precedes the first comment character on a line)."""
+    idx = len(line)
+    for ch in '!#%':
+        p = line.find(ch)
+        if p != -1 and p < idx:
+            idx = p
+    return line[:idx]
 
 
 class _TextDeck:
@@ -54,6 +92,7 @@ class _TextDeck:
             self.lines = f.read().splitlines()
         self.cursor = 0
         self.path = path
+        self.base_dir = os.path.dirname(path) or '.'
 
     def find(self, keyword):
         """Advance to the next line containing `keyword`; return its value tokens."""
@@ -88,6 +127,69 @@ class _TextDeck:
                     channels.append(name)
         return channels
 
+    def table_rows(self, n_rows, skip=0):
+        """Skip `skip` significant (non-comment/blank) lines, then collect exactly
+        `n_rows` numeric table-body lines -- both counted over the same *expanded*
+        line stream NWTC_IO itself sees: '@filename' file-inclusion lines (NWTC_IO's
+        ProcessComFile/ScanComFile convention) are transparently spliced in, and
+        comment/blank lines are dropped exactly like ReadLine does.
+
+        `skip` and `n_rows` are counted over ONE continuous stream on purpose: some
+        r-test decks give the table's two descriptive header/units lines directly in
+        the primary file before a single '@include' line that then supplies only the
+        data rows; others omit those two lines from the primary file entirely and
+        instead put them as the first two (non-comment) lines *inside* the included
+        file, immediately before its data rows. Both are legal because
+        AeroDisk_IO.f90's text-format reader also just counts lines in the fully
+        expanded FileInfoType, with no notion of which physical file a line came
+        from -- this mirrors that exactly.
+
+        Returns the collected rows as raw (comment-stripped, trimmed) text; advances
+        the cursor past whatever was consumed in this deck's own lines (an
+        '@include' line counts as one line here, however many lines it expands to)."""
+        rows = []
+        to_skip = skip
+        i = self.cursor
+
+        def consume(text):
+            nonlocal to_skip
+            if to_skip > 0:
+                to_skip -= 1
+                return
+            if len(rows) < n_rows:
+                rows.append(_strip_inline_comment(text).strip())
+
+        while to_skip > 0 or len(rows) < n_rows:
+            if i >= len(self.lines):
+                raise ValueError('table_rows: ran out of lines in {} before collecting {} row(s) '
+                                  '(need to skip {} more, got {} row(s))'.format(
+                                      self.path, n_rows, to_skip, len(rows)))
+            raw = self.lines[i]
+            if _is_comment_or_blank(raw):
+                i += 1
+                continue
+            stripped = raw.strip()
+            if stripped[0] == '@':
+                rest = stripped[1:].strip()
+                m = re.match(r'"[^"]*"|\'[^\']*\'|\S+', rest)
+                fname = _unquote(m.group(0)) if m else ''
+                inc_path = os.path.join(self.base_dir, fname)
+                with open(inc_path, 'r', errors='replace') as f:
+                    inc_lines = f.read().splitlines()
+                for iline in inc_lines:
+                    if _is_comment_or_blank(iline):
+                        continue
+                    if to_skip <= 0 and len(rows) >= n_rows:
+                        break
+                    consume(iline)
+                i += 1
+                continue
+            consume(raw)
+            i += 1
+
+        self.cursor = i
+        return rows
+
 
 def convert_inflowwind(text_path):
     """Convert a text-format InflowWind primary input file to its YAML schema."""
@@ -106,9 +208,9 @@ def convert_inflowwind(text_path):
     w('  VelInterpCubic: ' + _as_bool(d.scalar('VelInterpCubic')))
     n_wind_vel = int(d.scalar('NWindVel'))
     # counts are derived from list lengths in YAML: emit exactly NWindVel entries
-    w('  WindVxiList: [' + ', '.join(d.find('WindVxiList')[:n_wind_vel]) + ']')
-    w('  WindVyiList: [' + ', '.join(d.find('WindVyiList')[:n_wind_vel]) + ']')
-    w('  WindVziList: [' + ', '.join(d.find('WindVziList')[:n_wind_vel]) + ']')
+    w('  WindVxiList: [' + _list_join(d.find('WindVxiList')[:n_wind_vel]) + ']')
+    w('  WindVyiList: [' + _list_join(d.find('WindVyiList')[:n_wind_vel]) + ']')
+    w('  WindVziList: [' + _list_join(d.find('WindVziList')[:n_wind_vel]) + ']')
 
     w('steady_wind:')
     w('  HWindSpeed: ' + d.scalar('HWindSpeed'))
@@ -148,10 +250,10 @@ def convert_inflowwind(text_path):
     w('  NumPulseGate: ' + d.scalar('NumPulseGate'))
     w('  PulseSpacing: ' + d.scalar('PulseSpacing'))
     n_beam = max(int(d.scalar('NumBeam')), 1)   # the text path clamps NumBeam to >= 1
-    w('  FocalDistanceX: [' + ', '.join(d.find('FocalDistanceX')[:n_beam]) + ']')
-    w('  FocalDistanceY: [' + ', '.join(d.find('FocalDistanceY')[:n_beam]) + ']')
-    w('  FocalDistanceZ: [' + ', '.join(d.find('FocalDistanceZ')[:n_beam]) + ']')
-    w('  RotorApexOffsetPos: [' + ', '.join(d.find('RotorApexOffsetPos')[:3]) + ']')
+    w('  FocalDistanceX: [' + _list_join(d.find('FocalDistanceX')[:n_beam]) + ']')
+    w('  FocalDistanceY: [' + _list_join(d.find('FocalDistanceY')[:n_beam]) + ']')
+    w('  FocalDistanceZ: [' + _list_join(d.find('FocalDistanceZ')[:n_beam]) + ']')
+    w('  RotorApexOffsetPos: [' + _list_join(d.find('RotorApexOffsetPos')[:3]) + ']')
     w('  URefLid: ' + d.scalar('URefLid'))
     w('  MeasurementInterval: ' + d.scalar('MeasurementInterval'))
     w('  LidRadialVel: ' + _as_bool(d.scalar('LidRadialVel')))
@@ -166,22 +268,85 @@ def convert_inflowwind(text_path):
     return '\n'.join(out)
 
 
+def convert_aerodisk(text_path):
+    """Convert a text-format AeroDisk primary input file to its YAML schema.
+
+    The Actuator Disk Properties table (InColNames/InColDims plus the table body -- the
+    body may be given inline or via a single '@filename' inclusion line, as in the
+    reg_tests r-test case) is emitted as the documented columns:/rows: table under
+    actuator_disk:table. `columns` holds the index-column names in the order given by
+    InColNames; `dims` holds the matching InColDims counts (N_TSR/N_RtSpd/N_VRel/N_Pitch/
+    N_Skew are derived from this list in the YAML parser, not separate keys); each row in
+    `rows` holds the `columns` values followed by the six fixed coefficient columns
+    (C_Fx, C_Fy, C_Fz, C_Mx, C_My, C_Mz), exactly the column layout of the text-format
+    table body."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# AeroDisk primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  DT: ' + _default_or_num(d.scalar('DT')))
+    w('')
+
+    w('environmental_conditions:')
+    w('  AirDens: ' + _default_or_num(d.scalar('AirDens')))
+    w('')
+
+    w('actuator_disk:')
+    w('  RotorRad: ' + _default_or_num(d.scalar('RotorRad')))
+
+    # InColNames is a single quoted, comma-separated token (e.g. "TSR, RtSpd, VRel, Skew, Pitch")
+    incolnames_tok = d.scalar('InColNames')
+    names = [n.strip() for n in _unquote(incolnames_tok).split(',') if n.strip()]
+
+    # InColDims is a comma-separated list of integers, same order/length as InColNames
+    incoldims_toks = d.find('InColDims')[:len(names)]
+    dims = [int(t.rstrip(',')) for t in incoldims_toks]
+    if len(dims) != len(names):
+        raise ValueError('convert_aerodisk: InColDims has fewer entries than InColNames in {}'.format(text_path))
+
+    n_rows = 1
+    for n in dims:
+        n_rows *= max(n, 1)
+    n_cols = len(names) + 6   # + the 6 fixed coefficient columns C_Fx..C_Mz
+
+    # two header/units lines follow (column names, then units) -- purely descriptive,
+    # skipped without parsing exactly as AeroDisk_IO.f90 does (CurLine += 1 twice).
+    # They may appear directly in the primary file, or (if the whole table is pulled
+    # in via a single '@include' line) as the include file's own first two lines --
+    # table_rows(skip=2) counts skip+rows over the same expanded stream so either
+    # layout works.
+    rows = d.table_rows(n_rows, skip=2)
+
+    w('  table:')
+    w('    columns: [' + ', '.join(names) + ']')
+    w('    dims: [' + ', '.join(str(n) for n in dims) + ']')
+    w('    rows:')
+    for row in rows:
+        toks = [t for t in re.split(r'[,\s]+', row.strip()) if t]
+        if len(toks) != n_cols:
+            raise ValueError('convert_aerodisk: table row "{}" in {} has {} value(s); expected {}'.format(
+                row, text_path, len(toks), n_cols))
+        w('      - [' + ', '.join(toks) + ']')
+    w('')
+
+    w('output:')
+    channels = d.outlist()
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
 def _quote_line(text):
     """Double-quote an arbitrary raw line of text (e.g. the .fst description),
     escaping backslashes/quotes so it is always a valid YAML scalar even when
     the line contains ':' or other flow-scalar-hostile characters."""
     return '"' + text.strip().replace('\\', '\\\\').replace('"', '\\"') + '"'
-
-
-def _default_or_num(tok):
-    """DT_Out (and similarly Default-eligible keys) accept a literal
-    "default"/"DEFAULT" token in the text format; YamlGet's ScalarText helper
-    special-cases that keyword (quoted or bare) identically, so pass it through
-    bare. Otherwise keep the numeric literal verbatim."""
-    unquoted = _unquote(tok)
-    if unquoted.strip().lower() == 'default':
-        return 'default'
-    return unquoted
 
 
 def _indent_block(text, prefix):
@@ -198,19 +363,21 @@ def convert_fst(text_path, mode='per-file'):
       'per-file'    - all module input file entries stay as paths to the original
                       (text) files, unchanged.
       'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1)
-                      is ALSO converted to YAML and the InflowFile entry is repointed
-                      at the new .yaml file. Other module files stay as text paths.
-      'single-file' - the InflowWind input (if CompInflow == 1) is inlined as a
-                      nested mapping under input_files:InflowFile (the uniform value
-                      rule: a mapping value is inline module input). Other modules
-                      stay as text paths.
+                      and/or AeroDisk file (if CompAero == 1) are ALSO converted to
+                      YAML and their input_files entries are repointed at the new
+                      .yaml files. Other module files stay as text paths.
+      'single-file' - the InflowWind input (if CompInflow == 1) and/or the AeroDisk
+                      input (if CompAero == 1) are inlined as a nested mapping under
+                      input_files:InflowFile / input_files:AeroFile (the uniform
+                      value rule: a mapping value is inline module input). Other
+                      modules stay as text paths.
 
     Returns (yaml_text, extra_files):
       yaml_text   - the YAML document for the .fst itself (str).
       extra_files - dict of {relative_filename: yaml_text} for any sibling files
                     the caller must also write out (populated only for mode
-                    'all-yaml', where InflowFile is converted to a standalone
-                    sibling .yaml file).
+                    'all-yaml', where InflowFile/AeroFile are converted to standalone
+                    sibling .yaml files).
     """
     if mode not in ('per-file', 'all-yaml', 'single-file'):
         raise ValueError('convert_fst: unknown mode "{}"'.format(mode))
@@ -344,7 +511,25 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  InflowFile: ' + _as_str(inflow_rel))
 
-    w('  AeroFile: '    + _as_str(aero_file))
+    convert_aero = (comp_aero == 1) and (mode in ('all-yaml', 'single-file'))
+    aero_rel = _unquote(aero_file)
+    if convert_aero:
+        aero_abs = os.path.join(base_dir, aero_rel)
+        adsk_yaml_text = convert_aerodisk(aero_abs)
+        if mode == 'single-file':
+            w('  AeroFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under AeroFile:
+            adsk_lines = adsk_yaml_text.split('\n')
+            adsk_body = '\n'.join(adsk_lines[2:]) if len(adsk_lines) > 2 else adsk_yaml_text
+            w(_indent_block(adsk_body, '    '))
+        else:  # all-yaml
+            adsk_yaml_rel = os.path.splitext(aero_rel)[0] + '.yaml'
+            extra_files[adsk_yaml_rel] = adsk_yaml_text
+            w('  AeroFile: ' + _as_str(adsk_yaml_rel))
+    else:
+        w('  AeroFile: ' + _as_str(aero_rel))
+
     w('  ServoFile: '   + _as_str(servo_file))
     w('  SeaStFile: '   + _as_str(seast_file))
     w('  HydroFile: '   + _as_str(hydro_file))

@@ -22,6 +22,7 @@ add_library(aerodisklib
   src/AeroDisk_Types.f90
   src/AeroDisk_Output_Params.f90
   src/AeroDisk_IO.f90
+  src/AeroDisk_Yaml.f90
   src/AeroDisk.f90
 )
 target_link_libraries(aerodisklib ifwlib nwtclibs)

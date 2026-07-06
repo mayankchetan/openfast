@@ -780,9 +780,13 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       endif
 
       Init%InData_ADsk%defAirDens      = p_FAST%AirDens
-      Init%InData_ADsk%Linearize       = p_FAST%Linearize   ! NOTE: This module cannot be linearized 
-      Init%InData_ADsk%UseInputFile    = .true. 
-      !Init%InData_ADsk%PassedFileData  =                   ! Passing filename instead of file contents
+      Init%InData_ADsk%Linearize       = p_FAST%Linearize   ! NOTE: This module cannot be linearized
+      Init%InData_ADsk%UseInputFile    = .not. m_FAST%ADskIsInline
+      IF ( m_FAST%ADskIsInline ) THEN        ! inline AeroDisk input from a YAML primary file
+         Init%InData_ADsk%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%ADskInlineFileInfo, Init%InData_ADsk%PassedFileData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      END IF
       IF (p_FAST%CompInflow == Module_IfW) Init%InData_ADsk%FlowField => Init%OutData_IfW%FlowField
 
       ! Initialize module

@@ -576,6 +576,8 @@ IMPLICIT NONE
     TYPE(FAST_MiscLinType)  :: Lin      !< misc data for linearization analysis [-]
     TYPE(FileInfoType)  :: IfWInlineFileInfo      !< serialized inline InflowWind input from a YAML primary file (YAML text lines with provenance) [-]
     LOGICAL  :: IfWIsInline = .FALSE.      !< InflowWind input was given inline in the YAML primary file [-]
+    TYPE(FileInfoType)  :: ADskInlineFileInfo      !< serialized inline AeroDisk input from a YAML primary file (YAML text lines with provenance) [-]
+    LOGICAL  :: ADskIsInline = .FALSE.      !< AeroDisk input was given inline in the YAML primary file [-]
   END TYPE FAST_MiscVarType
 ! =======================
 ! =========  FAST_InitData  =======
@@ -8786,6 +8788,10 @@ subroutine FAST_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
    DstMiscData%IfWIsInline = SrcMiscData%IfWIsInline
+   call NWTC_Library_CopyFileInfoType(SrcMiscData%ADskInlineFileInfo, DstMiscData%ADskInlineFileInfo, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstMiscData%ADskIsInline = SrcMiscData%ADskIsInline
 end subroutine
 
 subroutine FAST_DestroyMisc(MiscData, ErrStat, ErrMsg)
@@ -8802,6 +8808,8 @@ subroutine FAST_DestroyMisc(MiscData, ErrStat, ErrMsg)
    call FAST_DestroyMiscLinType(MiscData%Lin, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    call NWTC_Library_DestroyFileInfoType(MiscData%IfWInlineFileInfo, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   call NWTC_Library_DestroyFileInfoType(MiscData%ADskInlineFileInfo, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
@@ -8821,6 +8829,8 @@ subroutine FAST_PackMisc(RF, Indata)
    call FAST_PackMiscLinType(RF, InData%Lin) 
    call NWTC_Library_PackFileInfoType(RF, InData%IfWInlineFileInfo) 
    call RegPack(RF, InData%IfWIsInline)
+   call NWTC_Library_PackFileInfoType(RF, InData%ADskInlineFileInfo) 
+   call RegPack(RF, InData%ADskIsInline)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -8840,6 +8850,8 @@ subroutine FAST_UnPackMisc(RF, OutData)
    call FAST_UnpackMiscLinType(RF, OutData%Lin) ! Lin 
    call NWTC_Library_UnpackFileInfoType(RF, OutData%IfWInlineFileInfo) ! IfWInlineFileInfo 
    call RegUnpack(RF, OutData%IfWIsInline); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%ADskInlineFileInfo) ! ADskInlineFileInfo 
+   call RegUnpack(RF, OutData%ADskIsInline); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine FAST_CopyInitData(SrcInitDataData, DstInitDataData, CtrlCode, ErrStat, ErrMsg)
