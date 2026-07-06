@@ -645,9 +645,10 @@ subroutine SplitKeyValue(SL, FileList, Key, Value, ErrStat, ErrMsg)
    end if
 end subroutine SplitKeyValue
 
-!> Fill node iNode with a scalar value from inline text, unquoting as needed. The raw
-!! (unquoted) text is stored; typed conversion happens at lookup.
-subroutine SetScalar(Doc, iNode, Text, SL, ErrStat, ErrMsg)
+!> Fill node iNode with an inline value: a flow collection ("[...]"/"{...}"), or a scalar
+!! (unquoted as needed; raw text stored — typed conversion happens at lookup). Block
+!! scalars and tags are rejected here with named-line errors.
+recursive subroutine SetScalar(Doc, iNode, Text, SL, ErrStat, ErrMsg)
    type(YamlDoc),      intent(inout) :: Doc
    integer(IntKi),     intent(in   ) :: iNode
    character(*),       intent(in   ) :: Text
@@ -655,13 +656,211 @@ subroutine SetScalar(Doc, iNode, Text, SL, ErrStat, ErrMsg)
    integer(IntKi),     intent(  out) :: ErrStat
    character(*),       intent(  out) :: ErrMsg
 
+   character(*), parameter   :: RoutineName = 'SetScalar'
    character(:), allocatable :: Unquoted
+   integer                   :: Pos, TagEnd
 
-   call Unquote(Text, SL, Doc%FileList, Unquoted, ErrStat, ErrMsg)
-   if (ErrStat >= AbortErrLev) return
-   Doc%Nodes(iNode)%Kind   = YAML_SCALAR
-   Doc%Nodes(iNode)%Scalar = Unquoted
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   select case (Text(1:1))
+   case ('[', '{')
+      Pos = 1
+      call ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+      if (len_trim(Text(Pos:)) > 0) then
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unexpected content after '// &
+            'the flow collection: "'//trim(Text(Pos:))//'".', ErrStat, ErrMsg, RoutineName)
+      end if
+   case ('|', '>')
+      call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Block scalars ("|", ">") are '// &
+         'not supported by OpenFAST; use a quoted string or a flow collection.', ErrStat, ErrMsg, RoutineName)
+   case ('!')
+      TagEnd = index(Text, ' ')
+      if (TagEnd == 0) TagEnd = len(Text) + 1
+      call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unknown tag "'//Text(1:TagEnd-1)// &
+         '". The only tag OpenFAST supports is !include (available in file-based input).', &
+         ErrStat, ErrMsg, RoutineName)
+   case default
+      call Unquote(Text, SL, Doc%FileList, Unquoted, ErrStat, ErrMsg)
+      if (ErrStat >= AbortErrLev) return
+      Doc%Nodes(iNode)%Kind   = YAML_SCALAR
+      Doc%Nodes(iNode)%Scalar = Unquoted
+   end select
 end subroutine SetScalar
+
+!> Parse a flow collection ("[a, b]" / "{k: v}") starting at Text(Pos:Pos) into iNode.
+!! On return Pos points just past the closing bracket. Nested flow collections recurse;
+!! commas and colons inside quoted strings are honored.
+recursive subroutine ParseFlow(Doc, iNode, Text, Pos, SL, ErrStat, ErrMsg)
+   type(YamlDoc),      intent(inout) :: Doc
+   integer(IntKi),     intent(in   ) :: iNode
+   character(*),       intent(in   ) :: Text
+   integer,            intent(inout) :: Pos
+   type(ScanLineType), intent(in   ) :: SL
+   integer(IntKi),     intent(  out) :: ErrStat
+   character(*),       intent(  out) :: ErrMsg
+
+   character(*), parameter   :: RoutineName = 'ParseFlow'
+   character(1)              :: Open, Close, c
+   logical                   :: IsMap, ExpectItem
+   integer(IntKi)            :: iChild, iDup
+   character(:), allocatable :: Token, Key
+   integer(IntKi)            :: ErrStat2
+   character(ErrMsgLen)      :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   Open  = Text(Pos:Pos)
+   IsMap = (Open == '{')
+   Close = ']'
+   if (IsMap) Close = '}'
+   if (IsMap) then
+      Doc%Nodes(iNode)%Kind = YAML_MAP
+   else
+      Doc%Nodes(iNode)%Kind = YAML_SEQ
+   end if
+   Pos = Pos + 1
+   ExpectItem = .false.        ! a leading close bracket (empty collection) is legal
+
+   do
+      call SkipSpaces(Text, Pos)
+      if (Pos > len(Text)) then
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unterminated flow collection '// &
+            '(missing "'//Close//'").', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+
+      c = Text(Pos:Pos)
+      if (c == Close .and. .not. ExpectItem) then
+         Pos = Pos + 1
+         return
+      end if
+
+      ! --- one item ---
+      iChild = AddNode(Doc, iNode)
+      Doc%Nodes(iChild)%FileIndx = SL%FileIndx
+      Doc%Nodes(iChild)%FileLine = SL%FileLine
+
+      if (IsMap) then
+         call FlowToken(Text, Pos, .true., Token)
+         call Unquote(Token, SL, Doc%FileList, Key, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat >= AbortErrLev) return
+         call SkipSpaces(Text, Pos)
+         if (Pos > len(Text) .or. Text(min(Pos,len(Text)):min(Pos,len(Text))) /= ':') then
+            call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Expected "key: value" inside '// &
+               'the flow mapping near "'//trim(Token)//'".', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+         Pos = Pos + 1                              ! consume ':'
+         iDup = Yaml_ChildByKey(Doc, iNode, Key)
+         if (iDup > 0 .and. iDup /= iChild) then
+            call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Duplicate key "'//Key// &
+               '" in flow mapping.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+         Doc%Nodes(iChild)%Key = Key
+         call SkipSpaces(Text, Pos)
+      end if
+
+      if (Pos <= len(Text) .and. (Text(min(Pos,len(Text)):min(Pos,len(Text))) == '[' .or. &
+                                  Text(min(Pos,len(Text)):min(Pos,len(Text))) == '{')) then
+         call ParseFlow(Doc, iChild, Text, Pos, SL, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat >= AbortErrLev) return
+      else
+         call FlowToken(Text, Pos, .false., Token)
+         if (len_trim(Token) == 0) then
+            call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Empty item in flow collection.', &
+               ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+         call Unquote(trim(Token), SL, Doc%FileList, Key, ErrStat2, ErrMsg2)   ! Key reused as buffer
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat >= AbortErrLev) return
+         Doc%Nodes(iChild)%Kind   = YAML_SCALAR
+         Doc%Nodes(iChild)%Scalar = Key
+      end if
+
+      ! --- separator or close ---
+      call SkipSpaces(Text, Pos)
+      if (Pos > len(Text)) then
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unterminated flow collection '// &
+            '(missing "'//Close//'").', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      c = Text(Pos:Pos)
+      if (c == ',') then
+         Pos = Pos + 1
+         ExpectItem = .true.
+      else if (c == Close) then
+         Pos = Pos + 1
+         return
+      else
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Expected "," or "'//Close// &
+            '" in flow collection but found "'//c//'".', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+   end do
+end subroutine ParseFlow
+
+!> Advance Pos past any spaces.
+subroutine SkipSpaces(Text, Pos)
+   character(*), intent(in   ) :: Text
+   integer,      intent(inout) :: Pos
+   do while (Pos <= len(Text))
+      if (Text(Pos:Pos) /= ' ') return
+      Pos = Pos + 1
+   end do
+end subroutine SkipSpaces
+
+!> Extract one raw token from a flow context starting at Text(Pos:), stopping (outside
+!! quotes) at ',', ']', '}' — and additionally at ':' when AtColon is true (flow-map
+!! keys). The token keeps its quotes (Unquote resolves them); Pos lands on the stopper.
+subroutine FlowToken(Text, Pos, AtColon, Token)
+   character(*),              intent(in   ) :: Text
+   integer,                   intent(inout) :: Pos
+   logical,                   intent(in   ) :: AtColon
+   character(:), allocatable, intent(  out) :: Token
+
+   integer      :: Start
+   character(1) :: c, Quote
+
+   call SkipSpaces(Text, Pos)
+   Start = Pos
+   Quote = ' '
+   do while (Pos <= len(Text))
+      c = Text(Pos:Pos)
+      if (Quote /= ' ') then
+         if (c == Quote) then
+            if (Quote == "'" .and. Pos < len(Text)) then
+               if (Text(Pos+1:Pos+1) == "'") then
+                  Pos = Pos + 1                     ! '' escape
+               else
+                  Quote = ' '
+               end if
+            else
+               Quote = ' '
+            end if
+         else if (c == '\' .and. Quote == '"') then
+            Pos = Pos + 1
+         end if
+      else
+         select case (c)
+         case ('"', "'")
+            Quote = c
+         case (',', ']', '}')
+            exit
+         case (':')
+            if (AtColon) exit
+         end select
+      end if
+      Pos = Pos + 1
+   end do
+   Token = trim(Text(Start:Pos-1))
+end subroutine FlowToken
 
 !> Resolve quoting on a scalar/key token: double quotes process \" and \\ escapes, single
 !! quotes process the '' escape, anything else is taken verbatim (plain scalar).

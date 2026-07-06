@@ -21,8 +21,163 @@ subroutine test_YamlInput_suite(testsuite)
                new_unittest("test_parse_quoting", test_parse_quoting), &
                new_unittest("test_parse_provenance", test_parse_provenance), &
                new_unittest("test_parse_tab_indent_fatal", test_parse_tab_indent_fatal), &
-               new_unittest("test_parse_duplicate_key_fatal", test_parse_duplicate_key_fatal) &
+               new_unittest("test_parse_duplicate_key_fatal", test_parse_duplicate_key_fatal), &
+               new_unittest("test_flow_sequences", test_flow_sequences), &
+               new_unittest("test_flow_map", test_flow_map), &
+               new_unittest("test_flow_unterminated_fatal", test_flow_unterminated_fatal), &
+               new_unittest("test_block_scalar_fatal", test_block_scalar_fatal), &
+               new_unittest("test_multidoc_fatal", test_multidoc_fatal), &
+               new_unittest("test_unknown_tag_fatal", test_unknown_tag_fatal) &
                ]
+end subroutine
+
+subroutine test_flow_sequences(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iA, iM, iRow, iV
+
+   character(64) :: Lines(4)
+   Lines(1) = "amps: [1, 2.5, -3e2]"
+   Lines(2) = "matrix:"
+   Lines(3) = "  - [1.0, 2.0]"
+   Lines(4) = "  - [3.0, 4.0]"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iA = Yaml_ChildByKey(Doc, 1_IntKi, "amps")
+   call check(error, Doc%Nodes(iA)%Kind, YAML_SEQ)
+   if (allocated(error)) return
+   call check(error, int(Yaml_NumChildren(Doc, iA)), 3)
+   if (allocated(error)) return
+   iV = Yaml_Child(Doc, iA, 2_IntKi)
+   call check(error, Doc%Nodes(iV)%Scalar, "2.5")
+   if (allocated(error)) return
+   iV = Yaml_Child(Doc, iA, 3_IntKi)
+   call check(error, Doc%Nodes(iV)%Scalar, "-3e2")
+   if (allocated(error)) return
+   ! flow items carry the line they appear on
+   call check(error, int(Doc%Nodes(iV)%FileLine), 1)
+   if (allocated(error)) return
+
+   ! sequence of flow sequences = matrix rows
+   iM = Yaml_ChildByKey(Doc, 1_IntKi, "matrix")
+   call check(error, Doc%Nodes(iM)%Kind, YAML_SEQ)
+   if (allocated(error)) return
+   call check(error, int(Yaml_NumChildren(Doc, iM)), 2)
+   if (allocated(error)) return
+   iRow = Yaml_Child(Doc, iM, 2_IntKi)
+   call check(error, Doc%Nodes(iRow)%Kind, YAML_SEQ)
+   if (allocated(error)) return
+   iV = Yaml_Child(Doc, iRow, 1_IntKi)
+   call check(error, Doc%Nodes(iV)%Scalar, "3.0")
+end subroutine
+
+subroutine test_flow_map(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iP, iV
+
+   character(80) :: Lines(2)
+   Lines(1) = 'point: {x: 1.0, y: -2.0, label: "a, b"}'
+   Lines(2) = "empty: []"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) return
+
+   iP = Yaml_ChildByKey(Doc, 1_IntKi, "point")
+   call check(error, Doc%Nodes(iP)%Kind, YAML_MAP)
+   if (allocated(error)) return
+   call check(error, int(Yaml_NumChildren(Doc, iP)), 3)
+   if (allocated(error)) return
+   iV = Yaml_ChildByKey(Doc, iP, "y")
+   call check(error, Doc%Nodes(iV)%Scalar, "-2.0")
+   if (allocated(error)) return
+   ! commas inside quotes do not split flow items
+   iV = Yaml_ChildByKey(Doc, iP, "label")
+   call check(error, Doc%Nodes(iV)%Scalar, "a, b")
+   if (allocated(error)) return
+
+   iV = Yaml_ChildByKey(Doc, 1_IntKi, "empty")
+   call check(error, Doc%Nodes(iV)%Kind, YAML_SEQ)
+   if (allocated(error)) return
+   call check(error, int(Yaml_NumChildren(Doc, iV)), 0)
+end subroutine
+
+subroutine test_flow_unterminated_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+
+   character(64) :: Lines(2)
+   Lines(1) = "ok: 1"
+   Lines(2) = "bad: [1, 2"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #2") > 0, .true., "error must name line #2: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_block_scalar_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+
+   character(64) :: Lines(2)
+   Lines(1) = "description: |"
+   Lines(2) = "  a folded block"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #1") > 0, .true., "error must name line #1: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "lock scalar") > 0, .true., "error must say block scalars unsupported: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_multidoc_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+
+   character(64) :: Lines(3)
+   Lines(1) = "---"
+   Lines(2) = "a: 1"
+   Lines(3) = "---"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #3") > 0, .true., "error must name line #3: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "ulti-document") > 0, .true., "error must mention multi-document: "//trim(ErrMsg))
+end subroutine
+
+subroutine test_unknown_tag_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+
+   character(64) :: Lines(1)
+   Lines(1) = "blade: !mystery blade1.yaml"
+
+   call Yaml_LoadString(Lines, Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "!mystery") > 0, .true., "error must name the tag: "//trim(ErrMsg))
+   if (allocated(error)) return
+   call check(error, index(ErrMsg, "line #1") > 0, .true., "error must name line #1: "//trim(ErrMsg))
 end subroutine
 
 subroutine test_IsYamlExt_positive(error)
