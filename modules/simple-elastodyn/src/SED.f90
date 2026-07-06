@@ -26,7 +26,9 @@ MODULE SED
 
    USE SED_Types
    USE SED_IO
+   USE SED_Yaml
    USE NWTC_Library
+   use YamlInput, only: IsYamlExt
 
    implicit none
    private
@@ -93,19 +95,45 @@ SUBROUTINE SED_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOu
 
    ! Get primary input file
    if ( InitInp%UseInputFile ) then
-      CALL ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+
+      if ( IsYamlExt( InitInp%InputFile ) ) then      ! YAML-format input file (.yaml/.yml)
+
+         call SED_ParseYamlFile( InitInp%InputFile, InitInp, p%RootName, Interval, InputFileData, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      else                                             ! text-format input file
+
+         CALL ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+         ! For diagnostic purposes, the following can be used to display the contents
+         ! of the FileInfo_In data structure.
+         !call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
+
+         ! Parse all SED-related input and populate the InputFileData structure
+         call SED_ParsePrimaryFileData( InitInp, p%RootName, Interval, FileInfo_In, InputFileData, UnEc, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      endif
+
    else
-      CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+
+      if ( InitInp%PassedFileIsYaml ) then             ! YAML content (e.g. inline module input from a YAML primary file)
+
+         call SED_ParseYamlFileInfo( InitInp%PassedFileData, InitInp, p%RootName, Interval, InputFileData, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      else
+
+         CALL NWTC_Library_CopyFileInfoType( InitInp%PassedFileData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+         call SED_ParsePrimaryFileData( InitInp, p%RootName, Interval, FileInfo_In, InputFileData, UnEc, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+
+      endif
+
    endif
-   if (Failed()) return
-
-   ! For diagnostic purposes, the following can be used to display the contents
-   ! of the FileInfo_In data structure.
-   !call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
-
-   ! Parse all SED-related input and populate the InputFileData structure
-   call SED_ParsePrimaryFileData( InitInp, p%RootName, Interval, FileInfo_In, InputFileData, UnEc, ErrStat2, ErrMsg2 )
-   if (Failed()) return;
 
    ! Verify all the necessary initialization and input file data
    CALL SEDInput_ValidateInput( InitInp, InputFileData, ErrStat2, ErrMsg2 )

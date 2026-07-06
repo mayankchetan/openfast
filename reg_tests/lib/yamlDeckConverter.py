@@ -10,6 +10,7 @@
     Converters:
         convert_inflowwind(text_path) -> str   (YAML document)
         convert_aerodisk(text_path) -> str      (YAML document)
+        convert_sed(text_path) -> str           (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -342,6 +343,72 @@ def convert_aerodisk(text_path):
     return '\n'.join(out)
 
 
+def convert_sed(text_path):
+    """Convert a text-format Simplified ElastoDyn (SED) primary input file to its YAML
+    schema.
+
+    Sections mirror the text file's banners (general, degrees_of_freedom,
+    initial_conditions, turbine_configuration, mass_and_inertia, drivetrain, output).
+    Only DT accepts the scalar "default" (ParseVarWDefault in the text path); every
+    other key is required. SumPrint is never read by the text-format parser either, so
+    it has no YAML key. Angle/speed values (Azimuth, BlPitch, RotSpeed, NacYaw,
+    PtfmPitch, PreCone, ShftTilt) are copied verbatim in their native units (deg / rpm)
+    -- SED_Yaml.f90 applies the same deg->rad / rpm->rad/s conversions as the text path
+    right after reading them."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# Simplified ElastoDyn (SED) primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  IntMethod: ' + d.scalar('IntMethod'))
+    w('  DT: ' + _default_or_num(d.scalar('DT')))
+    w('')
+
+    w('degrees_of_freedom:')
+    w('  GenDOF: ' + _as_bool(d.scalar('GenDOF')))
+    w('  YawDOF: ' + _as_bool(d.scalar('YawDOF')))
+    w('')
+
+    w('initial_conditions:')
+    w('  Azimuth: '   + d.scalar('Azimuth'))
+    w('  BlPitch: '   + d.scalar('BlPitch'))
+    w('  RotSpeed: '  + d.scalar('RotSpeed'))
+    w('  NacYaw: '    + d.scalar('NacYaw'))
+    w('  PtfmPitch: ' + d.scalar('PtfmPitch'))
+    w('')
+
+    w('turbine_configuration:')
+    w('  NumBl: '    + d.scalar('NumBl'))
+    w('  TipRad: '   + d.scalar('TipRad'))
+    w('  HubRad: '   + d.scalar('HubRad'))
+    w('  PreCone: '  + d.scalar('PreCone'))
+    w('  OverHang: ' + d.scalar('OverHang'))
+    w('  ShftTilt: ' + d.scalar('ShftTilt'))
+    w('  Twr2Shft: ' + d.scalar('Twr2Shft'))
+    w('  TowerHt: '  + d.scalar('TowerHt'))
+    w('')
+
+    w('mass_and_inertia:')
+    w('  RotIner: ' + d.scalar('RotIner'))
+    w('  GenIner: ' + d.scalar('GenIner'))
+    w('')
+
+    w('drivetrain:')
+    w('  GBoxRatio: ' + d.scalar('GBoxRatio'))
+    w('')
+
+    w('output:')
+    channels = d.outlist()
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
 def _quote_line(text):
     """Double-quote an arbitrary raw line of text (e.g. the .fst description),
     escaping backslashes/quotes so it is always a valid YAML scalar even when
@@ -362,15 +429,17 @@ def convert_fst(text_path, mode='per-file'):
     mode:
       'per-file'    - all module input file entries stay as paths to the original
                       (text) files, unchanged.
-      'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1)
-                      and/or AeroDisk file (if CompAero == 1) are ALSO converted to
+      'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1),
+                      AeroDisk file (if CompAero == 1), and/or EDFile (if
+                      CompElast == 3, i.e. Simplified ElastoDyn) are ALSO converted to
                       YAML and their input_files entries are repointed at the new
                       .yaml files. Other module files stay as text paths.
-      'single-file' - the InflowWind input (if CompInflow == 1) and/or the AeroDisk
-                      input (if CompAero == 1) are inlined as a nested mapping under
-                      input_files:InflowFile / input_files:AeroFile (the uniform
-                      value rule: a mapping value is inline module input). Other
-                      modules stay as text paths.
+      'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk input
+                      (if CompAero == 1), and/or the EDFile input (if CompElast == 3)
+                      are inlined as a nested mapping under input_files:InflowFile /
+                      input_files:AeroFile / input_files:EDFile (the uniform value
+                      rule: a mapping value is inline module input). Other modules
+                      stay as text paths.
 
     Returns (yaml_text, extra_files):
       yaml_text   - the YAML document for the .fst itself (str).
@@ -489,7 +558,28 @@ def convert_fst(text_path, mode='per-file'):
         rotors_extra.append((r_ed, r_bd, r_serv))
 
     w('input_files:')
-    w('  EDFile: ' + _as_str(ed_file))
+
+    # EDFile serves ElastoDyn (CompElast 1/2) and Simplified ElastoDyn (CompElast == 3);
+    # only the SED case has a YAML reader, so conversion/inlining is gated on that switch
+    convert_ed = (comp_elast == 3) and (mode in ('all-yaml', 'single-file'))
+    ed_rel = _unquote(ed_file)
+    if convert_ed:
+        ed_abs = os.path.join(base_dir, ed_rel)
+        sed_yaml_text = convert_sed(ed_abs)
+        if mode == 'single-file':
+            w('  EDFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under EDFile:
+            sed_lines = sed_yaml_text.split('\n')
+            sed_body = '\n'.join(sed_lines[2:]) if len(sed_lines) > 2 else sed_yaml_text
+            w(_indent_block(sed_body, '    '))
+        else:  # all-yaml
+            sed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
+            extra_files[sed_yaml_rel] = sed_yaml_text
+            w('  EDFile: ' + _as_str(sed_yaml_rel))
+    else:
+        w('  EDFile: ' + _as_str(ed_rel))
+
     w('  BDBldFile: [' + ', '.join(_as_str(x) for x in bd_files) + ']')
 
     convert_inflow = (comp_inflow == 1) and (mode in ('all-yaml', 'single-file'))

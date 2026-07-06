@@ -618,6 +618,15 @@ yaml_equiv("inflowwind" "ifw_nativeBladed" "${CTEST_INFLOWWIND_EXECUTABLE}" "inf
 # driver-level coverage (below) is what's available today.
 yaml_equiv("aerodisk" "adsk_timeseries_shutdown" "${CTEST_AERODISK_EXECUTABLE}" "aerodisk;yaml")
 
+# NOTE: no yaml_equiv_openfast registration for Simplified ElastoDyn either -- the only
+# two CompElast==3 glue-code cases in r-test (5MW_Land_DLL_WTurb_SED,
+# 5MW_Land_DLL_WTurb_ADsk_SED) both require a Bladed DISCON DLL, so neither is a
+# suitable DLL-free target; standalone driver-level coverage (below) is what's
+# available today. The inline EDFile glue path was verified with a manual smoke run
+# (DLL copied by hand), same approach as the AeroDisk case above.
+yaml_equiv("simple-elastodyn" "sed_test_freewheel" "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
+yaml_equiv("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
+
 yaml_equiv_openfast("AWT_YFix_WSt" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")

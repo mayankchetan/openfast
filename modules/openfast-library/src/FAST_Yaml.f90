@@ -31,6 +31,10 @@
 !!    FileInfoType carrying true file:line provenance (see Yaml_Serialize). Modules
 !!    gain inline support one at a time; supplying a mapping for an unsupported module
 !!    is a clear fatal error.
+!!  - EDFile serves both ElastoDyn (CompElast = 1 or 2) and Simplified ElastoDyn
+!!    (CompElast = 3); inline YAML input under EDFile is accepted only when CompElast
+!!    selects SED (ElastoDyn itself has no YAML reader yet, so a mapping value with
+!!    CompElast 1/2 still hits the "does not (yet) support inline YAML input" fatal).
 module FAST_Yaml
 
    use FAST_Types
@@ -87,6 +91,8 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
       call OpenEcho( UnEc, trim(p%OutFileRoot)//'.ech', ErrStat2, ErrMsg2 ); if (Failed()) return
       write(UnEc, '(A)') 'Echo file for OpenFAST primary input file: '//trim(InputFile)
       call Yaml_LoadFile( InputFile, Doc, ErrStat2, ErrMsg2, UnEc=UnEc ); if (Failed()) return
+      ! the reload reset the Used flags; re-read Echo so Yaml_WarnUnused doesn't flag it
+      call YamlGet( Doc, 'simulation_control:Echo', Echo, ErrStat2, ErrMsg2, Default=.false. ); if (Failed()) return
    end if
 
    !---------------------- header / description --------------------------------------
@@ -312,7 +318,16 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
 
    ! each module file is required only when its feature switch enables the module;
    ! entries for disabled modules may be omitted entirely (no "unused" placeholders)
-   call GetModFile( 'EDFile',      p%EDFile(1),    Required=.true. ); if (ErrStat >= AbortErrLev) return
+   ! EDFile serves ElastoDyn (CompElast = 1 or 2) and Simplified ElastoDyn (CompElast = 3);
+   ! inline YAML input is legal only for the SED target -- ElastoDyn itself is not yet
+   ! converted, so a mapping value under EDFile with CompElast 1/2 still hits GetModFile's
+   ! "does not (yet) support inline YAML input" fatal below, since InlineTarget is then not
+   ! passed at all (mirrors the AeroFile/CompAero gating pattern above)
+   if (p%CompElast == Module_SED) then
+      call GetModFile( 'EDFile', p%EDFile(1), Required=.true., InlineTarget='SED' ); if (ErrStat >= AbortErrLev) return
+   else
+      call GetModFile( 'EDFile', p%EDFile(1), Required=.true. ); if (ErrStat >= AbortErrLev) return
+   end if
    call GetBDBldFiles( iFiles, 1 );                                   if (ErrStat >= AbortErrLev) return
    call GetModFile( 'InflowFile',  p%InflowFile,   Required=(p%CompInflow  == Module_IfW), InlineTarget='InflowWind' ); if (ErrStat >= AbortErrLev) return
    ! inline AeroFile is legal only when CompAero selects AeroDisk; for any other CompAero
@@ -535,6 +550,13 @@ contains
                m_FAST%ADskIsInline = .true.
                ! pseudo path: used only for PriPath derivation and messages downstream
                FileVar = trim(PriPath)//'inline_AeroDisk.yaml'
+            case ('SED')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%SEDInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%SEDIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               FileVar = trim(PriPath)//'inline_SED.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

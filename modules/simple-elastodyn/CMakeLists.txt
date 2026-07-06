@@ -22,6 +22,7 @@ add_library(sedlib
   src/SED_Types.f90
   src/SED_Output_Params.f90
   src/SED_IO.f90
+  src/SED_Yaml.f90
   src/SED.f90
 )
 target_link_libraries(sedlib nwtclibs)

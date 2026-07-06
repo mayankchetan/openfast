@@ -9,11 +9,13 @@
     used to characterize a failure, never to excuse one.
 
     Supported modules:
-      inflowwind - standalone InflowWind driver case.
-      aerodisk   - standalone AeroDisk driver case.
-      openfast   - full glue-code (.fst) case; requires a mode (per-file | all-yaml |
-                   single-file) selecting how convert_fst() should transform
-                   input_files:InflowFile / input_files:AeroFile.
+      inflowwind      - standalone InflowWind driver case.
+      aerodisk        - standalone AeroDisk driver case.
+      simple-elastodyn - standalone Simplified ElastoDyn (SED) driver case.
+      openfast        - full glue-code (.fst) case; requires a mode (per-file |
+                        all-yaml | single-file) selecting how convert_fst() should
+                        transform input_files:InflowFile / input_files:AeroFile /
+                        input_files:EDFile.
 
     Usage: `executeYamlEquivalenceCase.py -h`
 """
@@ -51,7 +53,7 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "aerodisk", "openfast"):
+if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "openfast"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
 
 
@@ -249,6 +251,61 @@ elif module == "aerodisk":
     ### run both
     for d in (textDir, yamlDir):
         returnCode = openfastDrivers.runAerodiskDriverCase(os.path.join(d, DRIVER), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+elif module == "simple-elastodyn":
+    #### simple-elastodyn (standalone SED driver) case #############################
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+
+    # *.inp is the SED primary file; *.dvr is the driver file; *.csv covers the
+    # time-series input files the r-test cases use (e.g. Free.csv, HSSBrk.csv)
+    INPUT_GLOBS = ("*.inp", "*.dvr", "*.csv")
+    PRIMARY = "sed_primary.inp"
+    DRIVER = "sed_driver.dvr"
+    OUTPUT = "sed_driver.out"
+
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit at the same depth as a normally-staged case so that relative
+        paths in the inputs resolve identically."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        return d
+
+    ### text variant
+    textDir = stage("text")
+
+    ### yaml variant: convert the primary file, repoint the driver at it
+    yamlDir = stage("yaml")
+    yamlPrimary = PRIMARY.replace(".inp", ".yaml")
+    yamlText = yamlDeckConverter.convert_sed(os.path.join(yamlDir, PRIMARY))
+    with open(os.path.join(yamlDir, yamlPrimary), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, PRIMARY))
+
+    driverFile = os.path.join(yamlDir, DRIVER)
+    with open(driverFile) as f:
+        driverText = f.read()
+    if PRIMARY not in driverText:
+        rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, PRIMARY))
+    with open(driverFile, "w") as f:
+        f.write(driverText.replace(PRIMARY, yamlPrimary))
+
+    ### run both
+    for d in (textDir, yamlDir):
+        returnCode = openfastDrivers.runSimpleElastodynDriverCase(os.path.join(d, DRIVER), executable)
         if returnCode != 0:
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 

@@ -313,7 +313,13 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_SED%Linearize = p_FAST%Linearize
       Init%InData_SED%InputFile = p_FAST%EDFile(1)
       Init%InData_SED%RootName  = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_SED))
-   
+      Init%InData_SED%UseInputFile = .not. m_FAST%SEDIsInline
+      IF ( m_FAST%SEDIsInline ) THEN        ! inline Simplified ElastoDyn input from a YAML primary file
+         Init%InData_SED%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%SEDInlineFileInfo, Init%InData_SED%PassedFileData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      END IF
+
       ! Call module initialization routine
       dt_module = p_FAST%DT
       CALL SED_Init( Init%InData_SED, SED%Input(1), SED%p, SED%x(STATE_CURR), SED%xd(STATE_CURR), SED%z(STATE_CURR), SED%OtherSt(STATE_CURR), &

@@ -69,6 +69,7 @@ IMPLICIT NONE
     LOGICAL  :: Linearize = .false.      !< this module cannot be linearized at present [-]
     LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
     TYPE(FileInfoType)  :: PassedFileData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedFileData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
   END TYPE SED_InitInputType
 ! =======================
 ! =========  SED_InitOutputType  =======
@@ -355,6 +356,7 @@ subroutine SED_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrSt
    call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedFileData, DstInitInputData%PassedFileData, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
 end subroutine
 
 subroutine SED_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
@@ -380,6 +382,7 @@ subroutine SED_PackInitInput(RF, Indata)
    call RegPack(RF, InData%Linearize)
    call RegPack(RF, InData%UseInputFile)
    call NWTC_Library_PackFileInfoType(RF, InData%PassedFileData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -393,6 +396,7 @@ subroutine SED_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%Linearize); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
    call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedFileData) ! PassedFileData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine SED_CopyInitOutput(SrcInitOutputData, DstInitOutputData, CtrlCode, ErrStat, ErrMsg)
