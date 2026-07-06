@@ -38,7 +38,7 @@
 module YamlInput
 
    use NWTC_Base
-   use NWTC_IO, only: Conv2UC, GetPath, PathIsRelative, Num2LStr
+   use NWTC_IO, only: Conv2UC, GetPath, PathIsRelative, Num2LStr, GetNewUnit, OpenFInpFile
 
    implicit none
    private
@@ -93,15 +93,21 @@ module YamlInput
 
    character(*), parameter :: StringSourceName = '(string input)'
 
-   !> Transient parser state: the anchor registry (&name -> node index). Redefining an
-   !! anchor name shadows the earlier definition, per YAML.
+   !> Transient parser state: the anchor registry (&name -> node index; redefinition
+   !! shadows, per YAML) plus the !include machinery (echo unit, depth-capped stack of
+   !! in-progress files for cycle detection).
    type :: YamlParseState
       character(64),  allocatable :: AnchorNames(:)
       integer(IntKi), allocatable :: AnchorNodes(:)
       integer                     :: NumAnchors = 0
+      logical                     :: AllowInclude = .false.  !< only file-based loads may !include
+      integer(IntKi)              :: UnEc = 0                !< echo unit (0 = no echo)
+      integer                     :: Depth = 0               !< current include nesting depth
+      character(1024)             :: Stack(10) = ''          !< files currently being parsed
    end type YamlParseState
 
-   integer, parameter :: MaxMergeSrcs = 16  !< aliases allowed in one "<<:" merge list
+   integer, parameter :: MaxMergeSrcs    = 16  !< aliases allowed in one "<<:" merge list
+   integer, parameter :: MaxIncludeDepth = 10  !< !include nesting cap (also sizes Stack)
 
 contains
 
@@ -170,9 +176,172 @@ subroutine Yaml_LoadFile(FileName, Doc, ErrStat, ErrMsg, UnEc)
    integer(IntKi), intent(  out) :: ErrStat
    character(*),   intent(  out) :: ErrMsg
    integer(IntKi), intent(in   ), optional :: UnEc
-   ErrStat = ErrID_Fatal
-   ErrMsg  = 'Yaml_LoadFile: not implemented'
+
+   character(*), parameter :: RoutineName = 'Yaml_LoadFile'
+   type(YamlParseState)    :: PS
+   integer(IntKi)          :: iRoot
+   integer(IntKi)          :: ErrStat2
+   character(ErrMsgLen)    :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   PS%AllowInclude = .true.
+   if (present(UnEc)) PS%UnEc = UnEc
+
+   allocate(Doc%FileList(0))
+   iRoot = AddNode(Doc, 0_IntKi)
+
+   call ParseFileInto(Doc, iRoot, trim(FileName), PS, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine Yaml_LoadFile
+
+!> Read, scan, and parse one physical YAML file into an existing node — used for both the
+!! top file and every !include splice. Handles cycle detection, the depth cap, verbatim
+!! echo, and FileList/provenance bookkeeping. FileName must already be resolved.
+recursive subroutine ParseFileInto(Doc, iNode, FileName, PS, ErrStat, ErrMsg)
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   character(*),         intent(in   ) :: FileName
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
+
+   character(*), parameter                    :: RoutineName = 'ParseFileInto'
+   character(MaxFileInfoLineLen), allocatable :: Lines(:)
+   type(ScanLineType), allocatable            :: SL(:)
+   integer(IntKi)                             :: FileIndx
+   integer                                    :: i, Cur
+   integer(IntKi)                             :: ErrStat2
+   character(ErrMsgLen)                       :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   ! cycle detection over the in-progress stack
+   do i = 1, PS%Depth
+      if (trim(PS%Stack(i)) == FileName) then
+         call SetErrStat(ErrID_Fatal, '>> Include cycle detected: "'//FileName// &
+            '" is already being parsed (include chain: '//trim(IncludeChain(PS))//' -> '// &
+            FileName//').', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+   end do
+   if (PS%Depth >= MaxIncludeDepth) then
+      call SetErrStat(ErrID_Fatal, '>> Includes nested deeper than '// &
+         trim(Num2LStr(MaxIncludeDepth))//' levels at "'//FileName//'" (include chain: '// &
+         trim(IncludeChain(PS))//').', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+   PS%Depth = PS%Depth + 1
+   PS%Stack(PS%Depth) = FileName
+
+   call ReadFileLines(FileName, Lines, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) then
+      PS%Depth = PS%Depth - 1
+      return
+   end if
+
+   ! verbatim echo — comments and all — under a banner naming the file
+   if (PS%UnEc > 0) then
+      write(PS%UnEc, '(A)') '!===== begin echo of "'//FileName//'" ====='
+      do i = 1, size(Lines)
+         write(PS%UnEc, '(A)') trim(Lines(i))
+      end do
+      write(PS%UnEc, '(A)') '!===== end echo of "'//FileName//'" ====='
+   end if
+
+   FileIndx = AddFile(Doc, FileName)
+
+   call ScanSource(Lines, int(FileIndx), Doc%FileList, SL, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat < AbortErrLev) then
+      if (size(SL) == 0) then
+         call SetErrStat(ErrID_Fatal, 'No data found in "'//FileName//'".', ErrStat, ErrMsg, RoutineName)
+      else
+         Doc%Nodes(iNode)%FileIndx = FileIndx
+         Doc%Nodes(iNode)%FileLine = SL(1)%FileLine
+         Cur = 1
+         call ParseBlockNode(SL, Cur, SL(1)%Indent, Doc, iNode, PS, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+         if (ErrStat < AbortErrLev .and. Cur <= size(SL)) then
+            call SetErrStat(ErrID_Fatal, LineRef(SL(Cur), Doc%FileList)// &
+               ' Unexpected content after the end of the top-level block.', ErrStat, ErrMsg, RoutineName)
+         end if
+      end if
+   end if
+
+   PS%Depth = PS%Depth - 1
+end subroutine ParseFileInto
+
+!> " a -> b -> c" rendering of the current include stack, for cycle/depth errors.
+function IncludeChain(PS) result(Chain)
+   type(YamlParseState), intent(in) :: PS
+   character(:), allocatable        :: Chain
+   integer :: i
+   Chain = ''
+   do i = 1, PS%Depth
+      if (i > 1) Chain = Chain//' -> '
+      Chain = Chain//trim(PS%Stack(i))
+   end do
+end function IncludeChain
+
+!> Append a file name to Doc%FileList, returning its (1-based) index.
+integer(IntKi) function AddFile(Doc, FileName) result(Indx)
+   type(YamlDoc), intent(inout) :: Doc
+   character(*),  intent(in   ) :: FileName
+
+   character(1024), allocatable :: Tmp(:)
+   integer                      :: n
+
+   n = size(Doc%FileList)
+   allocate(Tmp(n+1))
+   if (n > 0) Tmp(1:n) = Doc%FileList
+   Tmp(n+1) = FileName
+   call move_alloc(Tmp, Doc%FileList)
+   Indx = n + 1
+end function AddFile
+
+!> Read every line of a text file into an array (no interpretation).
+subroutine ReadFileLines(FileName, Lines, ErrStat, ErrMsg)
+   character(*),                               intent(in   ) :: FileName
+   character(MaxFileInfoLineLen), allocatable, intent(  out) :: Lines(:)
+   integer(IntKi),                             intent(  out) :: ErrStat
+   character(*),                               intent(  out) :: ErrMsg
+
+   character(*), parameter                    :: RoutineName = 'ReadFileLines'
+   character(MaxFileInfoLineLen), allocatable :: Tmp(:)
+   character(MaxFileInfoLineLen)              :: Buf
+   integer                                    :: Un, ios, n
+   integer(IntKi)                             :: ErrStat2
+   character(ErrMsgLen)                       :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   Un = -1
+   call GetNewUnit(Un, ErrStat2, ErrMsg2)
+   call OpenFInpFile(Un, FileName, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+
+   allocate(Lines(64))
+   n = 0
+   do
+      read(Un, '(A)', iostat=ios) Buf
+      if (ios /= 0) exit
+      if (n == size(Lines)) then
+         allocate(Tmp(2*n))
+         Tmp(1:n) = Lines
+         call move_alloc(Tmp, Lines)
+      end if
+      n = n + 1
+      Lines(n) = Buf
+   end do
+   close(Un)
+   Lines = Lines(1:n)
+end subroutine ReadFileLines
 
 !> Parse YAML source given as an array of lines (no disk access; !include is not available
 !! through this entry). Used by unit tests and passed-data couplings.
@@ -966,9 +1135,13 @@ recursive subroutine SetScalar(Doc, iNode, Text, SL, PS, ErrStat, ErrMsg)
    case ('!')
       TagEnd = index(Text, ' ')
       if (TagEnd == 0) TagEnd = len(Text) + 1
-      call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unknown tag "'//Text(1:TagEnd-1)// &
-         '". The only tag OpenFAST supports is !include (available in file-based input).', &
-         ErrStat, ErrMsg, RoutineName)
+      if (Text(1:TagEnd-1) == '!include' .and. PS%AllowInclude) then
+         call ProcessInclude(Doc, iNode, trim(adjustl(Text(TagEnd:))), SL, PS, ErrStat, ErrMsg)
+      else
+         call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' Unknown tag "'//Text(1:TagEnd-1)// &
+            '". The only tag OpenFAST supports is !include (available in file-based input).', &
+            ErrStat, ErrMsg, RoutineName)
+      end if
    case default
       call Unquote(Text, SL, Doc%FileList, Unquoted, ErrStat, ErrMsg)
       if (ErrStat >= AbortErrLev) return
@@ -976,6 +1149,50 @@ recursive subroutine SetScalar(Doc, iNode, Text, SL, PS, ErrStat, ErrMsg)
       Doc%Nodes(iNode)%Scalar = Unquoted
    end select
 end subroutine SetScalar
+
+!> Handle "!include <path>" at a value position: resolve the path relative to the
+!! including file (the same rule as the text format's @file), then splice the included
+!! file's root content into iNode. Errors gain the referencing file:line context.
+recursive subroutine ProcessInclude(Doc, iNode, PathText, SL, PS, ErrStat, ErrMsg)
+   type(YamlDoc),        intent(inout) :: Doc
+   integer(IntKi),       intent(in   ) :: iNode
+   character(*),         intent(in   ) :: PathText
+   type(ScanLineType),   intent(in   ) :: SL
+   type(YamlParseState), intent(inout) :: PS
+   integer(IntKi),       intent(  out) :: ErrStat
+   character(*),         intent(  out) :: ErrMsg
+
+   character(*), parameter   :: RoutineName = 'ProcessInclude'
+   character(:), allocatable :: Path
+   character(1024)           :: PriPath
+   integer(IntKi)            :: ErrStat2
+   character(ErrMsgLen)      :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   call Unquote(PathText, SL, Doc%FileList, Path, ErrStat, ErrMsg)
+   if (ErrStat >= AbortErrLev) return
+   if (len_trim(Path) == 0) then
+      call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' "!include" requires a file path.', &
+         ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   ! resolve relative to the directory of the *including* file
+   if (PathIsRelative(Path)) then
+      call GetPath(Doc%FileList(SL%FileIndx), PriPath)
+      Path = trim(PriPath)//Path
+   end if
+
+   call ParseFileInto(Doc, iNode, Path, PS, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) then
+      ! prepend the referencing location so the user can find the offending !include
+      call SetErrStat(ErrID_Fatal, LineRef(SL, Doc%FileList)//' while processing !include "'// &
+         Path//'".', ErrStat, ErrMsg, RoutineName)
+   end if
+end subroutine ProcessInclude
 
 !> Parse a flow collection ("[a, b]" / "{k: v}") starting at Text(Pos:Pos) into iNode.
 !! On return Pos points just past the closing bracket. Nested flow collections recurse;

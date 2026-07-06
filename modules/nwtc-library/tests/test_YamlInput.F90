@@ -34,8 +34,200 @@ subroutine test_YamlInput_suite(testsuite)
                new_unittest("test_merge_list_precedence", test_merge_list_precedence), &
                new_unittest("test_merge_in_sequence", test_merge_in_sequence), &
                new_unittest("test_undefined_alias_fatal", test_undefined_alias_fatal), &
-               new_unittest("test_merge_bad_value_fatal", test_merge_bad_value_fatal) &
+               new_unittest("test_merge_bad_value_fatal", test_merge_bad_value_fatal), &
+               new_unittest("test_include_splice", test_include_splice), &
+               new_unittest("test_include_nested_relative", test_include_nested_relative), &
+               new_unittest("test_include_cycle_fatal", test_include_cycle_fatal), &
+               new_unittest("test_include_missing_fatal", test_include_missing_fatal), &
+               new_unittest("test_echo_verbatim", test_echo_verbatim) &
                ]
+end subroutine
+
+!> Write Lines to a fresh file named FName (test helper).
+subroutine WriteTestFile(FName, Lines)
+   character(*), intent(in) :: FName
+   character(*), intent(in) :: Lines(:)
+   integer :: Un, i
+   open(newunit=Un, file=FName, status='replace', action='write')
+   do i = 1, size(Lines)
+      write(Un, '(A)') trim(Lines(i))
+   end do
+   close(Un)
+end subroutine WriteTestFile
+
+!> Delete a file if it exists (test helper).
+subroutine DeleteTestFile(FName)
+   character(*), intent(in) :: FName
+   integer :: Un, ios
+   open(newunit=Un, file=FName, status='old', iostat=ios)
+   if (ios == 0) close(Un, status='delete')
+end subroutine DeleteTestFile
+
+subroutine test_include_splice(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iB, iV
+   character(64) :: Main(2), Inc(2)
+
+   Main(1) = "rho: 1.225"
+   Main(2) = "blade: !include yamltest_inc1.yaml"
+   Inc(1)  = "a: 1"
+   Inc(2)  = "b: 2"
+   call WriteTestFile("yamltest_main.yaml", Main)
+   call WriteTestFile("yamltest_inc1.yaml", Inc)
+
+   call Yaml_LoadFile("yamltest_main.yaml", Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) goto 100
+
+   ! the included file's mapping is spliced in as the value of "blade"
+   iB = Yaml_ChildByKey(Doc, 1_IntKi, "blade")
+   call check(error, Doc%Nodes(iB)%Kind, YAML_MAP)
+   if (allocated(error)) goto 100
+   call check(error, int(Yaml_NumChildren(Doc, iB)), 2)
+   if (allocated(error)) goto 100
+
+   ! provenance points into the included file with its own line numbers
+   iV = Yaml_ChildByKey(Doc, iB, "b")
+   call check(error, Doc%Nodes(iV)%Scalar, "2")
+   if (allocated(error)) goto 100
+   call check(error, int(Doc%Nodes(iV)%FileIndx), 2)
+   if (allocated(error)) goto 100
+   call check(error, int(Doc%Nodes(iV)%FileLine), 2)
+   if (allocated(error)) goto 100
+   call check(error, size(Doc%FileList), 2)
+   if (allocated(error)) goto 100
+   call check(error, index(Doc%FileList(2), "yamltest_inc1.yaml") > 0, .true., &
+              "FileList(2) must name the included file: "//trim(Doc%FileList(2)))
+
+100 call DeleteTestFile("yamltest_main.yaml")
+   call DeleteTestFile("yamltest_inc1.yaml")
+end subroutine
+
+subroutine test_include_nested_relative(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: iS, iD, iV
+   character(64) :: Main(1), Mid(1), Deep(1)
+
+   call execute_command_line("mkdir -p yamltest_sub")
+   Main(1) = "sub: !include yamltest_sub/mid.yaml"
+   Mid(1)  = "deep: !include deep.yaml"          ! resolves relative to yamltest_sub/
+   Deep(1) = "val: 42"
+   call WriteTestFile("yamltest_main2.yaml", Main)
+   call WriteTestFile("yamltest_sub/mid.yaml", Mid)
+   call WriteTestFile("yamltest_sub/deep.yaml", Deep)
+
+   call Yaml_LoadFile("yamltest_main2.yaml", Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) goto 100
+
+   iS = Yaml_ChildByKey(Doc, 1_IntKi, "sub")
+   iD = Yaml_ChildByKey(Doc, iS, "deep")
+   call check(error, iD > 0, .true., "deep key not found")
+   if (allocated(error)) goto 100
+   iV = Yaml_ChildByKey(Doc, iD, "val")
+   call check(error, Doc%Nodes(iV)%Scalar, "42")
+
+100 call DeleteTestFile("yamltest_main2.yaml")
+   call DeleteTestFile("yamltest_sub/mid.yaml")
+   call DeleteTestFile("yamltest_sub/deep.yaml")
+end subroutine
+
+subroutine test_include_cycle_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   character(64) :: A(1), B(1)
+
+   A(1) = "x: !include yamltest_cycB.yaml"
+   B(1) = "y: !include yamltest_cycA.yaml"
+   call WriteTestFile("yamltest_cycA.yaml", A)
+   call WriteTestFile("yamltest_cycB.yaml", B)
+
+   call Yaml_LoadFile("yamltest_cycA.yaml", Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) goto 100
+   call check(error, index(ErrMsg, "yamltest_cycA.yaml") > 0, .true., &
+              "cycle error must name the repeated file: "//trim(ErrMsg))
+
+100 call DeleteTestFile("yamltest_cycA.yaml")
+   call DeleteTestFile("yamltest_cycB.yaml")
+end subroutine
+
+subroutine test_include_missing_fatal(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   character(64) :: Main(2)
+
+   Main(1) = "a: 1"
+   Main(2) = "b: !include yamltest_nonexistent.yaml"
+   call WriteTestFile("yamltest_main3.yaml", Main)
+
+   call Yaml_LoadFile("yamltest_main3.yaml", Doc, ErrStat, ErrMsg)
+   call check(error, ErrStat, ErrID_Fatal)
+   if (allocated(error)) goto 100
+   ! error names the referencing location, not just the missing file
+   call check(error, index(ErrMsg, "line #2") > 0, .true., "must name referencing line: "//trim(ErrMsg))
+   if (allocated(error)) goto 100
+   call check(error, index(ErrMsg, "yamltest_main3.yaml") > 0, .true., &
+              "must name referencing file: "//trim(ErrMsg))
+
+100 call DeleteTestFile("yamltest_main3.yaml")
+end subroutine
+
+subroutine test_echo_verbatim(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(YamlDoc) :: Doc
+   integer(IntKi) :: ErrStat
+   character(ErrMsgLen) :: ErrMsg
+   integer(IntKi) :: UnEc
+   integer :: ios
+   character(256) :: EchoLine
+   logical :: SawComment, SawMainBanner, SawIncBanner
+   character(64) :: Main(3), Inc(1)
+
+   Main(1) = "# a precious comment"
+   Main(2) = "rho: 1.225"
+   Main(3) = "blade: !include yamltest_inc2.yaml"
+   Inc(1)  = "a: 1   # inline note"
+   call WriteTestFile("yamltest_main4.yaml", Main)
+   call WriteTestFile("yamltest_inc2.yaml", Inc)
+
+   call GetNewUnit(UnEc, ErrStat, ErrMsg)   ! NWTC-positive unit: echo gate is UnEc > 0
+   open(unit=UnEc, file="yamltest_echo.txt", status='replace', action='write')
+   call Yaml_LoadFile("yamltest_main4.yaml", Doc, ErrStat, ErrMsg, UnEc=UnEc)
+   close(UnEc)
+   call check(error, ErrStat, ErrID_None, trim(ErrMsg))
+   if (allocated(error)) goto 100
+
+   SawComment = .false.; SawMainBanner = .false.; SawIncBanner = .false.
+   open(newunit=UnEc, file="yamltest_echo.txt", status='old', action='read')
+   do
+      read(UnEc, '(A)', iostat=ios) EchoLine
+      if (ios /= 0) exit
+      if (index(EchoLine, "# a precious comment") > 0) SawComment = .true.
+      if (index(EchoLine, 'begin echo of') > 0 .and. index(EchoLine, "yamltest_main4.yaml") > 0) SawMainBanner = .true.
+      if (index(EchoLine, 'begin echo of') > 0 .and. index(EchoLine, "yamltest_inc2.yaml") > 0) SawIncBanner = .true.
+   end do
+   close(UnEc)
+
+   call check(error, SawComment, .true., "echo must reproduce comments verbatim")
+   if (allocated(error)) goto 100
+   call check(error, SawMainBanner, .true., "echo must banner the main file")
+   if (allocated(error)) goto 100
+   call check(error, SawIncBanner, .true., "echo must banner included files")
+
+100 call DeleteTestFile("yamltest_main4.yaml")
+   call DeleteTestFile("yamltest_inc2.yaml")
+   call DeleteTestFile("yamltest_echo.txt")
 end subroutine
 
 subroutine test_alias_scalar(error)
