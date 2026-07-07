@@ -1440,6 +1440,8 @@ MODULE ElastoDyn_IO
 
    USE ElastoDyn_Parameters
    USE ElastoDyn_Types
+   USE ElastoDyn_Yaml, only: ED_ParseYamlFile, ED_ParseYamlFileInfo
+   USE YamlInput, only: IsYamlExt
 
    IMPLICIT NONE
    
@@ -1447,13 +1449,14 @@ CONTAINS
 !----------------------------------------------------------------------------------------------------------------------------------
 !> This subroutine reads the input file and stores all the data in the ED_InputFile structure.
 !! It does not perform data validation.
-SUBROUTINE ED_ReadInput( InputFileName, InputFileData, BD4Blades, Default_DT, OutFileRoot, ErrStat, ErrMsg )
+SUBROUTINE ED_ReadInput( InitInp, InputFileData, BD4Blades, Default_DT, OutFileRoot, ErrStat, ErrMsg )
 !..................................................................................................................................
 
       ! Passed variables
    REAL(DbKi),           INTENT(IN)       :: Default_DT     !< The default DT (from glue code)
 
-   CHARACTER(*), INTENT(IN)               :: InputFileName  !< Name of the input file
+   TYPE(ED_InitInputType), INTENT(IN)     :: InitInp        !< Input data for initialization routine (InputFile, UseInputFile,
+                                                             !!   PassedFileIsYaml, PassedPrimaryInputData)
    CHARACTER(*), INTENT(IN)               :: OutFileRoot    !< The rootname of all the output files written by this routine.
 
    TYPE(ED_InputFile),   INTENT(OUT)      :: InputFileData  !< Data stored in the module's input file
@@ -1467,8 +1470,9 @@ SUBROUTINE ED_ReadInput( InputFileName, InputFileData, BD4Blades, Default_DT, Ou
    INTEGER(IntKi)                         :: UnEcho         !  Unit number for the echo file
    INTEGER(IntKi)                         :: ErrStat2       !  The error status code
    CHARACTER(ErrMsgLen)                   :: ErrMsg2        !  The error message, if an error occurred
-   CHARACTER(*), PARAMETER                :: RoutineName = 'ED_ReadInput'                
-   
+   CHARACTER(*), PARAMETER                :: RoutineName = 'ED_ReadInput'
+   CHARACTER(1024)                        :: PriPath        !  Path name of the primary file (only used for the passed-YAML entry point)
+
    CHARACTER(1024)                        :: BldFile(MaxBl) !  File that contains the blade information (specified in the primary input file)
    CHARACTER(1024)                        :: FurlFile       !  File that contains the furl information (specified in the primary input file)
    CHARACTER(1024)                        :: TwrFile        !  File that contains the tower information (specified in the primary input file)
@@ -1478,17 +1482,57 @@ SUBROUTINE ED_ReadInput( InputFileName, InputFileData, BD4Blades, Default_DT, Ou
    ErrStat = ErrID_None
    ErrMsg  = ''
 
-   InputFileData%DT = Default_DT  ! the glue code's suggested DT for the module (may be overwritten in ReadPrimaryFile())
+   InputFileData%DT = Default_DT  ! the glue code's suggested DT for the module (may be overwritten below)
 
       ! get the primary/platform input-file data
       ! sets UnEcho, BldFile, FurlFile, TwrFile
-   
-   CALL ReadPrimaryFile( InputFileName, InputFileData, BldFile, FurlFile, TwrFile, OutFileRoot, UnEcho, ErrStat2, ErrMsg2 )
-      call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
-      if ( ErrStat >= AbortErrLev ) then
+
+   IF ( InitInp%UseInputFile ) THEN
+
+      IF ( IsYamlExt( InitInp%InputFile ) ) THEN          ! YAML-format input file (.yaml/.yml)
+
+         CALL ED_ParseYamlFile( InitInp%InputFile, InputFileData, BldFile, FurlFile, TwrFile, &
+                                 OutFileRoot, Default_DT, UnEcho, ErrStat2, ErrMsg2 )
+            call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+            if ( ErrStat >= AbortErrLev ) then
+               call Cleanup()
+               return
+            end if
+
+      ELSE                                                ! text-format input file
+
+         CALL ReadPrimaryFile( InitInp%InputFile, InputFileData, BldFile, FurlFile, TwrFile, OutFileRoot, UnEcho, ErrStat2, ErrMsg2 )
+            call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+            if ( ErrStat >= AbortErrLev ) then
+               call Cleanup()
+               return
+            end if
+
+      END IF
+
+   ELSE
+
+      IF ( InitInp%PassedFileIsYaml ) THEN                ! YAML content (e.g. inline module input from a YAML primary file)
+
+         CALL GetPath( InitInp%InputFile, PriPath )       ! blade/tower/furling files (still on disk) resolve relative to the .fst
+         CALL ED_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, InputFileData, BldFile, FurlFile, TwrFile, &
+                                     PriPath, OutFileRoot, Default_DT, UnEcho, ErrStat2, ErrMsg2 )
+            call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+            if ( ErrStat >= AbortErrLev ) then
+               call Cleanup()
+               return
+            end if
+
+      ELSE
+
+         call SetErrStat( ErrID_Fatal, 'ElastoDyn requires either a text- or YAML-format input file, or inline '// &
+                           'YAML input data; inline non-YAML (text) passed input data is not supported.', ErrStat, ErrMsg, RoutineName )
          call Cleanup()
          return
-      end if
+
+      END IF
+
+   END IF
 
       ! get the furling input-file data
    IF ( InputFileData%Furling )  THEN

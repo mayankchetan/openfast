@@ -320,14 +320,12 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    ! each module file is required only when its feature switch enables the module;
    ! entries for disabled modules may be omitted entirely (no "unused" placeholders)
    ! EDFile serves ElastoDyn (CompElast = 1 or 2) and Simplified ElastoDyn (CompElast = 3);
-   ! inline YAML input is legal only for the SED target -- ElastoDyn itself is not yet
-   ! converted, so a mapping value under EDFile with CompElast 1/2 still hits GetModFile's
-   ! "does not (yet) support inline YAML input" fatal below, since InlineTarget is then not
-   ! passed at all (mirrors the AeroFile/CompAero gating pattern above)
+   ! both targets now have a YAML reader, so a mapping value under EDFile is legal for
+   ! either (mirrors the AeroFile/CompAero gating pattern above)
    if (p%CompElast == Module_SED) then
       call GetModFile( 'EDFile', p%EDFile(1), Required=.true., InlineTarget='SED' ); if (ErrStat >= AbortErrLev) return
    else
-      call GetModFile( 'EDFile', p%EDFile(1), Required=.true. ); if (ErrStat >= AbortErrLev) return
+      call GetModFile( 'EDFile', p%EDFile(1), Required=.true., InlineTarget='ElastoDyn' ); if (ErrStat >= AbortErrLev) return
    end if
    call GetBDBldFiles( iFiles, 1 );                                   if (ErrStat >= AbortErrLev) return
    call GetModFile( 'InflowFile',  p%InflowFile,   Required=(p%CompInflow  == Module_IfW), InlineTarget='InflowWind' ); if (ErrStat >= AbortErrLev) return
@@ -519,8 +517,8 @@ contains
 
    !> Uniform value rule for one input_files entry: a string is a path (resolved
    !! relative to the .fst); a mapping is inline module input, legal only for modules
-   !! that support it (currently InflowWind, AeroDisk, AeroDyn, Simplified ElastoDyn,
-   !! ServoDyn, SeaState, HydroDyn, and MoorDyn).
+   !! that support it (currently InflowWind, AeroDisk, AeroDyn, ElastoDyn, Simplified
+   !! ElastoDyn, ServoDyn, SeaState, HydroDyn, and MoorDyn).
    subroutine GetModFile( KeyName, FileVar, Required, InlineTarget )
       character(*), intent(in   )           :: KeyName
       character(*), intent(inout)           :: FileVar
@@ -570,6 +568,15 @@ contains
                m_FAST%SEDIsInline = .true.
                ! pseudo path: used only for PriPath derivation and messages downstream
                FileVar = trim(PriPath)//'inline_SED.yaml'
+            case ('ElastoDyn')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%EDInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%EDIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (BldFile/TwrFile/FurlFile paths written inside the inline section
+               ! resolve relative to the deck file through this PriPath)
+               FileVar = trim(PriPath)//'inline_ElastoDyn.yaml'
             case ('SeaState')
                call Yaml_MarkUsed( Doc, iVal, .true. )
                call Yaml_Serialize( Doc, iVal, m_FAST%SeaStInlineFileInfo, ErrStat2, ErrMsg2 )

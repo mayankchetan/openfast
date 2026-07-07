@@ -47,6 +47,9 @@ IMPLICIT NONE
     REAL(ReKi)  :: WtrDpth = 0.0_ReKi      !< Water depth [m]
     LOGICAL  :: CompAeroMaps = .FALSE.      !< flag to determine if ElastoDyn is computing aero maps (true) or running a normal simulation (false) [-]
     REAL(ReKi)  :: RotSpeed = 0.0_ReKi      !< Rotor speed used when ElastoDyn is computing aero maps [rad/s]
+    LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
+    TYPE(FileInfoType)  :: PassedPrimaryInputData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
   END TYPE ED_InitInputType
 ! =======================
 ! =========  ED_InitOutputType  =======
@@ -922,6 +925,8 @@ subroutine ED_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrSta
    integer(IntKi),  intent(in   ) :: CtrlCode
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'ED_CopyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -935,15 +940,24 @@ subroutine ED_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrSta
    DstInitInputData%WtrDpth = SrcInitInputData%WtrDpth
    DstInitInputData%CompAeroMaps = SrcInitInputData%CompAeroMaps
    DstInitInputData%RotSpeed = SrcInitInputData%RotSpeed
+   DstInitInputData%UseInputFile = SrcInitInputData%UseInputFile
+   call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
 end subroutine
 
 subroutine ED_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
    type(ED_InitInputType), intent(inout) :: InitInputData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'ED_DestroyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
+   call NWTC_Library_DestroyFileInfoType(InitInputData%PassedPrimaryInputData, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
 subroutine ED_PackInitInput(RF, Indata)
@@ -961,6 +975,9 @@ subroutine ED_PackInitInput(RF, Indata)
    call RegPack(RF, InData%WtrDpth)
    call RegPack(RF, InData%CompAeroMaps)
    call RegPack(RF, InData%RotSpeed)
+   call RegPack(RF, InData%UseInputFile)
+   call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -979,6 +996,9 @@ subroutine ED_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%WtrDpth); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%CompAeroMaps); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%RotSpeed); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine ED_CopyInitOutput(SrcInitOutputData, DstInitOutputData, CtrlCode, ErrStat, ErrMsg)

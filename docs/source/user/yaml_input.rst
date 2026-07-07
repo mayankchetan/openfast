@@ -115,20 +115,20 @@ from the deck's.)
 Formats mix freely: one deck may combine text files, YAML files, and inline
 sections. Inline input is available for modules whose YAML schema exists
 (currently InflowWind; AeroDisk or AeroDyn when ``CompAero`` selects one of
-them; Simplified ElastoDyn when ``CompElast`` selects it; ServoDyn when
-``CompServo`` selects it; SeaState when ``CompSeaSt`` selects it; HydroDyn
-when ``CompHydro`` selects it; and MoorDyn when ``CompMooring`` selects it);
-an inline mapping for any other module -- or for ``EDFile`` when ``CompElast``
-selects a module without a YAML schema (ElastoDyn), or for ``MooringFile``
-when ``CompMooring`` selects a module without one (MAP++, FEAMooring,
-OrcaFlex) -- is a clear fatal error suggesting a file path instead. Combined
-with ``!include`` and anchors, this supports fully single-file models.
-Second-order files (e.g. Structural Control files under ServoDyn,
-potential-flow data under HydroDyn, AeroDyn's
-airfoil/blade/tailfin/AeroAcoustics/OLAF files, or MoorDyn's
-bathymetry/water-kinematics/lookup-table files) are never inlined: they stay
-referenced by path, in text or YAML form (the binary/tabular potential-flow
-data files themselves are always text).
+them; ElastoDyn or Simplified ElastoDyn when ``CompElast`` selects one of
+them; ServoDyn when ``CompServo`` selects it; SeaState when ``CompSeaSt``
+selects it; HydroDyn when ``CompHydro`` selects it; and MoorDyn when
+``CompMooring`` selects it); an inline mapping for any other module -- or for
+``MooringFile`` when ``CompMooring`` selects a module without a YAML schema
+(MAP++, FEAMooring, OrcaFlex) -- is a clear fatal error suggesting a file path
+instead. Combined with ``!include`` and anchors, this supports fully
+single-file models. Second-order files (e.g. Structural Control files under
+ServoDyn, potential-flow data under HydroDyn, AeroDyn's
+airfoil/blade/tailfin/AeroAcoustics/OLAF files, ElastoDyn's
+blade/tower/furling files, or MoorDyn's bathymetry/water-kinematics/lookup-
+table files) are never inlined: they stay referenced by path, in text or YAML
+form where a schema exists (of the above, only Structural Control files have
+one; the binary/tabular potential-flow data files themselves are always text).
 
 OpenFAST primary file (.fst)
 ----------------------------
@@ -145,8 +145,8 @@ format:
   with ``EDFile``, ``ServoFile``, and (when ``CompElast`` is 2) ``BDBldFile``
   for that additional rotor.
 - ``EDFile`` serves ElastoDyn (``CompElast`` 1 or 2) and Simplified ElastoDyn
-  (``CompElast`` 3); inline mapping input under ``EDFile`` is accepted only when
-  ``CompElast`` selects Simplified ElastoDyn (ElastoDyn has no YAML schema yet).
+  (``CompElast`` 3); both have a YAML schema, so inline mapping input under
+  ``EDFile`` is accepted for either.
 - ``BDBldFile`` is a sequence of blade-file paths (its length gives the number
   of BeamDyn blade files); it is required only when ``CompElast`` is 2.
 - ``MirrorRotor`` (under ``feature_switches``) is a sequence of true/false
@@ -206,6 +206,9 @@ supported:
   under ``input_files:InflowFile``
 - AeroDisk primary input file (:ref:`adsk-yaml-input`), including inline use
   under ``input_files:AeroFile`` (when ``CompAero`` selects AeroDisk)
+- ElastoDyn primary input file (:ref:`elastodyn-yaml-input`), including inline
+  use under ``input_files:EDFile`` (when ``CompElast`` selects ElastoDyn);
+  blade, tower, and furling files stay referenced by path
 - Simplified ElastoDyn (SED) primary input file (:ref:`sed-yaml-input`),
   including inline use under ``input_files:EDFile`` (when ``CompElast`` selects
   Simplified ElastoDyn)

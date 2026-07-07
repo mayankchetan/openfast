@@ -824,3 +824,196 @@ negative and is only used when ``TFrlMod`` is set to 1. (N·m/(rad/s))
 
 
 
+
+
+.. _elastodyn-yaml-input:
+
+YAML input file
+----------------
+
+The ElastoDyn primary input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); see :ref:`yaml_input` for the conventions shared by
+all modules. Parameters keep their documented names, grouped into sections
+that mirror the text format's banners: ``simulation_control`` (``Echo``,
+``Method``, ``DT``), ``degrees_of_freedom``, ``initial_conditions``,
+``turbine_configuration``, ``mass_and_inertia``, ``blade``, ``rotor_teeter``,
+``yaw_friction``, ``drivetrain``, ``furling``, ``tower``, ``output``, and the
+optional ``nodal_outputs``.
+
+``DT`` accepts the scalar ``default`` exactly like ``"DEFAULT"`` in the text
+format, falling back to the glue-code (or driver) interval.
+
+The per-blade parameters -- three separate keyword lines (``BlPitch(1)`` ..
+``BlPitch(3)``, etc.) in the text format -- are always 3-entry lists:
+``initial_conditions:BlPitch``, ``turbine_configuration:PreCone``, and
+``mass_and_inertia:TipMass``/``PBrIner``/``BlPIner`` (matching the text
+format's fixed three lines even for two-bladed rotors).
+
+``blade:BldFile``, ``furling:FurlFile``, and ``tower:TwrFile`` are paths to
+the blade, furling, and tower input files -- second-order files with no YAML
+schema of their own, always referenced by path (text format only), resolved
+relative to this primary input file.
+
+``output:NTwGages``/``NBlGages`` are explicit counts, *not* derived from list
+length: ``output:TwrGagNd``/``BldGagNd`` must each list at least that many
+entries (matching the text format, where the strain-gage count may be less
+than the number of values present on the line). ``output:NumOuts`` derives
+from the length of ``output:OutList``, and the optional section's
+``BldNd_NumOuts`` similarly derives from ``nodal_outputs:OutList``. Unlike the
+text format (which tolerates a missing or malformed nodal-outputs section by
+silently disabling it), the YAML ``nodal_outputs`` section is simply omitted
+entirely when not needed.
+
+Values keep their documented units (degrees, rpm, percent) exactly as in the
+text format; ``ElastoDyn_Yaml.f90`` applies the same deg→rad / rpm→rad/s /
+percent→fraction conversions right after reading them.
+
+.. code-block:: yaml
+
+   # ElastoDyn primary input file (YAML form)
+   simulation_control:
+     Echo: false
+     Method: 3                  # 1: RK4, 2: AB4, 3: ABM4
+     DT: default                # or a number of seconds
+
+   degrees_of_freedom:
+     FlapDOF1: true
+     FlapDOF2: true
+     EdgeDOF: true
+     PitchDOF: false
+     TeetDOF: false
+     DrTrDOF: true
+     GenDOF: true
+     YawDOF: true
+     TwFADOF1: true
+     TwFADOF2: true
+     TwSSDOF1: true
+     TwSSDOF2: true
+     PtfmSgDOF: false
+     PtfmSwDOF: false
+     PtfmHvDOF: false
+     PtfmRDOF: false
+     PtfmPDOF: false
+     PtfmYDOF: false
+
+   initial_conditions:
+     OoPDefl: 0
+     IPDefl: 0
+     BlPitch: [0, 0, 0]         # deg; always 3 entries
+     TeetDefl: 0                # deg
+     Azimuth: 0                 # deg
+     RotSpeed: 12.1             # rpm
+     NacYaw: 0                  # deg
+     TTDspFA: 0
+     TTDspSS: 0
+     PtfmSurge: 0
+     PtfmSway: 0
+     PtfmHeave: 0
+     PtfmRoll: 0                # deg
+     PtfmPitch: 0               # deg
+     PtfmYaw: 0                 # deg
+
+   turbine_configuration:
+     NumBl: 3
+     TipRad: 63
+     HubRad: 1.5
+     PreCone: [-2.5, -2.5, -2.5]   # deg; always 3 entries
+     HubCM: 0
+     UndSling: 0
+     Delta3: 0                  # deg
+     AzimB1Up: 0                # deg
+     OverHang: -5.0191
+     ShftGagL: 1.912
+     ShftTilt: -5               # deg
+     NacCMxn: 1.9
+     NacCMyn: 0
+     NacCMzn: 1.75
+     NcIMUxn: -3.09528
+     NcIMUyn: 0
+     NcIMUzn: 2.23336
+     Twr2Shft: 1.96256
+     TowerHt: 87.6
+     TowerBsHt: 0
+     PtfmCMxt: 0
+     PtfmCMyt: 0
+     PtfmCMzt: 0
+     PtfmRefxt: 0
+     PtfmRefyt: 0
+     PtfmRefzt: 0
+
+   mass_and_inertia:
+     TipMass: [0, 0, 0]
+     PBrIner: [0, 0, 0]
+     BlPIner: [0, 0, 0]
+     HubMass: 56780
+     HubIner: 115926
+     HubIner_Teeter: 0
+     GenIner: 534.116
+     NacMass: 240000
+     NacYIner: 2607890
+     YawBrMass: 0
+     PtfmMass: 0
+     PtfmRIner: 0
+     PtfmPIner: 0
+     PtfmYIner: 0
+     PtfmXYIner: 0
+     PtfmYZIner: 0
+     PtfmXZIner: 0
+
+   blade:
+     BldNodes: 17
+     BldFile: ["Blade.dat", "Blade.dat", "Blade.dat"]   # always 3 entries
+
+   rotor_teeter:
+     TeetMod: 0
+     TeetDmpP: 0                # deg
+     TeetDmp: 0
+     TeetCDmp: 0
+     TeetSStP: 0                # deg
+     TeetHStP: 0                # deg
+     TeetSSSp: 0
+     TeetHSSp: 0
+
+   yaw_friction:
+     YawFrctMod: 0
+     M_CSmax: 300
+     M_FCSmax: 0
+     M_MCSmax: 0
+     M_CD: 40
+     M_FCD: 0
+     M_MCD: 0
+     sig_v: 0
+     sig_v2: 0
+     OmgCut: 0
+
+   drivetrain:
+     GBoxEff: 100               # percent
+     GBRatio: 97
+     DTTorSpr: 867637000
+     DTTorDmp: 6215000
+
+   furling:
+     Furling: false
+     FurlFile: "unused"
+
+   tower:
+     TwrNodes: 20
+     TwrFile: "Tower.dat"
+
+   output:
+     SumPrint: true
+     OutFile: 1
+     TabDelim: true
+     OutFmt: "G0"
+     Tstart: 0
+     DecFact: 1
+     NTwGages: 0
+     TwrGagNd: []
+     NBlGages: 3
+     BldGagNd: [5, 9, 13]
+     OutList: ["OoPDefl1", "IPDefl1", "TwstDefl1", "RotSpeed", "GenSpeed"]
+
+   nodal_outputs:
+     BldNd_BladesOut: 1
+     BldNd_BlOutNd: "All"
+     OutList: []

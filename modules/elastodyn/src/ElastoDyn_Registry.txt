@@ -28,6 +28,9 @@ typedef ^   InitInputType   IntKi MHK     -   -   -   "MHK turbine type switch" 
 typedef ^   InitInputType   ReKi WtrDpth -  -   -    "Water depth" m
 typedef	^	InitInputType	LOGICAL	CompAeroMaps	-	.FALSE.	-	"flag to determine if ElastoDyn is computing aero maps (true) or running a normal simulation (false)"	-
 typedef	^	InitInputType	ReKi	RotSpeed	-	-	-	"Rotor speed used when ElastoDyn is computing aero maps"	"rad/s"
+typedef	^	InitInputType	LOGICAL	UseInputFile	-	.TRUE.	-	"Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller"	-
+typedef	^	InitInputType	FileInfoType	PassedPrimaryInputData	-	-	-	"If we don't use the input file, pass everything through this"	-
+typedef	^	InitInputType	LOGICAL	PassedFileIsYaml	-	.FALSE.	-	"PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.]"	-
 
 # Define outputs from the initialization routine here:
 typedef	^	InitOutputType	CHARACTER(ChanLen)	WriteOutputHdr	{:}	-	-	"Names of the output-to-file channels"	-

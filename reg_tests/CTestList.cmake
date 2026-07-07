@@ -636,6 +636,9 @@ yaml_equiv("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;y
 # AWT_YFix_WSt: CompServo=1 with no DISCON DLL (all ServoDyn control modes 0), so its
 # all-yaml/single-file modes exercise ServoDyn YAML conversion and the inline ServoFile
 # glue path directly via ctest (ServoDyn has no r-test driver cases -- glue coverage only).
+# CompElast=1 (full ElastoDyn), so all-yaml/single-file also exercise ElastoDyn YAML
+# conversion and its inline EDFile glue path (ElastoDyn likewise has no r-test driver
+# cases -- glue coverage only); its BldFile/TwrFile/FurlFile stay text paths.
 yaml_equiv_openfast("AWT_YFix_WSt" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")

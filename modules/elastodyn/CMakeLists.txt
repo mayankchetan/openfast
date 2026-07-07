@@ -20,6 +20,7 @@ endif()
 
 add_library(elastodynlib STATIC
   src/ElastoDyn.f90
+  src/ElastoDyn_Yaml.f90
   src/ElastoDyn_IO.f90
   src/ElastoDyn_AllBldNdOuts_IO.f90
   src/ED_UserSubs.f90

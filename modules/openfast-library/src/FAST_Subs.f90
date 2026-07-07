@@ -356,7 +356,18 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
          Init%InData_ED%CompAeroMaps   = p_FAST%CompAeroMaps
          Init%InData_ED%RotSpeed       = p_FAST%RotSpeedInit
          Init%InData_ED%InputFile      = p_FAST%EDFile(iRot)
-      
+
+         ! inline ElastoDyn input from a YAML primary file applies to rotor 1's EDFile
+         ! only (input_files:EDFile); additional rotors always give a file path
+         Init%InData_ED%UseInputFile   = .not. (m_FAST%EDIsInline .and. iRot == 1)
+         IF ( m_FAST%EDIsInline .and. iRot == 1 ) THEN
+            Init%InData_ED%PassedFileIsYaml = .TRUE.
+            CALL NWTC_Library_CopyFileInfoType( m_FAST%EDInlineFileInfo, Init%InData_ED%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+            if (Failed()) return
+         ELSE
+            Init%InData_ED%PassedFileIsYaml = .FALSE.   ! Init%InData_ED is reused across the rotor loop
+         END IF
+
          Init%InData_ED%RootName       = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_ED))
          Init%InData_ED%CompElast      = p_FAST%CompElast == Module_ED
          Init%InData_ED%Gravity        = p_FAST%Gravity

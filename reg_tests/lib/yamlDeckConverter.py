@@ -11,6 +11,7 @@
         convert_inflowwind(text_path) -> str   (YAML document)
         convert_aerodisk(text_path) -> str      (YAML document)
         convert_sed(text_path) -> str           (YAML document)
+        convert_elastodyn(text_path) -> str     (YAML document)
         convert_seastate(text_path) -> str      (YAML document)
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
         convert_stc(text_path) -> str           (YAML document)
@@ -409,6 +410,187 @@ def convert_sed(text_path):
     w('output:')
     channels = d.outlist()
     w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def convert_elastodyn(text_path):
+    """Convert a text-format (full) ElastoDyn primary input file to its YAML schema.
+
+    Sections mirror the text file's banners (simulation_control, degrees_of_freedom,
+    initial_conditions, turbine_configuration, mass_and_inertia, blade, rotor_teeter,
+    yaw_friction, drivetrain, furling, tower, output, nodal_outputs). Only DT accepts
+    the scalar "default" (the text path's "DEFAULT" special-case in ReadPrimaryFile).
+    Per-blade values (BlPitch, PreCone, TipMass, PBrIner, BlPIner) -- three separate
+    keyword lines in the text format (index 1..MaxBl=3) -- become 3-entry lists.
+    BldFile/FurlFile/TwrFile stay path strings (second-order files: never
+    converted/inlined). NTwGages/NBlGages are explicit counts (NOT list lengths --
+    ElastoDyn_Yaml.f90 requires the TwrGagNd/BldGagNd lists to have at least that many
+    entries, matching the text path's own count-vs-line-length contract). NumOuts and
+    BldNd_NumOuts derive from output:OutList / nodal_outputs:OutList's list lengths.
+    Angle/speed/percentage values are copied verbatim in their native units (deg / rpm
+    / %); ElastoDyn_Yaml.f90 applies the same conversions as the text path right after
+    reading them."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# ElastoDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('simulation_control:')
+    w('  Echo: '   + _as_bool(d.scalar('Echo')))
+    w('  Method: ' + d.scalar('Method'))
+    w('  DT: '     + _default_or_num(d.scalar('DT')))
+    w('')
+
+    w('degrees_of_freedom:')
+    for key in ('FlapDOF1', 'FlapDOF2', 'EdgeDOF', 'PitchDOF', 'TeetDOF', 'DrTrDOF',
+                'GenDOF', 'YawDOF', 'TwFADOF1', 'TwFADOF2', 'TwSSDOF1', 'TwSSDOF2',
+                'PtfmSgDOF', 'PtfmSwDOF', 'PtfmHvDOF', 'PtfmRDOF', 'PtfmPDOF', 'PtfmYDOF'):
+        w('  {}: {}'.format(key, _as_bool(d.scalar(key))))
+    w('')
+
+    w('initial_conditions:')
+    w('  OoPDefl: ' + d.scalar('OoPDefl'))
+    w('  IPDefl: '  + d.scalar('IPDefl'))
+    blpitch = [d.scalar('BlPitch({})'.format(k)) for k in (1, 2, 3)]
+    w('  BlPitch: [' + _list_join(blpitch) + ']')
+    w('  TeetDefl: '  + d.scalar('TeetDefl'))
+    w('  Azimuth: '   + d.scalar('Azimuth'))
+    w('  RotSpeed: '  + d.scalar('RotSpeed'))
+    w('  NacYaw: '    + d.scalar('NacYaw'))
+    w('  TTDspFA: '   + d.scalar('TTDspFA'))
+    w('  TTDspSS: '   + d.scalar('TTDspSS'))
+    w('  PtfmSurge: ' + d.scalar('PtfmSurge'))
+    w('  PtfmSway: '  + d.scalar('PtfmSway'))
+    w('  PtfmHeave: ' + d.scalar('PtfmHeave'))
+    w('  PtfmRoll: '  + d.scalar('PtfmRoll'))
+    w('  PtfmPitch: ' + d.scalar('PtfmPitch'))
+    w('  PtfmYaw: '   + d.scalar('PtfmYaw'))
+    w('')
+
+    w('turbine_configuration:')
+    w('  NumBl: '   + d.scalar('NumBl'))
+    w('  TipRad: '  + d.scalar('TipRad'))
+    w('  HubRad: '  + d.scalar('HubRad'))
+    precone = [d.scalar('PreCone({})'.format(k)) for k in (1, 2, 3)]
+    w('  PreCone: [' + _list_join(precone) + ']')
+    w('  HubCM: '     + d.scalar('HubCM'))
+    w('  UndSling: '  + d.scalar('UndSling'))
+    w('  Delta3: '    + d.scalar('Delta3'))
+    w('  AzimB1Up: '  + d.scalar('AzimB1Up'))
+    w('  OverHang: '  + d.scalar('OverHang'))
+    w('  ShftGagL: '  + d.scalar('ShftGagL'))
+    w('  ShftTilt: '  + d.scalar('ShftTilt'))
+    w('  NacCMxn: '   + d.scalar('NacCMxn'))
+    w('  NacCMyn: '   + d.scalar('NacCMyn'))
+    w('  NacCMzn: '   + d.scalar('NacCMzn'))
+    w('  NcIMUxn: '   + d.scalar('NcIMUxn'))
+    w('  NcIMUyn: '   + d.scalar('NcIMUyn'))
+    w('  NcIMUzn: '   + d.scalar('NcIMUzn'))
+    w('  Twr2Shft: '  + d.scalar('Twr2Shft'))
+    w('  TowerHt: '   + d.scalar('TowerHt'))
+    w('  TowerBsHt: ' + d.scalar('TowerBsHt'))
+    w('  PtfmCMxt: '  + d.scalar('PtfmCMxt'))
+    w('  PtfmCMyt: '  + d.scalar('PtfmCMyt'))
+    w('  PtfmCMzt: '  + d.scalar('PtfmCMzt'))
+    w('  PtfmRefxt: ' + d.scalar('PtfmRefxt'))
+    w('  PtfmRefyt: ' + d.scalar('PtfmRefyt'))
+    w('  PtfmRefzt: ' + d.scalar('PtfmRefzt'))
+    w('')
+
+    w('mass_and_inertia:')
+    tipmass = [d.scalar('TipMass({})'.format(k)) for k in (1, 2, 3)]
+    w('  TipMass: [' + _list_join(tipmass) + ']')
+    pbriner = [d.scalar('PBrIner({})'.format(k)) for k in (1, 2, 3)]
+    w('  PBrIner: [' + _list_join(pbriner) + ']')
+    blpiner = [d.scalar('BlPIner({})'.format(k)) for k in (1, 2, 3)]
+    w('  BlPIner: [' + _list_join(blpiner) + ']')
+    w('  HubMass: '        + d.scalar('HubMass'))
+    w('  HubIner: '        + d.scalar('HubIner'))
+    w('  HubIner_Teeter: ' + d.scalar('HubIner_Teeter'))
+    w('  GenIner: '        + d.scalar('GenIner'))
+    w('  NacMass: '        + d.scalar('NacMass'))
+    w('  NacYIner: '       + d.scalar('NacYIner'))
+    w('  YawBrMass: '      + d.scalar('YawBrMass'))
+    w('  PtfmMass: '       + d.scalar('PtfmMass'))
+    w('  PtfmRIner: '      + d.scalar('PtfmRIner'))
+    w('  PtfmPIner: '      + d.scalar('PtfmPIner'))
+    w('  PtfmYIner: '      + d.scalar('PtfmYIner'))
+    w('  PtfmXYIner: '     + d.scalar('PtfmXYIner'))
+    w('  PtfmYZIner: '     + d.scalar('PtfmYZIner'))
+    w('  PtfmXZIner: '     + d.scalar('PtfmXZIner'))
+    w('')
+
+    w('blade:')
+    w('  BldNodes: ' + d.scalar('BldNodes'))
+    bldfiles = [_as_str(d.scalar('BldFile({})'.format(k))) for k in (1, 2, 3)]
+    w('  BldFile: [' + ', '.join(bldfiles) + ']')
+    w('')
+
+    w('rotor_teeter:')
+    w('  TeetMod: '  + d.scalar('TeetMod'))
+    w('  TeetDmpP: ' + d.scalar('TeetDmpP'))
+    w('  TeetDmp: '  + d.scalar('TeetDmp'))
+    w('  TeetCDmp: ' + d.scalar('TeetCDmp'))
+    w('  TeetSStP: ' + d.scalar('TeetSStP'))
+    w('  TeetHStP: ' + d.scalar('TeetHStP'))
+    w('  TeetSSSp: ' + d.scalar('TeetSSSp'))
+    w('  TeetHSSp: ' + d.scalar('TeetHSSp'))
+    w('')
+
+    w('yaw_friction:')
+    w('  YawFrctMod: ' + d.scalar('YawFrctMod'))
+    w('  M_CSmax: '    + d.scalar('M_CSmax'))
+    w('  M_FCSmax: '   + d.scalar('M_FCSmax'))
+    w('  M_MCSmax: '   + d.scalar('M_MCSmax'))
+    w('  M_CD: '       + d.scalar('M_CD'))
+    w('  M_FCD: '      + d.scalar('M_FCD'))
+    w('  M_MCD: '      + d.scalar('M_MCD'))
+    w('  sig_v: '      + d.scalar('sig_v'))
+    w('  sig_v2: '     + d.scalar('sig_v2'))
+    w('  OmgCut: '     + d.scalar('OmgCut'))
+    w('')
+
+    w('drivetrain:')
+    w('  GBoxEff: '  + d.scalar('GBoxEff'))
+    w('  GBRatio: '  + d.scalar('GBRatio'))
+    w('  DTTorSpr: ' + d.scalar('DTTorSpr'))
+    w('  DTTorDmp: ' + d.scalar('DTTorDmp'))
+    w('')
+
+    w('furling:')
+    w('  Furling: '  + _as_bool(d.scalar('Furling')))
+    w('  FurlFile: ' + _as_str(d.scalar('FurlFile')))
+    w('')
+
+    w('tower:')
+    w('  TwrNodes: ' + d.scalar('TwrNodes'))
+    w('  TwrFile: '  + _as_str(d.scalar('TwrFile')))
+    w('')
+
+    w('output:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  OutFile: '  + d.scalar('OutFile'))
+    w('  TabDelim: ' + _as_bool(d.scalar('TabDelim')))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    w('  Tstart: '   + d.scalar('Tstart'))
+    w('  DecFact: '  + d.scalar('DecFact'))
+    w('  NTwGages: ' + d.scalar('NTwGages'))
+    w('  TwrGagNd: [' + _list_join(d.find('TwrGagNd')) + ']')
+    w('  NBlGages: ' + d.scalar('NBlGages'))
+    w('  BldGagNd: [' + _list_join(d.find('BldGagNd')) + ']')
+    channels = d.outlist()
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    w('nodal_outputs:')
+    w('  BldNd_BladesOut: ' + d.scalar('BldNd_BladesOut'))
+    w('  BldNd_BlOutNd: '   + _as_str(d.scalar('BldNd_BlOutNd')))
+    nd_channels = d.outlist()
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in nd_channels) + ']')
     w('')
 
     return '\n'.join(out)
@@ -1877,6 +2059,7 @@ _INLINE_PATH_KEYS = {
     'inflowwind': ['uniform_wind.FileName_Uni', 'turbsim_wind.FileName_BTS',
                    'bladed_wind.FilenameRoot', 'hawc_wind.FileName_u',
                    'hawc_wind.FileName_v', 'hawc_wind.FileName_w'],
+    'elastodyn':  ['blade.BldFile', 'furling.FurlFile', 'tower.TwrFile'],
     'aerodyn':    ['general.AA_InputFile', 'olaf_options.OLAFInputFileName',
                    'airfoil_info.AFNames', 'rotor_blade_properties.ADBlFile',
                    'tail_fin_aerodynamics.TFinFile'],
@@ -1983,10 +2166,11 @@ def convert_fst(text_path, mode='per-file'):
       'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1),
                       AeroDisk or AeroDyn file (if CompAero == 1 or 2 respectively;
                       AeroDyn's airfoil/blade/tailfin/AeroAcoustics/OLAF files stay
-                      paths), EDFile (if CompElast == 3, i.e. Simplified ElastoDyn),
-                      ServoFile (if CompServo == 1, including its referenced StC
-                      sub-files as their own .yaml file type), SeaStFile (if
-                      CompSeaSt == 1), HydroFile (if CompHydro == 1; its
+                      paths), EDFile (if CompElast == 1, 2, or 3 -- (Beam)ElastoDyn or
+                      Simplified ElastoDyn; ElastoDyn's referenced BldFile/TwrFile/
+                      FurlFile stay paths), ServoFile (if CompServo == 1, including its
+                      referenced StC sub-files as their own .yaml file type), SeaStFile
+                      (if CompSeaSt == 1), HydroFile (if CompHydro == 1; its
                       referenced PotFile/GeoFile potential-flow data stay paths),
                       and/or MooringFile (if CompMooring == 3, MoorDyn; its
                       bathymetry/WaterKin/lookup-table/Syrope sub-files stay paths) are
@@ -1994,7 +2178,9 @@ def convert_fst(text_path, mode='per-file'):
                       at the new .yaml files. Other module files stay as text paths.
       'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk or AeroDyn
                       input (if CompAero == 1 or 2 respectively), the EDFile input (if
-                      CompElast == 3), the ServoFile input (if CompServo == 1; its StC
+                      CompElast == 1, 2, or 3; ElastoDyn's BldFile/TwrFile/FurlFile stay
+                      referenced by path -- second-order files are never inlined), the
+                      ServoFile input (if CompServo == 1; its StC
                       sub-files stay referenced by path -- StC input is never inlined),
                       the SeaStFile input (if CompSeaSt == 1), the HydroFile input
                       (if CompHydro == 1), and/or the MooringFile input (if
@@ -2129,10 +2315,11 @@ def convert_fst(text_path, mode='per-file'):
     w('input_files:')
 
     # EDFile serves ElastoDyn (CompElast 1/2) and Simplified ElastoDyn (CompElast == 3);
-    # only the SED case has a YAML reader, so conversion/inlining is gated on that switch
-    convert_ed = (comp_elast == 3) and (mode in ('all-yaml', 'single-file'))
+    # both targets have a YAML reader now, so conversion/inlining is gated only on mode
+    convert_sed_file = (comp_elast == 3) and (mode in ('all-yaml', 'single-file'))
+    convert_ed_file  = (comp_elast in (1, 2)) and (mode in ('all-yaml', 'single-file'))
     ed_rel = _unquote(ed_file)
-    if convert_ed:
+    if convert_sed_file:
         ed_abs = os.path.join(base_dir, ed_rel)
         sed_yaml_text = convert_sed(ed_abs)
         if mode == 'single-file':
@@ -2146,6 +2333,25 @@ def convert_fst(text_path, mode='per-file'):
             sed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
             extra_files[sed_yaml_rel] = sed_yaml_text
             w('  EDFile: ' + _as_str(sed_yaml_rel))
+    elif convert_ed_file:
+        ed_abs = os.path.join(base_dir, ed_rel)
+        ed_yaml_text = convert_elastodyn(ed_abs)
+        if mode == 'single-file':
+            w('  EDFile:')
+            # rewrite any relative paths inside the inlined section (BldFile/TwrFile/
+            # FurlFile -- second-order files, still referenced by path) so they keep
+            # resolving once nested under a deck at a different directory
+            ed_yaml_text = _rewrite_inline_paths(
+                ed_yaml_text, 'elastodyn', _relpath_prefix(os.path.dirname(ed_abs), base_dir))
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under EDFile:
+            ed_lines = ed_yaml_text.split('\n')
+            ed_body = '\n'.join(ed_lines[2:]) if len(ed_lines) > 2 else ed_yaml_text
+            w(_indent_block(ed_body, '    '))
+        else:  # all-yaml
+            ed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
+            extra_files[ed_yaml_rel] = ed_yaml_text
+            w('  EDFile: ' + _as_str(ed_yaml_rel))
     else:
         w('  EDFile: ' + _as_str(ed_rel))
 
