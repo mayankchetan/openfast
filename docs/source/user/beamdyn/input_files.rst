@@ -644,3 +644,98 @@ We note that for beam structure, the :math:`i_{plr}` is given as
    :label: PolarMOI
 
    i_{plr} = i_{Edg} + i_{Flp}
+
+
+.. _beamdyn-yaml-input:
+
+YAML input file
+----------------
+
+The BeamDyn primary input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); see :ref:`yaml_input` for the conventions shared by
+all modules. Parameters keep their documented names, grouped into sections
+that mirror the text format's banners: ``simulation_control``,
+``geometry_parameter``, ``mesh_parameter``, ``beam_sectional_parameter``,
+``outputs``, and the optional ``nodal_outputs``.
+
+Unlike the text format, ``member_total`` and ``kp_total`` are not given
+explicitly -- they derive from list lengths:
+``geometry_parameter:kp_member`` is the ordered, per-member key-point-count
+list (its length is ``member_total``; the text format's leading "member
+number" column is dropped since a YAML list is already unambiguously
+ordered), and ``geometry_parameter:key_points`` is the key-point table
+(its row count is ``kp_total``), each row a 4-entry ``[x, y, z, twist]``
+list in the same units as the text format (m, m, m, deg).
+
+``simulation_control:refine``, ``n_fact``, ``DTBeam``, ``load_retries``,
+``NRMax``, ``stop_tol``, ``tngt_stf_fd``, ``tngt_stf_comp``,
+``tngt_stf_pert``, and ``tngt_stf_difftol`` all accept the scalar
+``default`` exactly like ``"DEFAULT"`` in the text format. ``DTBeam``
+falls back to the glue-code (or driver) time step; the others fall back to
+the same hard-coded defaults as the text reader (``refine`` = 1, ``n_fact``
+= 5, ``load_retries`` = 20, ``NRMax`` = 10, ``stop_tol`` = 1.0E-5,
+``tngt_stf_fd``/``tngt_stf_comp`` = false, ``tngt_stf_pert`` = 1.0E-6,
+``tngt_stf_difftol`` = 0.1).
+
+``beam_sectional_parameter:BldFile`` is a path to the blade properties
+input file -- a second-order file with no YAML schema of its own, always
+referenced by path (text format only), resolved relative to this primary
+input file.
+
+``outputs:NNodeOuts`` derives from the length of ``outputs:OutNd`` (a list
+of up to 9 node numbers), and ``outputs:NumOuts`` derives from the length
+of ``outputs:OutList``. Unlike the text format (which tolerates a missing
+or malformed nodal-outputs section by silently disabling it), the YAML
+``nodal_outputs`` section is simply omitted entirely when not needed, and
+its ``BldNd_NumOuts`` similarly derives from ``nodal_outputs:OutList``.
+
+BeamDyn has no inline-input glue path: unlike ElastoDyn/ServoDyn, a
+``BDBldFile`` entry under a glue-code (``.fst``) primary file's
+``input_files`` section is always a path to a separate file (text or
+YAML), never an inlined mapping.
+
+.. code-block:: yaml
+
+   # BeamDyn primary input file (YAML form)
+   simulation_control:
+     Echo: false
+     QuasiStaticInit: false
+     rhoinf: 0
+     quadrature: 2               # 1: Gaussian; 2: Trapezoidal
+     refine: default
+     n_fact: default
+     DTBeam: default
+     load_retries: default
+     NRMax: default
+     stop_tol: default
+     tngt_stf_fd: default
+     tngt_stf_comp: default
+     tngt_stf_pert: default
+     tngt_stf_difftol: default
+     RotStates: true
+
+   geometry_parameter:
+     kp_member: [3]               # one member with 3 key points
+     key_points:
+       - [0.0, 0.0,  0.0, 0.0]    # x, y, z (m), initial twist (deg)
+       - [0.0, 0.0, 25.0, 0.0]
+       - [0.0, 0.0, 50.0, 0.0]
+
+   mesh_parameter:
+     order_elem: 5
+
+   beam_sectional_parameter:
+     BldFile: "beam_props.inp"
+
+   outputs:
+     SumPrint: true
+     OutFmt: "ES16.8E2"
+     OutNd: [1, 7, 14]
+     OutList:
+       - "RootFxr, RootFyr, RootFzr"
+       - "TipTDxr, TipTDyr, TipTDzr"
+
+   nodal_outputs:                # optional
+     BldNd_BlOutNd: "All"
+     OutList:
+       - "N1Fxl,N2Fxl,N3Fxl"

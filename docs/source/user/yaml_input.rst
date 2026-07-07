@@ -228,3 +228,8 @@ supported:
   under ``input_files:MooringFile`` (when ``CompMooring`` selects MoorDyn);
   bathymetry grids, water-kinematics files, stiffness/damping lookup tables,
   and Syrope working-curve files stay referenced by path
+- BeamDyn primary input file (:ref:`beamdyn-yaml-input`), referenced by path
+  from a glue-code deck's ``BDBldFile`` entries (when ``CompElast`` selects
+  ElastoDyn + BeamDyn); BeamDyn has no inline-input glue path, so
+  ``BDBldFile`` is always a file path, never inlined. The blade properties
+  file stays referenced by path.

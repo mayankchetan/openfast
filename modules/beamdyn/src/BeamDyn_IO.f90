@@ -21,6 +21,8 @@ MODULE BeamDyn_IO
    USE BeamDyn_BldNdOuts_IO
    USE BeamDyn_Types
    USE BeamDyn_Subs
+   USE BeamDyn_Yaml, only: BD_ParseYamlFile
+   USE YamlInput, only: IsYamlExt
    USE NWTC_Library
    !USE NWTC_LAPACK
 
@@ -531,7 +533,12 @@ SUBROUTINE BD_ReadInput(InputFileName,InputFileData,OutFileRoot, Default_DT,ErrS
    UnEcho = -1
 
    InputFileData%DTBeam = Default_DT
-   CALL BD_ReadPrimaryFile(InputFileName,InputFileData,OutFileRoot,UnEcho,ErrStat2,ErrMsg2)
+
+   IF ( IsYamlExt( InputFileName ) ) THEN          ! YAML-format input file (.yaml/.yml)
+      CALL BD_ParseYamlFile(InputFileName,InputFileData,OutFileRoot,Default_DT,UnEcho,ErrStat2,ErrMsg2)
+   ELSE                                             ! text-format input file
+      CALL BD_ReadPrimaryFile(InputFileName,InputFileData,OutFileRoot,UnEcho,ErrStat2,ErrMsg2)
+   END IF
       CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
       IF(ErrStat >= AbortErrLev) THEN
          IF (UnEcho > 0) CLOSE (UnEcho)

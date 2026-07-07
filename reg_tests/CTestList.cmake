@@ -733,6 +733,28 @@ yaml_equiv("moordyn" "md_5MW_OC4Semi"   "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;y
 yaml_equiv("moordyn" "md_lineFail"      "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 yaml_equiv("moordyn" "md_VIV"           "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 
+# BeamDyn standalone-driver yaml-equivalence: bd_5MW_dynamic (dynamic solve, GA2 time
+# integration, quadrature=2/Trapezoidal so refine's non-"default" path is live, 9 node
+# outputs + full OutList) and bd_static_cantilever_beam (static/QuasiStaticInit path,
+# quadrature=1/Gaussian, small 3-key-point single-member geometry, 1 node output)
+# together cover both quadrature branches, the "default"-sentinel and explicit-value
+# forms of the simulation_control fields (dynamic case takes "DEFAULT" throughout;
+# static case gives refine/quadrature explicit values), and both NNodeOuts sizes.
+yaml_equiv("beamdyn" "bd_5MW_dynamic"             "${CTEST_BEAMDYN_EXECUTABLE}" "beamdyn;yaml")
+yaml_equiv("beamdyn" "bd_static_cantilever_beam"  "${CTEST_BEAMDYN_EXECUTABLE}" "beamdyn;yaml")
+
+# 5MW_Land_BD_Init: CompElast=2 (ElastoDyn + BeamDyn for blades), CompAero=0,
+# CompServo=0 (no DISCON DLL) -- the cheapest CompElast=2 glue case in r-test, so the
+# BDBldFile-per-blade-file-path conversion (yamlDeckConverter.py's convert_fst) and
+# BeamDyn's read-input funnel are exercised end-to-end through the full glue path in
+# all three modes. BDBldFile itself is never inlined (FAST_Yaml.f90's GetBDBldFiles
+# only ever accepts a list of file paths, in both allyaml and singlefile modes) --
+# consistent with BeamDyn having no PassedFileIsYaml/inline entry point at all (see
+# BeamDyn_Yaml.f90's header comment).
+yaml_equiv_openfast("5MW_Land_BD_Init" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_Land_BD_Init" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_Land_BD_Init" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

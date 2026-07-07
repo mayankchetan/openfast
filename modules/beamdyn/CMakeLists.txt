@@ -21,6 +21,7 @@ endif()
 add_library(beamdynlib STATIC
   src/BeamDyn.f90
   src/BeamDyn_IO.f90
+  src/BeamDyn_Yaml.f90
   src/BeamDyn_BldNdOuts_IO.f90
   src/BeamDyn_Subs.f90
   src/BeamDyn_Types.f90

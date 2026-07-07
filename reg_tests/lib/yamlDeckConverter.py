@@ -586,12 +586,121 @@ def convert_elastodyn(text_path):
     w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
     w('')
 
-    w('nodal_outputs:')
-    w('  BldNd_BladesOut: ' + d.scalar('BldNd_BladesOut'))
-    w('  BldNd_BlOutNd: '   + _as_str(d.scalar('BldNd_BlOutNd')))
-    nd_channels = d.outlist()
-    w('  OutList: [' + ', '.join('"' + c + '"' for c in nd_channels) + ']')
+    # nodal_outputs is optional -- some r-test decks omit the trailing "additional
+    # nodal outputs" section entirely, matching ElastoDyn_Yaml.f90's own tolerate-a-
+    # missing-section fallback (BldNd_NumOuts/BldNd_BladesOut just stay 0 rather than
+    # erroring); only emit the section here when the keyword is actually present in
+    # the remaining, unconsumed text (mirrors BeamDyn_Yaml.f90/convert_beamdyn's
+    # identical optional-section guard)
+    remaining = '\n'.join(d.lines[d.cursor:])
+    if re.search(r'(?i)(?<![A-Za-z0-9_])BldNd_BladesOut(?![A-Za-z0-9_])', remaining):
+        w('nodal_outputs:')
+        w('  BldNd_BladesOut: ' + d.scalar('BldNd_BladesOut'))
+        w('  BldNd_BlOutNd: '   + _as_str(d.scalar('BldNd_BlOutNd')))
+        nd_channels = d.outlist()
+        w('  OutList: [' + ', '.join('"' + c + '"' for c in nd_channels) + ']')
+        w('')
+
+    return '\n'.join(out)
+
+
+def _default_or_bool(tok):
+    """load_retries/NRMax/stop_tol/refine/n_fact/DTBeam/tngt_stf_* (BeamDyn) accept the
+    scalar "default"; the boolean ones (tngt_stf_fd, tngt_stf_comp) still need a valid
+    YAML boolean literal when not defaulted, since BeamDyn_Yaml.f90 reads the raw scalar
+    text back with a plain Fortran logical READ (which accepts true/false/T/F/.TRUE./
+    .FALSE. alike)."""
+    unquoted = _unquote(tok)
+    if unquoted.strip().lower() == 'default':
+        return 'default'
+    return _as_bool(tok)
+
+
+def convert_beamdyn(text_path):
+    """Convert a text-format BeamDyn primary input file to its YAML schema.
+
+    Sections mirror the text file's banners (simulation_control, geometry_parameter,
+    mesh_parameter, beam_sectional_parameter, outputs, nodal_outputs).
+    member_total/kp_total are NOT emitted (list lengths derive them in
+    BeamDyn_Yaml.f90): geometry_parameter:kp_member is the ordered per-member key-point
+    count list (the text format's leading "member number" column is dropped -- it is
+    only ever used by the text reader to warn about out-of-order entry, and a YAML list
+    is unambiguously ordered), and geometry_parameter:key_points is the kp_total x 4
+    (x, y, z, twist) table. BldFile stays a path string (a second-order file: never
+    converted/inlined). NNodeOuts derives from outputs:OutNd's list length. NumOuts and
+    nodal_outputs' BldNd_NumOuts derive from their respective OutList lengths.
+    refine/n_fact/DTBeam/load_retries/NRMax/stop_tol/tngt_stf_fd/tngt_stf_comp/
+    tngt_stf_pert/tngt_stf_difftol all accept the literal scalar "default"/"DEFAULT"."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# BeamDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('simulation_control:')
+    w('  Echo: '             + _as_bool(d.scalar('Echo')))
+    w('  QuasiStaticInit: '  + _as_bool(d.scalar('QuasiStaticInit')))
+    w('  rhoinf: '           + d.scalar('rhoinf'))
+    w('  quadrature: '       + d.scalar('quadrature'))
+    w('  refine: '           + _default_or_num(d.scalar('refine')))
+    w('  n_fact: '           + _default_or_num(d.scalar('n_fact')))
+    w('  DTBeam: '           + _default_or_num(d.scalar('DTBeam')))
+    w('  load_retries: '     + _default_or_num(d.scalar('load_retries')))
+    w('  NRMax: '            + _default_or_num(d.scalar('NRMax')))
+    w('  stop_tol: '         + _default_or_num(d.scalar('stop_tol')))
+    w('  tngt_stf_fd: '      + _default_or_bool(d.scalar('tngt_stf_fd')))
+    w('  tngt_stf_comp: '    + _default_or_bool(d.scalar('tngt_stf_comp')))
+    w('  tngt_stf_pert: '    + _default_or_num(d.scalar('tngt_stf_pert')))
+    w('  tngt_stf_difftol: '+ _default_or_num(d.scalar('tngt_stf_difftol')))
+    w('  RotStates: '        + _as_bool(d.scalar('RotStates')))
     w('')
+
+    w('geometry_parameter:')
+    member_total = int(d.scalar('member_total'))
+    kp_total     = int(d.scalar('kp_total'))
+    # member table: "member_number  kp_count_in_member" pairs, no header line; only the
+    # count (2nd token) survives to YAML (see the docstring above)
+    member_rows = _matrix_rows(d, member_total, 2, skip=0)
+    kp_member = [row[1] for row in member_rows]
+    w('  kp_member: [' + ', '.join(kp_member) + ']')
+    # key-point table: two descriptive header lines, then kp_total rows of x,y,z,twist
+    kp_rows = _matrix_rows(d, kp_total, 4, skip=2)
+    w('  key_points:')
+    for row in kp_rows:
+        w('    - [' + ', '.join(row) + ']')
+    w('')
+
+    w('mesh_parameter:')
+    w('  order_elem: ' + d.scalar('order_elem'))
+    w('')
+
+    w('beam_sectional_parameter:')
+    w('  BldFile: ' + _as_str(d.scalar('BldFile')))
+    w('')
+
+    w('outputs:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    n_node_outs = int(d.scalar('NNodeOuts'))
+    outnd = d.find('OutNd')[:n_node_outs]
+    w('  OutNd: [' + _list_join(outnd) + ']')
+    channels = d.outlist()
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    # nodal_outputs is optional -- some r-test decks (e.g. glue-code BDBldFile targets)
+    # omit the trailing "OutList for Blade node channels" section entirely, matching
+    # the text reader's own tolerate-a-missing-section fallback (BD_ReadPrimaryFile
+    # just leaves BldNd_NumOuts = 0 rather than erroring); only emit the section here
+    # when the keyword is actually present in the remaining, unconsumed text
+    remaining = '\n'.join(d.lines[d.cursor:])
+    if re.search(r'(?i)(?<![A-Za-z0-9_])BldNd_BlOutNd(?![A-Za-z0-9_])', remaining):
+        w('nodal_outputs:')
+        w('  BldNd_BlOutNd: ' + _as_str(d.scalar('BldNd_BlOutNd')))
+        nd_channels = d.outlist()
+        w('  OutList: [' + ', '.join('"' + c + '"' for c in nd_channels) + ']')
+        w('')
 
     return '\n'.join(out)
 
@@ -2355,7 +2464,28 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  EDFile: ' + _as_str(ed_rel))
 
-    w('  BDBldFile: [' + ', '.join(_as_str(x) for x in bd_files) + ']')
+    # BDBldFile (CompElast == 2): unlike EDFile, BeamDyn has no PassedFileIsYaml/
+    # FileInfoType inline entry point at all (BeamDyn_Yaml.f90's InitInputType carries
+    # only a plain file-path InputFile, in both text and YAML -- see FAST_Yaml.f90's
+    # GetBDBldFiles, which only ever accepts a list of file paths). So BDBldFile entries
+    # are never inlined as a nested mapping, even in single-file mode: in both all-yaml
+    # and single-file modes each non-empty entry is converted to a sibling .yaml file
+    # (same directory as the original, so BldFile's relative path inside it keeps
+    # resolving unchanged) and BDBldFile is repointed at that path; perfile mode leaves
+    # the original text paths untouched.
+    convert_bd_files = (comp_elast == 2) and (mode in ('all-yaml', 'single-file'))
+    bd_files_out = []
+    for bd_tok in bd_files:
+        bd_rel = _unquote(bd_tok)
+        if convert_bd_files and bd_rel:
+            bd_abs = os.path.join(base_dir, bd_rel)
+            bd_yaml_text = convert_beamdyn(bd_abs)
+            bd_yaml_rel = os.path.splitext(bd_rel)[0] + '.yaml'
+            extra_files[bd_yaml_rel] = bd_yaml_text
+            bd_files_out.append(_as_str(bd_yaml_rel))
+        else:
+            bd_files_out.append(_as_str(bd_rel))
+    w('  BDBldFile: [' + ', '.join(bd_files_out) + ']')
 
     convert_inflow = (comp_inflow == 1) and (mode in ('all-yaml', 'single-file'))
     inflow_rel = _unquote(inflow_file_tok)
