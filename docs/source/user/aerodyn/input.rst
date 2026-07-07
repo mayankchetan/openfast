@@ -588,6 +588,175 @@ complete list of possible output parameters.
 
 .. include:: ADNodalOutputs.rst
 
+.. _aerodyn-yaml-input:
+
+YAML input file
+----------------
+
+The AeroDyn primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); see :ref:`yaml_input` for the conventions shared by all modules.
+Parameters keep their documented names, grouped into sections that mirror the
+text format's banners: ``general`` (``Echo`` through ``AA_InputFile``),
+``environmental_conditions``, ``bemt_options``, ``dbemt_options``,
+``olaf_options`` (``OLAFInputFileName``), ``unsteady_aero_options``,
+``airfoil_info`` (including ``AFNames``), ``rotor_blade_properties``
+(``UseBlCm`` and ``ADBlFile``), ``hub_properties``, ``nacelle_properties``,
+``tail_fin_aerodynamics``, ``tower_influence``, ``outputs`` (``SumPrint``,
+``BlOutNd``, ``TwOutNd``), ``output_channels`` (``OutList``), and
+``nodal_outputs``.
+
+Second-order files stay path strings, resolved relative to the primary input
+file, and are never converted or inlined: ``AA_InputFile`` (AeroAcoustics),
+``OLAFInputFileName`` (OLAF/FVW -- OLAF's own parameters live entirely in that
+separate file), ``AFNames`` (one airfoil-polar file per entry), ``ADBlFile``
+(one per-blade AeroDyn blade file per entry), and ``TFinFile`` (tail-fin
+aerodynamics, one per rotor).
+
+Counted lists/tables (``AFNames``, ``ADBlFile``, ``tower_influence``'s
+``tower_nodes``, ``outputs:BlOutNd``/``TwOutNd``, ``output_channels:OutList``,
+``nodal_outputs:BldNd_OutList``) derive their counts (``NumAFfiles``,
+``NumTwrNds``, ``NBlOuts``, ``NTwOuts``, ``NumOuts``, ``BldNd_NumOuts``) from
+list length; they are never themselves YAML keys. ``BlOutNd``/``TwOutNd`` are
+clamped (with a warning, not fatal, matching the text format) to at most 9
+entries.
+
+``hub_properties``, ``nacelle_properties``, ``tail_fin_aerodynamics``, and
+``tower_influence`` are themselves YAML lists with exactly one entry per
+rotor -- the rotor count is supplied by the driver/glue code (as in the text
+format), never read from the file itself; each ``tower_influence`` entry
+holds its own ``tower_nodes`` table (a list of mappings keyed
+``TwrElev``/``TwrDiam``/``TwrCd``/``TwrTI``/``TwrCb``/``TwrCp``/``TwrCa``).
+
+Several fields accept the literal scalar ``default`` exactly like ``DEFAULT``
+in the text format: ``DTAero`` (falls back to the glue-code/driver timestep),
+``AirDens``/``KinVisc``/``SpdSound``/``Patm``/``Pvap`` (fall back to the
+driver's default fluid properties), and several ``bemt_options`` fields
+(``SkewRedistr_Mod``, ``SkewRedistrFactor``, ``IndToler``,
+``SectAvgWeighting``, ``SectAvgNPoints``, ``SectAvgPsiBwd``,
+``SectAvgPsiFwd``).
+
+``nodal_outputs:BldNd_BlOutNd`` is carried as a quoted string, exactly as the
+text format's raw fallback, since its legal values (``"ALL"``, ``"Tip"``,
+``"Root"``, or a list of node numbers) are resolved downstream, not by the
+YAML parser itself.
+
+Legacy-only keys (``WakeMod``, ``AFAeroMod``, ``SkewMod``, ``FrozenWake``,
+``UAMod``, and the ``SkewModFactor`` alias for ``SkewRedistrFactor``) have no
+YAML equivalent; only the current key names are recognized.
+
+.. code-block:: yaml
+
+   # AeroDyn primary input file (YAML form; abridged)
+   general:
+     Echo: false
+     DTAero: default
+     Wake_Mod: 1
+     TwrPotent: 0
+     TwrShadow: 1
+     TwrAero: false
+     CavitCheck: false
+     NacelleDrag: false
+     CompAA: false
+     AA_InputFile: "AeroAcousticsInput.dat"
+
+   environmental_conditions:
+     AirDens: default
+     KinVisc: default
+     SpdSound: default
+     Patm: default
+     Pvap: default
+
+   bemt_options:
+     BEM_Mod: 1
+     Skew_Mod: 0
+     SkewMomCorr: false
+     SkewRedistr_Mod: default
+     SkewRedistrFactor: default
+     TipLoss: true
+     HubLoss: true
+     TanInd: true
+     AIDrag: true
+     TIDrag: true
+     IndToler: default
+     MaxIter: 100
+     SectAvg: false
+     SectAvgWeighting: 1
+     SectAvgNPoints: default
+     SectAvgPsiBwd: default
+     SectAvgPsiFwd: default
+
+   dbemt_options:
+     DBEMT_Mod: 0
+     tau1_const: 20
+
+   olaf_options:
+     OLAFInputFileName: "OLAF.dat"   # only read when Wake_Mod=3; stays a path
+
+   unsteady_aero_options:
+     AoA34: false
+     UA_Mod: 0
+     FLookup: true
+     IntegrationMethod: 3
+     UAStartRad: 0
+     UAEndRad: 1
+
+   airfoil_info:
+     AFTabMod: 1
+     InCol_Alfa: 1
+     InCol_Cl: 2
+     InCol_Cd: 3
+     InCol_Cm: 4
+     InCol_Cpmin: 0
+     AFNames: ["Airfoils/BAR0_Polar_00.dat", "Airfoils/BAR0_Polar_01.dat"]   # one per airfoil
+
+   rotor_blade_properties:
+     UseBlCm: true
+     ADBlFile: ["Blade.dat", "Blade.dat", "Blade.dat"]   # one per blade, all rotors concatenated
+
+   hub_properties:
+     - VolHub: 0
+       HubCenBx: 0
+
+   nacelle_properties:
+     - VolNac: 0
+       NacCenB: [0.0, 0.0, 0.0]
+       NacArea: [0, 0, 0]
+       NacCd: [0, 0, 0]
+       NacDragAC: [0, 0, 0]
+
+   tail_fin_aerodynamics:
+     - TFinAero: false
+       TFinFile: "unused"
+
+   tower_influence:
+     - tower_nodes:
+       - TwrElev: 0.0
+         TwrDiam: 8.5
+         TwrCd: 1.0
+         TwrTI: 0.1
+         TwrCb: 0.0
+         TwrCp: 0.0
+         TwrCa: 0.0
+       # ... one mapping per tower node ...
+
+   outputs:
+     SumPrint: false
+     BlOutNd: []
+     TwOutNd: []
+
+   output_channels:
+     OutList: [RtAeroCp, RtAeroCq, RtAeroCt, RtAeroPwr, RtSpeed, RtTSR]
+
+   nodal_outputs:
+     BldNd_BladesOut: 1
+     BldNd_BlOutNd: "ALL"
+     BldNd_OutList: [Fx, Fy, Vx, Vy]
+
+AeroDyn's input file may also be given inline under an OpenFAST primary
+(.fst) file's ``input_files:AeroFile`` (only legal when ``CompAero`` selects
+AeroDyn; see :ref:`yaml_input`). Airfoil, blade, tailfin, AeroAcoustics, and
+OLAF files always stay referenced by path.
+
 
 Tail fin outputs
 ~~~~~~~~~~~~~~~~

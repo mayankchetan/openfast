@@ -109,17 +109,18 @@ the inlined sections accordingly.
 
 Formats mix freely: one deck may combine text files, YAML files, and inline
 sections. Inline input is available for modules whose YAML schema exists
-(currently InflowWind; AeroDisk when ``CompAero`` selects AeroDisk;
-Simplified ElastoDyn when ``CompElast`` selects it; ServoDyn when
+(currently InflowWind; AeroDisk or AeroDyn when ``CompAero`` selects one of
+them; Simplified ElastoDyn when ``CompElast`` selects it; ServoDyn when
 ``CompServo`` selects it; SeaState when ``CompSeaSt`` selects it; and
 HydroDyn when ``CompHydro`` selects it); an inline mapping for any other
-module -- or for ``AeroFile``/``EDFile`` when the corresponding switch selects
-a module without a YAML schema (AeroDyn, or ElastoDyn) -- is a clear fatal
-error suggesting a file path instead. Combined with ``!include`` and anchors,
-this supports fully single-file models. Second-order files (e.g. Structural
-Control files under ServoDyn, or potential-flow data under HydroDyn) are
-never inlined: they stay referenced by path, in text or YAML form (the
-binary/tabular potential-flow data files themselves are always text).
+module -- or for ``EDFile`` when ``CompElast`` selects a module without a
+YAML schema (ElastoDyn) -- is a clear fatal error suggesting a file path
+instead. Combined with ``!include`` and anchors, this supports fully
+single-file models. Second-order files (e.g. Structural Control files under
+ServoDyn, potential-flow data under HydroDyn, or AeroDyn's
+airfoil/blade/tailfin/AeroAcoustics/OLAF files) are never inlined: they stay
+referenced by path, in text or YAML form (the binary/tabular potential-flow
+data files themselves are always text).
 
 OpenFAST primary file (.fst)
 ----------------------------
@@ -209,3 +210,6 @@ supported:
 - HydroDyn primary input file (:ref:`hydrodyn-yaml-input`), including inline
   use under ``input_files:HydroFile`` (when ``CompHydro`` selects HydroDyn);
   potential-flow data files (``PotFile``/``GeoFile``) stay referenced by path
+- AeroDyn primary input file (:ref:`aerodyn-yaml-input`), including inline use
+  under ``input_files:AeroFile`` (when ``CompAero`` selects AeroDyn); airfoil,
+  blade, tailfin, AeroAcoustics, and OLAF files stay referenced by path

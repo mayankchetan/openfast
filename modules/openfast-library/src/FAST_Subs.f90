@@ -691,6 +691,15 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
          Init%InData_AD%CompAeroMaps       = p_FAST%CompAeroMaps
          Init%InData_AD%rotors(iRot)%RotSpeed = p_FAST%RotSpeedInit ! used only for aeromaps
          Init%InData_AD%InputFile          = p_FAST%AeroFile
+         ! inline AeroDyn input from a YAML primary file (input_files:AeroFile)
+         Init%InData_AD%UsePrimaryInputFile = .not. m_FAST%ADIsInline
+         IF ( m_FAST%ADIsInline ) THEN
+            Init%InData_AD%PassedFileIsYaml = .TRUE.
+            CALL NWTC_Library_CopyFileInfoType( m_FAST%ADInlineFileInfo, Init%InData_AD%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+            if (Failed()) return
+         ELSE
+            Init%InData_AD%PassedFileIsYaml = .FALSE.   ! Init%InData_AD is reused across the rotor loop
+         END IF
          Init%InData_AD%RootName           = p_FAST%OutFileRoot
          Init%InData_AD%MHK                = p_FAST%MHK
          Init%InData_AD%CompSeaSt          = p_FAST%CompSeaSt /= Module_None

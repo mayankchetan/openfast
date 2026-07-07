@@ -14,6 +14,7 @@
       simple-elastodyn - standalone Simplified ElastoDyn (SED) driver case.
       seastate        - standalone SeaState driver case.
       hydrodyn        - standalone HydroDyn driver case.
+      aerodyn         - standalone AeroDyn driver case.
       openfast        - full glue-code (.fst) case; requires a mode (per-file |
                         all-yaml | single-file) selecting how convert_fst() should
                         transform input_files:InflowFile / input_files:AeroFile /
@@ -56,7 +57,7 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "openfast"):
+if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "openfast"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
 
 
@@ -456,6 +457,102 @@ elif module == "hydrodyn":
     ### run both
     for d in (textDir, yamlDir):
         returnCode = openfastDrivers.runHydrodynDriverCase(os.path.join(d, DRIVER), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+elif module == "aerodyn":
+    #### aerodyn (standalone driver) case #############################################
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+
+    # Unlike SeaState/HydroDyn, every r-test AeroDyn driver case shares the same driver
+    # file name (ad_driver.dvr) and primary-file keyword ("AeroFile"), but the primary
+    # filename itself still varies per case, so it is discovered rather than hardcoded
+    # (mirrors executeAerodynRegressionCase.py's own handling).
+    # *.csv covers cases (e.g. ad_BAR_RNAMotion) that prescribe rotor/pitch/yaw motion
+    # via CreateMotion.py-generated CSV files referenced from the driver file.
+    INPUT_GLOBS = ("*.dat", "*.inp", "*.dvr", "*.csv")
+    DRIVER = "ad_driver.dvr"
+    OUTPUT = "ad_driver.outb"
+
+    # BAR-baseline cases reference shared airfoil/blade files by a relative path that
+    # climbs out of the case directory ("../BAR_Baseline/..."); stage it once at the
+    # same relative depth executeAerodynRegressionCase.py uses (a sibling of each
+    # staged case directory under buildDirectory), so those paths keep resolving.
+    dirToCopy = "BAR_Baseline"
+    buildDirectoryBAR = os.path.join(buildDirectory, dirToCopy)
+    if not os.path.isdir(buildDirectoryBAR):
+        srcDataDir = os.path.join(moduleDirectory, dirToCopy)
+        if os.path.isdir(srcDataDir):
+            rtl.copyTree(srcDataDir, buildDirectoryBAR)
+
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit at the same depth as a normally-staged case so that relative
+        paths in the inputs (e.g. ../BAR_Baseline/...) resolve identically."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        return d
+
+    def findPrimaryBaseName(driverText, driverPath):
+        m = re.search(r'(?im)^\s*("[^"]*"|\'[^\']*\'|\S+)\s+AeroFile\b', driverText)
+        if m is None:
+            rtl.exitWithError("Could not find 'AeroFile' entry in {}.".format(driverPath))
+        return os.path.basename(yamlDeckConverter._unquote(m.group(1)))
+
+    def findNumTurbines(driverText):
+        m = re.search(r'(?im)^\s*(\d+)\s+NumTurbines\b', driverText)
+        return int(m.group(1)) if m is not None else 1
+
+    def findNumBladesTotal(driverText, nTurbines):
+        """Sum the driver's per-turbine NumBlades(i) entries (the same values the
+        driver passes to AD_Init as InitInp NumBlades -- rotors may have fewer than 3
+        blades, e.g. ad_QuadRotor_OLAF's 0-bladed 5th turbine). Basic-format or
+        single-rotor drivers may carry a plain NumBlades or none at all; default 3 per
+        turbine then (all such r-test cases are 3-bladed)."""
+        vals = re.findall(r'(?im)^\s*(\d+)\s+NumBlades(?:\(\d+\))?\b', driverText)
+        if len(vals) == nTurbines:
+            return sum(int(v) for v in vals)
+        return 3 * nTurbines
+
+    ### text variant
+    textDir = stage("text")
+
+    ### yaml variant: discover the primary filename from the driver file, convert it,
+    ### repoint the driver at the new .yaml file
+    yamlDir = stage("yaml")
+    driverFile = os.path.join(yamlDir, DRIVER)
+    with open(driverFile) as f:
+        driverText = f.read()
+
+    nTurbines = findNumTurbines(driverText)
+    nBladesTotal = findNumBladesTotal(driverText, nTurbines)
+    primaryBase = findPrimaryBaseName(driverText, driverFile)
+    yamlPrimaryBase = os.path.splitext(primaryBase)[0] + ".yaml"
+    yamlText = yamlDeckConverter.convert_aerodyn(os.path.join(yamlDir, primaryBase),
+                                                 n_rotors=nTurbines, num_blades_total=nBladesTotal)
+    with open(os.path.join(yamlDir, yamlPrimaryBase), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, primaryBase))
+
+    if primaryBase not in driverText:
+        rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, primaryBase))
+    with open(driverFile, "w") as f:
+        f.write(driverText.replace(primaryBase, yamlPrimaryBase))
+
+    ### run both
+    for d in (textDir, yamlDir):
+        returnCode = openfastDrivers.runAerodynDriverCase(os.path.join(d, DRIVER), executable)
         if returnCode != 0:
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 

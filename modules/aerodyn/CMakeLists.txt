@@ -50,6 +50,7 @@ target_link_libraries(aeroacousticslib basicaerolib nwtclibs)
 
 # AeroDyn Library
 add_library(aerodynlib STATIC
+  src/AeroDyn_Yaml.f90
   src/AeroDyn.f90
   src/AeroDyn_IO_Params.f90
   src/AeroDyn_IO.f90

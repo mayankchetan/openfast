@@ -15,6 +15,7 @@
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
         convert_stc(text_path) -> str           (YAML document)
         convert_hydrodyn(text_path) -> str      (YAML document)
+        convert_aerodyn(text_path, n_rotors) -> str  (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -861,6 +862,35 @@ def _matrix_rows(d, nrows, ncols, skip=0):
     return rows
 
 
+def _bare_lines(d, n):
+    """Return the next `n` non-comment/blank lines' first value token each -- bare,
+    unlabeled continuation entries (AeroDyn's AFNames/ADBlFile lines after the first,
+    read via ParseVar with an empty keyname, so there is no keyword to search for)."""
+    vals = []
+    while len(vals) < n:
+        if d.cursor >= len(d.lines):
+            raise ValueError('_bare_lines: ran out of lines in {} before collecting {} entr(ies)'.format(
+                d.path, n))
+        raw = d.lines[d.cursor]
+        d.cursor += 1
+        if _is_comment_or_blank(raw):
+            continue
+        stripped = _strip_inline_comment(raw).strip()
+        m = re.match(r'"[^"]*"|\'[^\']*\'|\S+', stripped)
+        if m is None:
+            continue
+        vals.append(m.group(0))
+    return vals
+
+
+def _ed_num_blades(text_path):
+    """Read NumBl (blade count) from an ElastoDyn or Simplified ElastoDyn primary file --
+    used by convert_fst to tell convert_aerodyn the true per-rotor blade count (AeroDyn's
+    own primary file never carries it; the Fortran glue code supplies it from ElastoDyn's
+    own initialization output)."""
+    return int(_TextDeck(text_path).scalar('NumBl'))
+
+
 def _row_map(keys, toks, indent='    '):
     """One YAML block-mapping table row ("- Key1: val1\\n  Key2: val2\\n..."), using
     only as many of `keys` as `toks` supplies (fewer toks than keys means the trailing
@@ -1325,6 +1355,229 @@ def _indent_block(text, prefix):
     return '\n'.join((prefix + line) if line.strip() else '' for line in lines)
 
 
+# AeroDyn's Rotor/Blade Properties section never repeats a "MaxBl" count keyword; the
+# text format always reads exactly max(MaxBl, sum(NumBlades)) ADBlFile lines (MaxBl == 3,
+# AeroDyn_IO_Params.f90), regardless of the true blade count. Every r-test AeroDyn primary
+# file uses conventional 3-bladed rotors, so this matches sum(NumBlades) exactly for all
+# supported cases; the true blade count is otherwise not recoverable from the primary
+# file alone (it is supplied externally by the driver/glue code).
+_AD_MAXBL = 3
+
+_AD_TWR_KEYS = ('TwrElev', 'TwrDiam', 'TwrCd', 'TwrTI', 'TwrCb', 'TwrCp', 'TwrCa')
+
+
+def convert_aerodyn(text_path, n_rotors=1, num_blades_total=None):
+    """Convert a text-format AeroDyn primary input file to its YAML schema
+    (modules/aerodyn/src/AeroDyn_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners (general, environmental_conditions,
+    bemt_options, dbemt_options, olaf_options, unsteady_aero_options, airfoil_info,
+    rotor_blade_properties, hub_properties, nacelle_properties,
+    tail_fin_aerodynamics, tower_influence, outputs, output_channels, nodal_outputs).
+    Legacy-only keys (WakeMod, AFAeroMod, SkewMod, FrozenWake, UAMod, and the
+    "SkewModFactor" alias) have no YAML equivalent and are skipped; every r-test
+    AeroDyn primary file already uses the current key names.
+
+    Airfoil/blade/tailfin/AeroAcoustics/OLAF files stay path strings (never inlined).
+    NumAFfiles/NumTwrNds/NBlOuts/NTwOuts/NumOuts/BldNd_NumOuts are all consumed here
+    only to know how many entries/rows to read, and are never themselves emitted
+    (AeroDyn_Yaml.f90 derives them back from list length).
+
+    `n_rotors`: the rotor count, needed because hub_properties/nacelle_properties/
+    tail_fin_aerodynamics/tower_influence each repeat once per rotor in the text format,
+    and NumBlades/rotor-count is supplied externally by the driver/glue code, never read
+    from the AeroDyn primary file itself. The .fst converter passes its own NRotors;
+    callers converting a standalone AeroDyn-driver case that know the driver's turbine
+    count should pass it explicitly too (default 1 covers the common single-rotor case).
+
+    `num_blades_total`: the true blade count summed across all rotors (AeroDyn's own
+    NumBlades is likewise supplied externally, from ElastoDyn's NumBl -- it is never read
+    from the AeroDyn primary file). The text format always reads exactly
+    max(MaxBl=3, num_blades_total) ADBlFile lines regardless of the true blade count, so
+    the converter must know the true count to correctly drop unused padding lines (e.g. a
+    2-bladed turbine still has 3 ADBlFile lines in the text file, but only the first 2 are
+    ever used -- the .fst converter passes ElastoDyn's own NumBl; the default (None -> 3 *
+    n_rotors) covers the common 3-bladed-rotor case, e.g. the standalone-driver
+    equivalence tests' BAR-turbine cases)."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# AeroDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- general -----------------------------------------------------
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  DTAero: ' + _default_or_num(d.scalar('DTAero')))
+    w('  Wake_Mod: ' + d.scalar('Wake_Mod'))
+    w('  TwrPotent: ' + d.scalar('TwrPotent'))
+    w('  TwrShadow: ' + d.scalar('TwrShadow'))
+    w('  TwrAero: ' + _as_bool(d.scalar('TwrAero')))
+    w('  CavitCheck: ' + _as_bool(d.scalar('CavitCheck')))
+    w('  NacelleDrag: ' + _as_bool(d.scalar('NacelleDrag')))
+    w('  CompAA: ' + _as_bool(d.scalar('CompAA')))
+    w('  AA_InputFile: ' + _as_str(d.scalar('AA_InputFile')))
+    w('')
+
+    #-------------------- environmental_conditions -------------------------------------
+    w('environmental_conditions:')
+    w('  AirDens: ' + _default_or_num(d.scalar('AirDens')))
+    w('  KinVisc: ' + _default_or_num(d.scalar('KinVisc')))
+    w('  SpdSound: ' + _default_or_num(d.scalar('SpdSound')))
+    w('  Patm: ' + _default_or_num(d.scalar('Patm')))
+    w('  Pvap: ' + _default_or_num(d.scalar('Pvap')))
+    w('')
+
+    #-------------------- bemt_options --------------------------------------------------
+    # consume the BEMT section banner explicitly: its own bracketed usage note ("[unused
+    # when Wake_Mod=0 or 3, except for BEM_Mod]") mentions "BEM_Mod" ahead of the actual
+    # data line, which would otherwise collide with the literal-substring keyword search
+    d.find('Momentum Theory Options')
+    w('bemt_options:')
+    w('  BEM_Mod: ' + d.scalar('BEM_Mod'))
+    w('  Skew_Mod: ' + d.scalar('Skew_Mod'))
+    w('  SkewMomCorr: ' + _as_bool(d.scalar('SkewMomCorr')))
+    w('  SkewRedistr_Mod: ' + _default_or_num(d.scalar('SkewRedistr_Mod')))
+    w('  SkewRedistrFactor: ' + _default_or_num(d.scalar('SkewRedistrFactor')))
+    w('  TipLoss: ' + _as_bool(d.scalar('TipLoss')))
+    w('  HubLoss: ' + _as_bool(d.scalar('HubLoss')))
+    w('  TanInd: ' + _as_bool(d.scalar('TanInd')))
+    w('  AIDrag: ' + _as_bool(d.scalar('AIDrag')))
+    w('  TIDrag: ' + _as_bool(d.scalar('TIDrag')))
+    w('  IndToler: ' + _default_or_num(d.scalar('IndToler')))
+    w('  MaxIter: ' + d.scalar('MaxIter'))
+    w('  SectAvg: ' + _as_bool(d.scalar('SectAvg')))
+    w('  SectAvgWeighting: ' + _default_or_num(d.scalar('SectAvgWeighting')))
+    w('  SectAvgNPoints: ' + _default_or_num(d.scalar('SectAvgNPoints')))
+    w('  SectAvgPsiBwd: ' + _default_or_num(d.scalar('SectAvgPsiBwd')))
+    w('  SectAvgPsiFwd: ' + _default_or_num(d.scalar('SectAvgPsiFwd')))
+    w('')
+
+    #-------------------- dbemt_options --------------------------------------------------
+    w('dbemt_options:')
+    w('  DBEMT_Mod: ' + d.scalar('DBEMT_Mod'))
+    w('  tau1_const: ' + d.scalar('tau1_const'))
+    w('')
+
+    #-------------------- olaf_options -----------------------------------------------
+    w('olaf_options:')
+    w('  OLAFInputFileName: ' + _as_str(d.scalar('OLAFInputFileName')))
+    w('')
+
+    #-------------------- unsteady_aero_options ----------------------------------------
+    w('unsteady_aero_options:')
+    w('  AoA34: ' + _as_bool(d.scalar('AoA34')))
+    w('  UA_Mod: ' + d.scalar('UA_Mod'))
+    w('  FLookup: ' + _as_bool(d.scalar('FLookup')))
+    w('  IntegrationMethod: ' + d.scalar('IntegrationMethod'))
+    w('  UAStartRad: ' + d.scalar('UAStartRad'))
+    w('  UAEndRad: ' + d.scalar('UAEndRad'))
+    w('')
+
+    #-------------------- airfoil_info --------------------------------------------------
+    w('airfoil_info:')
+    w('  AFTabMod: ' + d.scalar('AFTabMod'))
+    w('  InCol_Alfa: ' + d.scalar('InCol_Alfa'))
+    w('  InCol_Cl: ' + d.scalar('InCol_Cl'))
+    w('  InCol_Cd: ' + d.scalar('InCol_Cd'))
+    w('  InCol_Cm: ' + d.scalar('InCol_Cm'))
+    w('  InCol_Cpmin: ' + d.scalar('InCol_Cpmin'))
+    n_af = int(d.scalar('NumAFfiles'))
+    af_first = d.find('AFNames')[0]
+    af_rest = _bare_lines(d, n_af - 1) if n_af > 1 else []
+    af_toks = [af_first] + af_rest
+    w('  AFNames: [' + ', '.join(_as_str(t) for t in af_toks) + ']')
+    w('')
+
+    #-------------------- rotor_blade_properties ---------------------------------------
+    w('rotor_blade_properties:')
+    w('  UseBlCm: ' + _as_bool(d.scalar('UseBlCm')))
+    if num_blades_total is None:
+        num_blades_total = _AD_MAXBL * n_rotors
+    n_blade_lines = max(_AD_MAXBL, num_blades_total)
+    adbl_first = d.find('ADBlFile')[0]
+    adbl_rest = _bare_lines(d, n_blade_lines - 1) if n_blade_lines > 1 else []
+    adbl_toks = ([adbl_first] + adbl_rest)[:num_blades_total]
+    w('  ADBlFile: [' + ', '.join(_as_str(t) for t in adbl_toks) + ']')
+    w('')
+
+    #-------------------- hub_properties / nacelle_properties / tail_fin_aerodynamics /
+    #-------------------- tower_influence (one entry per rotor) ------------------------
+    w('hub_properties:')
+    for _ in range(n_rotors):
+        w('  - VolHub: ' + d.scalar('VolHub'))
+        w('    HubCenBx: ' + d.scalar('HubCenBx'))
+    w('')
+
+    w('nacelle_properties:')
+    for _ in range(n_rotors):
+        w('  - VolNac: ' + d.scalar('VolNac'))
+        w('    NacCenB: [' + _list_join(d.find('NacCenB')[:3]) + ']')
+        w('    NacArea: [' + _list_join(d.find('NacArea')[:3]) + ']')
+        w('    NacCd: [' + _list_join(d.find('NacCd')[:3]) + ']')
+        w('    NacDragAC: [' + _list_join(d.find('NacDragAC')[:3]) + ']')
+    w('')
+
+    w('tail_fin_aerodynamics:')
+    for _ in range(n_rotors):
+        w('  - TFinAero: ' + _as_bool(d.scalar('TFinAero')))
+        w('    TFinFile: ' + _as_str(d.scalar('TFinFile')))
+    w('')
+
+    w('tower_influence:')
+    for _ in range(n_rotors):
+        n_twr = int(d.scalar('NumTwrNds'))
+        # the two header/units lines are always present, even when NumTwrNds==0
+        twr_rows = _matrix_rows(d, n_twr, 7, skip=2)
+        if n_twr > 0:
+            w('  - tower_nodes:')
+            for row in twr_rows:
+                w(_row_map(_AD_TWR_KEYS, row, indent='    '))
+        else:
+            w('  - tower_nodes: []')
+    w('')
+
+    #-------------------- outputs / output_channels ------------------------------------
+    w('outputs:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    n_bl_outs = int(d.scalar('NBlOuts'))
+    w('  BlOutNd: [' + _list_join(d.find('BlOutNd')[:n_bl_outs]) + ']')
+    n_tw_outs = int(d.scalar('NTwOuts'))
+    w('  TwOutNd: [' + _list_join(d.find('TwOutNd')[:n_tw_outs]) + ']')
+    w('')
+
+    w('output_channels:')
+    channels = d.outlist('OutList')
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    #-------------------- nodal_outputs -------------------------------------------------
+    # The text path tolerates a completely missing Nodal Outputs section (legacy files:
+    # ParsePrimaryFileInfo's FailedNodal degrades to BldNd_BladesOut=0/BldNd_NumOuts=0
+    # with a warning). The YAML schema requires the section, so when the text deck omits
+    # it, emit the explicit equivalent of that degrade: 0 blades out + an empty channel
+    # list (BldNd_BlOutNd is never parsed downstream when BldNd_BladesOut<=0, so "ALL"
+    # is an inert placeholder).
+    w('nodal_outputs:')
+    has_nodal = any(_tokens_before_keyword(line, 'BldNd_BladesOut') is not None
+                    for line in d.lines[d.cursor:])
+    if has_nodal:
+        w('  BldNd_BladesOut: ' + d.scalar('BldNd_BladesOut'))
+        bl_outnd_toks = d.find('BldNd_BlOutNd')
+        bl_outnd_val = ', '.join(t.rstrip(',') for t in bl_outnd_toks)
+        w('  BldNd_BlOutNd: ' + _as_str(bl_outnd_val))
+        nodal_channels = d.outlist('OutList_Nodal')
+        w('  BldNd_OutList: [' + ', '.join('"' + c + '"' for c in nodal_channels) + ']')
+    else:
+        w('  BldNd_BladesOut: 0')
+        w('  BldNd_BlOutNd: "ALL"')
+        w('  BldNd_OutList: []')
+    w('')
+
+    return '\n'.join(out)
+
+
 def convert_fst(text_path, mode='per-file'):
     """Convert a text-format OpenFAST primary (.fst) input file to its YAML schema
     (modules/openfast-library/src/FAST_Yaml.f90 is the source of truth).
@@ -1333,19 +1586,21 @@ def convert_fst(text_path, mode='per-file'):
       'per-file'    - all module input file entries stay as paths to the original
                       (text) files, unchanged.
       'all-yaml'    - same, but the referenced InflowWind file (if CompInflow == 1),
-                      AeroDisk file (if CompAero == 1), EDFile (if CompElast == 3, i.e.
-                      Simplified ElastoDyn), ServoFile (if CompServo == 1, including
-                      its referenced StC sub-files as their own .yaml file type),
-                      SeaStFile (if CompSeaSt == 1), and/or HydroFile (if CompHydro == 1;
-                      its referenced PotFile/GeoFile potential-flow data stay paths) are
+                      AeroDisk or AeroDyn file (if CompAero == 1 or 2 respectively;
+                      AeroDyn's airfoil/blade/tailfin/AeroAcoustics/OLAF files stay
+                      paths), EDFile (if CompElast == 3, i.e. Simplified ElastoDyn),
+                      ServoFile (if CompServo == 1, including its referenced StC
+                      sub-files as their own .yaml file type), SeaStFile (if
+                      CompSeaSt == 1), and/or HydroFile (if CompHydro == 1; its
+                      referenced PotFile/GeoFile potential-flow data stay paths) are
                       ALSO converted to YAML and their input_files entries are repointed
                       at the new .yaml files. Other module files stay as text paths.
-      'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk input
-                      (if CompAero == 1), the EDFile input (if CompElast == 3), the
-                      ServoFile input (if CompServo == 1; its StC sub-files stay
-                      referenced by path -- StC input is never inlined), the SeaStFile
-                      input (if CompSeaSt == 1), and/or the HydroFile input (if
-                      CompHydro == 1) are inlined as a nested mapping under
+      'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk or AeroDyn
+                      input (if CompAero == 1 or 2 respectively), the EDFile input (if
+                      CompElast == 3), the ServoFile input (if CompServo == 1; its StC
+                      sub-files stay referenced by path -- StC input is never inlined),
+                      the SeaStFile input (if CompSeaSt == 1), and/or the HydroFile
+                      input (if CompHydro == 1) are inlined as a nested mapping under
                       input_files:InflowFile / input_files:AeroFile / input_files:EDFile
                       / input_files:ServoFile / input_files:SeaStFile /
                       input_files:HydroFile (the uniform value rule: a mapping value is
@@ -1511,9 +1766,10 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  InflowFile: ' + _as_str(inflow_rel))
 
-    convert_aero = (comp_aero == 1) and (mode in ('all-yaml', 'single-file'))
+    convert_aerodisk_file = (comp_aero == 1) and (mode in ('all-yaml', 'single-file'))
+    convert_aerodyn_file  = (comp_aero == 2) and (mode in ('all-yaml', 'single-file'))
     aero_rel = _unquote(aero_file)
-    if convert_aero:
+    if convert_aerodisk_file:
         aero_abs = os.path.join(base_dir, aero_rel)
         adsk_yaml_text = convert_aerodisk(aero_abs)
         if mode == 'single-file':
@@ -1527,6 +1783,29 @@ def convert_fst(text_path, mode='per-file'):
             adsk_yaml_rel = os.path.splitext(aero_rel)[0] + '.yaml'
             extra_files[adsk_yaml_rel] = adsk_yaml_text
             w('  AeroFile: ' + _as_str(adsk_yaml_rel))
+    elif convert_aerodyn_file:
+        aero_abs = os.path.join(base_dir, aero_rel)
+        # AeroDyn's Hub/Nacelle/TailFin/Tower sections repeat once per rotor; NRotors
+        # is already known here (read from the .fst above), so pass it through.
+        # Likewise, the true blade count (needed to drop unused ADBlFile padding lines
+        # for turbines with fewer than MaxBl=3 blades) comes from each rotor's own
+        # ElastoDyn NumBl -- never from the AeroDyn primary file, exactly as the
+        # Fortran glue code supplies it.
+        num_blades_total = _ed_num_blades(os.path.join(base_dir, ed_rel))
+        for (r_ed, _r_bd, _r_serv) in rotors_extra:
+            num_blades_total += _ed_num_blades(os.path.join(base_dir, _unquote(r_ed)))
+        ad_yaml_text = convert_aerodyn(aero_abs, n_rotors=n_rotors, num_blades_total=num_blades_total)
+        if mode == 'single-file':
+            w('  AeroFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under AeroFile:
+            ad_lines = ad_yaml_text.split('\n')
+            ad_body = '\n'.join(ad_lines[2:]) if len(ad_lines) > 2 else ad_yaml_text
+            w(_indent_block(ad_body, '    '))
+        else:  # all-yaml
+            ad_yaml_rel = os.path.splitext(aero_rel)[0] + '.yaml'
+            extra_files[ad_yaml_rel] = ad_yaml_text
+            w('  AeroFile: ' + _as_str(ad_yaml_rel))
     else:
         w('  AeroFile: ' + _as_str(aero_rel))
 

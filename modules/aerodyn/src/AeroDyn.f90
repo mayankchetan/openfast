@@ -24,6 +24,8 @@ module AeroDyn
    use NWTC_Library
    use AeroDyn_Types
    use AeroDyn_IO
+   use AeroDyn_Yaml
+   use YamlInput, only: IsYamlExt
    use BEMT
    use AirfoilInfo
    use NWTC_LAPACK
@@ -336,21 +338,36 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
       ! -----------------------------------------------------------------
       ! Read the primary AeroDyn input file, or copy from passed input
    if (InitInp%UsePrimaryInputFile) then
-      ! Read the entire input file, minus any comment lines, into the FileInfo_In
-      ! data structure in memory for further processing.
-      call ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+      if ( IsYamlExt( InitInp%InputFile ) ) THEN
+         CALL AD_ParseYamlFile( InitInp%InputFile, PriPath, InitInp, p%RootName, NumBlades, interval, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
+            if (Failed()) return;
+      ELSE
+         ! Read the entire input file, minus any comment lines, into the FileInfo_In
+         ! data structure in memory for further processing.
+         call ProcessComFile( InitInp%InputFile, FileInfo_In, ErrStat2, ErrMsg2 )
+            if (Failed()) return;
+
+         ! For diagnostic purposes, the following can be used to display the contents
+         ! of the FileInfo_In data structure.
+         ! call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
+
+            !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
+         CALL ParsePrimaryFileInfo( PriPath, InitInp, InitInp%InputFile, p%RootName, NumBlades, interval, FileInfo_In, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
+            if (Failed()) return;
+      ENDIF
    else
-      call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+      if ( InitInp%PassedFileIsYaml ) THEN
+         CALL AD_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, PriPath, InitInp, p%RootName, NumBlades, interval, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
+            if (Failed()) return;
+      ELSE
+         call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+            if (Failed()) return;
+
+         !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
+         CALL ParsePrimaryFileInfo( PriPath, InitInp, InitInp%InputFile, p%RootName, NumBlades, interval, FileInfo_In, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
+            if (Failed()) return;
+      ENDIF
    endif
-   if (Failed()) return;
-
-   ! For diagnostic purposes, the following can be used to display the contents
-   ! of the FileInfo_In data structure.
-   ! call Print_FileInfo_Struct( CU, FileInfo_In ) ! CU is the screen -- different number on different systems.
-
-      !  Parse the FileInfo_In structure of data from the inputfile into the InitInp%InputFile structure
-   CALL ParsePrimaryFileInfo( PriPath, InitInp, InitInp%InputFile, p%RootName, NumBlades, interval, FileInfo_In, InputFileData, UnEcho, ErrStat2, ErrMsg2 )
-      if (Failed()) return;
 
    ! --- "Automatic handling of AeroProjMod
    do iR = 1, nRotors

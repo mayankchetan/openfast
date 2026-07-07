@@ -677,6 +677,17 @@ yaml_equiv_openfast("MHK_RM1_Floating" "perfile"    "${CTEST_OPENFAST_EXECUTABLE
 yaml_equiv_openfast("MHK_RM1_Floating" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("MHK_RM1_Floating" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
+# AeroDyn standalone-driver yaml-equivalence: ad_BAR_RNAMotion (Wake_Mod=1 BEMT rotor,
+# prescribed rigid-body/pitch/rotor motion, TwrShadow=1, tower table, nodal outputs off)
+# and ad_BAR_OLAF (Wake_Mod=3 OLAF -- OLAFInputFileName stays a path -- with the Nodal
+# Outputs section active and BldNd_BlOutNd="ALL") together span the BEMT and OLAF wake
+# models and the nodal-outputs schema; both are single-rotor, 3-bladed BAR-turbine cases.
+# The existing AWT_YFix_WSt/MHK_RM1_Fixed/MHK_RM1_Floating glue trios above already
+# exercise AeroDyn (CompAero=2) through convert_fst's AeroFile conversion, since
+# yamlDeckConverter.py now knows how to convert it -- no new glue registrations needed.
+yaml_equiv("aerodyn" "ad_BAR_RNAMotion" "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
+yaml_equiv("aerodyn" "ad_BAR_OLAF"      "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

@@ -331,11 +331,14 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    end if
    call GetBDBldFiles( iFiles, 1 );                                   if (ErrStat >= AbortErrLev) return
    call GetModFile( 'InflowFile',  p%InflowFile,   Required=(p%CompInflow  == Module_IfW), InlineTarget='InflowWind' ); if (ErrStat >= AbortErrLev) return
-   ! inline AeroFile is legal only when CompAero selects AeroDisk; for any other CompAero
-   ! value (AeroDyn, ExtLoads, or none) a mapping value hits GetModFile's "does not (yet)
-   ! support inline YAML input" fatal below, since InlineTarget is then not passed at all
+   ! inline AeroFile is legal only when CompAero selects AeroDisk or AeroDyn; for any
+   ! other CompAero value (ExtLoads or none) a mapping value hits GetModFile's "does not
+   ! (yet) support inline YAML input" fatal below, since InlineTarget is then not passed
+   ! at all
    if (p%CompAero == Module_ADsk) then
       call GetModFile( 'AeroFile', p%AeroFile, Required=(p%CompAero /= Module_NONE), InlineTarget='AeroDisk' ); if (ErrStat >= AbortErrLev) return
+   else if (p%CompAero == Module_AD) then
+      call GetModFile( 'AeroFile', p%AeroFile, Required=(p%CompAero /= Module_NONE), InlineTarget='AeroDyn' ); if (ErrStat >= AbortErrLev) return
    else
       call GetModFile( 'AeroFile', p%AeroFile, Required=(p%CompAero /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    end if
@@ -508,8 +511,8 @@ contains
 
    !> Uniform value rule for one input_files entry: a string is a path (resolved
    !! relative to the .fst); a mapping is inline module input, legal only for modules
-   !! that support it (currently InflowWind, AeroDisk, Simplified ElastoDyn, ServoDyn,
-   !! SeaState, and HydroDyn).
+   !! that support it (currently InflowWind, AeroDisk, AeroDyn, Simplified ElastoDyn,
+   !! ServoDyn, SeaState, and HydroDyn).
    subroutine GetModFile( KeyName, FileVar, Required, InlineTarget )
       character(*), intent(in   )           :: KeyName
       character(*), intent(inout)           :: FileVar
@@ -584,6 +587,16 @@ contains
                ! (PotFile/GeoFile paths written inside the inline section resolve
                ! relative to the deck file through this PriPath)
                FileVar = trim(PriPath)//'inline_HydroDyn.yaml'
+            case ('AeroDyn')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%ADInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%ADIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (AA_InputFile/OLAFInputFileName/AFNames/ADBlFile/TFinFile paths written
+               ! inside the inline section resolve relative to the deck file through this
+               ! PriPath)
+               FileVar = trim(PriPath)//'inline_AeroDyn.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal
