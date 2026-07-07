@@ -114,6 +114,25 @@ if module == "openfast":
         if os.path.isdir(srcDataDir) and not os.path.isdir(dataDir):
             rtl.copyTree(srcDataDir, dataDir, excludeExt=CASE_EXCLUDE_EXT)
 
+    # Bladed-style DISCON DLLs (ServoDyn PCMode/VSContrl=5 cases, e.g.
+    # 5MW_OC3Spar_DLL_WTurb_WavesIrr) are built once and staged into
+    # glue-codes/openfast/5MW_Baseline/ServoData/ by the CMake "regression_test_controllers"
+    # target (reg_tests/CMakeLists.txt) -- the same built-DLL location
+    # executeOpenfastRegressionCase.py's own case-execution tree relies on (that tree is a
+    # sibling of this one under CTEST_BINARY_DIR, populated once at build time). The
+    # TURBINE_DATA_DIRS staging above copies 5MW_Baseline from the SOURCE r-test tree
+    # (text/source files only, no built binaries) into this equivalence test's own build
+    # tree, so any built DISCON DLL must be copied in here explicitly before a
+    # DLL-controlled case can run.
+    DLL_EXTS = ('.dll', '.dylib', '.so')
+    builtServoDataDir = os.path.join(buildDirectory, os.pardir, os.pardir,
+                                      "glue-codes", "openfast", "5MW_Baseline", "ServoData")
+    localServoDataDir = os.path.join(buildDirectory, "5MW_Baseline", "ServoData")
+    if os.path.isdir(builtServoDataDir) and os.path.isdir(localServoDataDir):
+        for f in glob.glob(os.path.join(builtServoDataDir, "*")):
+            if os.path.isfile(f) and os.path.splitext(f)[1].lower() in DLL_EXTS:
+                shutil.copy(f, os.path.join(localServoDataDir, os.path.basename(f)))
+
     def stageOpenfastVariant(variant):
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit directly under buildDirectory -- the SAME depth as the shared
@@ -398,7 +417,11 @@ elif module == "hydrodyn":
     # keyword, so the primary filename is discovered rather than hardcoded. The
     # driver file's "SeaStateInputFile" entry keeps pointing at its (unconverted,
     # text-format) SeaState file -- SeaState YAML conversion is out of scope here.
-    INPUT_GLOBS = ("*.dat", "*.inp")
+    # *.1/*.3/*.hst are WAMIT potential-flow data (added mass/damping, wave excitation,
+    # hydrostatic restoring), *.ss/*.ssexctn are state-space potential-flow data --
+    # staged here for cases (e.g. hd_NBodyMod2) whose PotFile rootname is case-local
+    # rather than pointing into the shared 5MW_Baseline/HydroData directory above.
+    INPUT_GLOBS = ("*.dat", "*.inp", "*.1", "*.3", "*.hst", "*.ss", "*.ssexctn")
     DRIVER = "hd_driver.inp"
     OUTPUT = "driver.out"
 

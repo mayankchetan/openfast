@@ -645,7 +645,13 @@ yaml_equiv_openfast("AWT_YFix_WSt" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "
 # Z-DOF instances), so all-yaml also exercises the StC .yaml sub-file type (converted
 # as its own file type, referenced by path -- never inlined) and single-file exercises
 # an inline ServoDyn section whose StC entries stay text paths.
-yaml_equiv_openfast("StC_test_OC4Semi" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+# NOTE: no "perfile" registration here (2.8) -- convert_fst's per-file mode leaves
+# every module file entry as its original text path unchanged (no module conversion
+# runs at all in that mode), so it exercises no ServoDyn/StC conversion whatsoever; the
+# cheap AWT_YFix_WSt perfile case above already covers the .fst-level per-file round
+# trip. Running this case's own (much longer) perfile variant would be ~10 CPU-minutes
+# spent re-testing exactly nothing StC/ServoDyn-specific -- dropped for cost, keeping
+# allyaml + singlefile (the two modes that actually convert ServoDyn/StC).
 yaml_equiv_openfast("StC_test_OC4Semi" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("StC_test_OC4Semi" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
@@ -668,6 +674,14 @@ yaml_equiv("hydrodyn" "hd_5MW_OC4Semi_WSt_WavesWN" "${CTEST_HYDRODYN_EXECUTABLE}
 yaml_equiv("hydrodyn" "hd_MCF_WaveStMod1"          "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
 yaml_equiv("hydrodyn" "hd_MHstLMod2_RectMmbr"      "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
 
+# hd_NBodyMod2 (2.8): NBody=4/NBodyMod=2 (nWAMITObj=4, coupling terms neglected between
+# bodies), closing the NBody>1/nWAMITObj>1 coverage gap in HydroDyn's YAML path --
+# multi-entry PotFile lists, the AddCLin/AddBLin/AddBQuad matrix-list block slicing
+# across 4 WAMIT objects, and FKMod broadcast with NBody>1. Its PotFile rootnames
+# ("semi_center"/"semi_col") are case-local WAMIT data, exercising the widened
+# hydrodyn INPUT_GLOBS in executeYamlEquivalenceCase.py.
+yaml_equiv("hydrodyn" "hd_NBodyMod2"               "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
+
 # MHK_RM1_Floating: CompHydro=1 (self-contained WAMIT PotFile, RdtnDT="default") with no
 # DISCON DLL (CompServo=0), so the inline HydroFile glue path (all-yaml/single-file) can
 # be exercised directly via ctest. (MHK_RM1_Fixed above has CompHydro=0 -- HydroFile is
@@ -676,6 +690,17 @@ yaml_equiv("hydrodyn" "hd_MHstLMod2_RectMmbr"      "${CTEST_HYDRODYN_EXECUTABLE}
 yaml_equiv_openfast("MHK_RM1_Floating" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("MHK_RM1_Floating" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("MHK_RM1_Floating" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
+# 5MW_OC3Spar_DLL_WTurb_WavesIrr (2.8, the headline offshore glue case): CompServo=1
+# with PCMode=VSContrl=5 (Bladed-style DISCON_OC3Hywind.dll), CompAero=2, CompHydro=1,
+# CompMooring=1 (MAP++, stays a text path), and InflowFile pointing at the shared
+# ../5MW_Baseline/ directory -- so all-yaml/single-file exercise both headline items
+# together: DISCON DLL staging (executeYamlEquivalenceCase.py) and the generic
+# relative-path rewrite (yamlDeckConverter.py's InflowWind Wind/*.bts file, inlined
+# from a directory that differs from the .fst's).
+yaml_equiv_openfast("5MW_OC3Spar_DLL_WTurb_WavesIrr" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC3Spar_DLL_WTurb_WavesIrr" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC3Spar_DLL_WTurb_WavesIrr" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # AeroDyn standalone-driver yaml-equivalence: ad_BAR_RNAMotion (Wake_Mod=1 BEMT rotor,
 # prescribed rigid-body/pitch/rotor motion, TwrShadow=1, tower table, nodal outputs off)

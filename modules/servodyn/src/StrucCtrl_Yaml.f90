@@ -36,6 +36,7 @@
 !! single value broadcast to every mesh point (missing trailing PrescribedForcesFile
 !! entries fall back to the first file with the same informational message as the text
 !! path). Relative paths resolve against this StC input file, exactly as the text path.
+!! Design note: unlike the text reader's silent first-token broadcast fallback on a malformed array, control:StC_CChan here is validated strictly -- its list length must be 1 or NumMeshPts, else a fatal error.
 module StrucCtrl_Yaml
 
    use NWTC_Library

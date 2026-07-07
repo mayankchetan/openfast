@@ -565,7 +565,9 @@ def convert_servodyn(text_path, stc_to_yaml=False):
     extra_files (path relative to the ServoDyn deck -> yaml text). StC files are a
     separate file type, always referenced by path -- never inlined.
 
-    Returns (yaml_text, extra_files)."""
+    Returns (yaml_text, extra_files) -- the same tuple-return shape as convert_fst's own
+    sibling-extra-files precedent (used there for all-yaml mode's converted module
+    files, mirrored here one level down for StC sub-files)."""
     d = _TextDeck(text_path)
     extra_files = {}
 
@@ -1848,6 +1850,129 @@ def convert_moordyn(text_path):
     return '\n'.join(out)
 
 
+#---------------------- single-file mode: inline relative-path rewrite ----------------
+#
+# Known converter caveat (found in 2.1): a module's own relative paths are always
+# *written* relative to the module file's own directory (matching the runtime
+# semantic: a text-format module file's relative paths resolve against that file, not
+# against the .fst). In --single-file mode the module's converted document is embedded
+# directly under the .fst's own document, and the documented single-file semantic is
+# that paths inside an inlined section resolve relative to the *deck* instead (see
+# docs/source/user/yaml_input.rst). So whenever the module file's own directory differs
+# from the .fst's, every relative path inside the inlined section must be rewritten --
+# prefixed with the relative directory from the deck to the module file's original
+# location -- so it keeps resolving to the same file (the 5MW cases, whose InflowWind
+# file lives in a shared ../5MW_Baseline/ directory while referencing its own
+# Wind/*.bts file relative to itself, are the canonical exerciser). When the module
+# file already lives alongside the .fst (the common case), the prefix is empty and
+# this is a no-op.
+#
+# Per-module path-key tables: each entry is "section.Key" (the converter's top-level
+# YAML section, then the scalar- or list-valued key within it) for the fixed-schema
+# converters, or "options.OptionName" for MoorDyn's free-form OPTIONS keywords
+# (matched case-insensitively, since MoorDyn option keyword case follows the original
+# text file). Modules with no path-typed keys (Simplified ElastoDyn, AeroDisk) are
+# simply absent.
+_INLINE_PATH_KEYS = {
+    'inflowwind': ['uniform_wind.FileName_Uni', 'turbsim_wind.FileName_BTS',
+                   'bladed_wind.FilenameRoot', 'hawc_wind.FileName_u',
+                   'hawc_wind.FileName_v', 'hawc_wind.FileName_w'],
+    'aerodyn':    ['general.AA_InputFile', 'olaf_options.OLAFInputFileName',
+                   'airfoil_info.AFNames', 'rotor_blade_properties.ADBlFile',
+                   'tail_fin_aerodynamics.TFinFile'],
+    'servodyn':   ['bladed_interface.DLL_FileName', 'bladed_interface.DLL_InFile',
+                   'structural_control.BStCfiles', 'structural_control.NStCfiles',
+                   'structural_control.TStCfiles', 'structural_control.SStCfiles'],
+    'seastate':   ['waves.WvKinFile'],
+    'hydrodyn':   ['floating_platform.PotFile', 'floating_platform.GeoFile'],
+    'moordyn':    ['options.WaterKin'],
+    # note: MoorDyn's variant "depth" option (a number OR a bathymetry filename --
+    # MoorDyn_IO.f90 MDIO_getBathymetry) is intentionally not listed above:
+    # distinguishing the two forms needs content sniffing beyond a simple keyword
+    # lookup, and no current case inlines a MoorDyn deck whose directory differs from
+    # its .fst's; revisit the day one does.
+}
+
+# path-like values that are never real relative paths -- left untouched by the rewrite
+_PLACEHOLDER_PATHS = ('unused', 'default', 'none', '')
+
+
+def _relpath_prefix(from_dir, to_dir):
+    """Directory (forward-slashed) to prepend to a path that was written relative to
+    `from_dir` so it stays correct when interpreted relative to `to_dir` instead.
+    Empty when the two directories are the same -- the common case, and the only case
+    for any module file that lives alongside the .fst."""
+    rel = os.path.relpath(os.path.abspath(from_dir), os.path.abspath(to_dir))
+    return '' if rel in ('.', '') else rel.replace(os.sep, '/')
+
+
+def _rewrite_path_token(value, prefix):
+    """Prefix one genuine relative path with `prefix`; leave placeholders
+    ("unused"/"default"/"none"/empty) and already-absolute paths untouched."""
+    if not prefix or not value:
+        return value
+    if value.strip().lower() in _PLACEHOLDER_PATHS or os.path.isabs(value):
+        return value
+    return prefix + '/' + value
+
+
+def _rewrite_inline_paths(yaml_text, module_key, prefix):
+    """Rewrite the relative-path values of `module_key`'s known path-typed keys (see
+    _INLINE_PATH_KEYS) found in `yaml_text`'s top-level sections, prefixing genuine
+    relative paths with `prefix` (see _relpath_prefix). No-op when `prefix` is empty
+    (module and deck already share a directory) or the module has no path-typed keys.
+
+    Handles the three value shapes the converters emit: a double-quoted scalar
+    (`Key: "path"`), a flow list of double-quoted scalars (`Key: ["a", "b"]` -- always
+    one physical line for every path-typed list key emitted above), and MoorDyn's bare
+    (unquoted) plain-scalar option cells (`WaterKin: WaterKin.dat`)."""
+    path_keys = _INLINE_PATH_KEYS.get(module_key, [])
+    if not prefix or not path_keys:
+        return yaml_text
+
+    by_section = {}
+    for pk in path_keys:
+        section, _, key = pk.rpartition('.')
+        by_section.setdefault(section, set()).add(key.lower())
+
+    quoted = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+    def rewrite_quoted(m):
+        raw = m.group(1).replace('\\"', '"').replace('\\\\', '\\')
+        new_raw = _rewrite_path_token(raw, prefix)
+        if new_raw == raw:
+            return m.group(0)
+        return '"' + new_raw.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+    section = None
+    out_lines = []
+    for line in yaml_text.split('\n'):
+        stripped = line.strip()
+        if stripped and stripped.endswith(':') and not line[:1].isspace():
+            section = stripped[:-1]
+            out_lines.append(line)
+            continue
+        m = re.match(r'^(\s*)([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$', line)
+        if m and section in by_section and m.group(2).lower() in by_section[section]:
+            indent, key, rest = m.groups()
+            rest_stripped = rest.strip()
+            if rest_stripped.startswith('"') or rest_stripped.startswith('['):
+                new_rest = quoted.sub(rewrite_quoted, rest)
+            elif rest_stripped:
+                # MoorDyn's bare option cells: rewrite, then re-quote if the rewritten
+                # value is no longer a safe bare scalar (_MD_PLAIN excludes '/')
+                new_val = _rewrite_path_token(rest_stripped, prefix)
+                if new_val != rest_stripped and not _MD_PLAIN.match(new_val):
+                    new_val = _as_str(new_val)
+                new_rest = new_val
+            else:
+                new_rest = rest
+            out_lines.append('{}{}: {}'.format(indent, key, new_rest))
+        else:
+            out_lines.append(line)
+    return '\n'.join(out_lines)
+
+
 def convert_fst(text_path, mode='per-file'):
     """Convert a text-format OpenFAST primary (.fst) input file to its YAML schema
     (modules/openfast-library/src/FAST_Yaml.f90 is the source of truth).
@@ -1878,7 +2003,12 @@ def convert_fst(text_path, mode='per-file'):
                       / input_files:ServoFile / input_files:SeaStFile /
                       input_files:HydroFile / input_files:MooringFile (the uniform
                       value rule: a mapping value is inline module input). Other
-                      modules stay as text paths.
+                      modules stay as text paths. Whenever an inlined module file's own
+                      directory differs from the .fst's, relative paths inside its
+                      inlined section (StC files, airfoil dirs, ADBlFile, wind files,
+                      DLL_FileName, PotFile rootnames, ...) are rewritten relative to
+                      the deck, per the documented single-file semantic (see
+                      _rewrite_inline_paths / _INLINE_PATH_KEYS above).
 
     Returns (yaml_text, extra_files):
       yaml_text   - the YAML document for the .fst itself (str).
@@ -2028,6 +2158,11 @@ def convert_fst(text_path, mode='per-file'):
         ifw_yaml_text = convert_inflowwind(inflow_abs)
         if mode == 'single-file':
             w('  InflowFile:')
+            # rewrite any relative paths inside the inlined section (e.g. a shared
+            # 5MW_Baseline/ InflowWind file's own "Wind/..." wind files) so they keep
+            # resolving once nested under a deck at a different directory
+            ifw_yaml_text = _rewrite_inline_paths(
+                ifw_yaml_text, 'inflowwind', _relpath_prefix(os.path.dirname(inflow_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under InflowFile:
             ifw_lines = ifw_yaml_text.split('\n')
@@ -2071,6 +2206,11 @@ def convert_fst(text_path, mode='per-file'):
         ad_yaml_text = convert_aerodyn(aero_abs, n_rotors=n_rotors, num_blades_total=num_blades_total)
         if mode == 'single-file':
             w('  AeroFile:')
+            # rewrite any relative paths inside the inlined section (airfoil dirs,
+            # ADBlFile, tailfin) so they keep resolving once nested under a deck at a
+            # different directory
+            ad_yaml_text = _rewrite_inline_paths(
+                ad_yaml_text, 'aerodyn', _relpath_prefix(os.path.dirname(aero_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under AeroFile:
             ad_lines = ad_yaml_text.split('\n')
@@ -2093,6 +2233,11 @@ def convert_fst(text_path, mode='per-file'):
             # because paths inside an inline section resolve relative to the deck)
             srvd_yaml_text, _ = convert_servodyn(servo_abs, stc_to_yaml=False)
             w('  ServoFile:')
+            # rewrite any relative paths inside the inlined section (DLL_FileName/
+            # DLL_InFile, StC file references) so they keep resolving once nested
+            # under a deck at a different directory
+            srvd_yaml_text = _rewrite_inline_paths(
+                srvd_yaml_text, 'servodyn', _relpath_prefix(os.path.dirname(servo_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under ServoFile:
             srvd_lines = srvd_yaml_text.split('\n')
@@ -2117,6 +2262,10 @@ def convert_fst(text_path, mode='per-file'):
         seast_yaml_text = convert_seastate(seast_abs)
         if mode == 'single-file':
             w('  SeaStFile:')
+            # rewrite any relative paths inside the inlined section (WvKinFile) so
+            # they keep resolving once nested under a deck at a different directory
+            seast_yaml_text = _rewrite_inline_paths(
+                seast_yaml_text, 'seastate', _relpath_prefix(os.path.dirname(seast_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under SeaStFile:
             seast_lines = seast_yaml_text.split('\n')
@@ -2136,6 +2285,11 @@ def convert_fst(text_path, mode='per-file'):
         hydro_yaml_text = convert_hydrodyn(hydro_abs)
         if mode == 'single-file':
             w('  HydroFile:')
+            # rewrite any relative paths inside the inlined section (PotFile/GeoFile
+            # rootnames) so they keep resolving once nested under a deck at a
+            # different directory
+            hydro_yaml_text = _rewrite_inline_paths(
+                hydro_yaml_text, 'hydrodyn', _relpath_prefix(os.path.dirname(hydro_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under HydroFile:
             hydro_lines = hydro_yaml_text.split('\n')
@@ -2159,6 +2313,11 @@ def convert_fst(text_path, mode='per-file'):
         md_yaml_text = convert_moordyn(mooring_abs)
         if mode == 'single-file':
             w('  MooringFile:')
+            # rewrite any relative paths inside the inlined section (e.g. a WaterKin
+            # bathymetry/water-kinematics file) so they keep resolving once nested
+            # under a deck at a different directory
+            md_yaml_text = _rewrite_inline_paths(
+                md_yaml_text, 'moordyn', _relpath_prefix(os.path.dirname(mooring_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under MooringFile:
             md_doc_lines = md_yaml_text.split('\n')

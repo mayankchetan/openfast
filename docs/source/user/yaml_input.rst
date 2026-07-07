@@ -105,7 +105,12 @@ simply nests under its ``input_files`` key::
 File paths written *inside* an inline section resolve relative to the deck
 file itself (there is no separate module file to be relative to). When moving
 an existing multi-file model into a single deck, rewrite any relative paths in
-the inlined sections accordingly.
+the inlined sections accordingly. (This runtime semantic is unchanged; it only
+matters when hand-authoring or hand-editing a single-file deck. The
+``reg_tests`` YAML-equivalence converter's ``--single-file`` mode
+(``yamlDeckConverter.py``'s ``convert_fst``) already does this rewrite for
+you automatically whenever an inlined module file's own directory differs
+from the deck's.)
 
 Formats mix freely: one deck may combine text files, YAML files, and inline
 sections. Inline input is available for modules whose YAML schema exists
