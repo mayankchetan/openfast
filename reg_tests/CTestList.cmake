@@ -688,6 +688,23 @@ yaml_equiv_openfast("MHK_RM1_Floating" "singlefile" "${CTEST_OPENFAST_EXECUTABLE
 yaml_equiv("aerodyn" "ad_BAR_RNAMotion" "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
 yaml_equiv("aerodyn" "ad_BAR_OLAF"      "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
 
+# MoorDyn standalone-driver yaml-equivalence: the four cases together span the
+# free-form schema: md_BodiesAndRods (BODIES + RODS incl. Body1/Body1Pinned
+# attachments, option-keyword aliases kb/cb/WtrDpth, an unrecognized option keyword,
+# and TmaxIC=0), md_5MW_OC4Semi (classic line-heavy floating case: Fixed/Vessel
+# points, prescribed platform motion, and a large multi-channel-per-line OUTPUTS
+# list), md_lineFail (a Free rod, line ends attached to rod ends R1A/R1B, and the
+# FAILURE section's comma-separated line-ID rows), and md_VIV (11-column LINE
+# DICTIONARY form with the optional Cl column, tScheme=RK4, seabed friction options,
+# and a WaterKin file kept as a path).
+# The existing MHK_RM1_Floating glue trio above already exercises MoorDyn
+# (CompMooring=3, no DISCON DLL) through convert_fst's MooringFile conversion, since
+# yamlDeckConverter.py now knows how to convert it -- no new glue registrations needed.
+yaml_equiv("moordyn" "md_BodiesAndRods" "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
+yaml_equiv("moordyn" "md_5MW_OC4Semi"   "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
+yaml_equiv("moordyn" "md_lineFail"      "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
+yaml_equiv("moordyn" "md_VIV"           "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

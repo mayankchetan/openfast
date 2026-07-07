@@ -15,6 +15,7 @@
       seastate        - standalone SeaState driver case.
       hydrodyn        - standalone HydroDyn driver case.
       aerodyn         - standalone AeroDyn driver case.
+      moordyn         - standalone MoorDyn driver case.
       openfast        - full glue-code (.fst) case; requires a mode (per-file |
                         all-yaml | single-file) selecting how convert_fst() should
                         transform input_files:InflowFile / input_files:AeroFile /
@@ -57,7 +58,7 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "openfast"):
+if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "moordyn", "openfast"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
 
 
@@ -553,6 +554,72 @@ elif module == "aerodyn":
     ### run both
     for d in (textDir, yamlDir):
         returnCode = openfastDrivers.runAerodynDriverCase(os.path.join(d, DRIVER), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+elif module == "moordyn":
+    #### moordyn (standalone driver) case ############################################
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+
+    # Every r-test MoorDyn driver case shares the same driver file name (md_driver.inp)
+    # and primary-file keyword ("MDInputFile"), but the primary filename itself is still
+    # discovered from the driver file for robustness. *.dat covers the primary file plus
+    # any sub-files kept as paths (platform-motion time series, WaterKin files, Syrope
+    # working-curve files, bathymetry grids, EA/BA lookup tables).
+    INPUT_GLOBS = ("*.dat", "*.inp", "*.txt")
+    DRIVER = "md_driver.inp"
+    OUTPUT = "driver.MD.out"
+
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit at the same depth as a normally-staged case so that relative
+        paths in the inputs resolve identically."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        return d
+
+    def findPrimaryBaseName(driverText, driverPath):
+        m = re.search(r'(?im)^\s*("[^"]*"|\'[^\']*\'|\S+)\s+MDInputFile\b', driverText)
+        if m is None:
+            rtl.exitWithError("Could not find 'MDInputFile' entry in {}.".format(driverPath))
+        return os.path.basename(yamlDeckConverter._unquote(m.group(1)))
+
+    ### text variant
+    textDir = stage("text")
+
+    ### yaml variant: discover the primary filename from the driver file, convert it,
+    ### repoint the driver at the new .yaml file
+    yamlDir = stage("yaml")
+    driverFile = os.path.join(yamlDir, DRIVER)
+    with open(driverFile) as f:
+        driverText = f.read()
+
+    primaryBase = findPrimaryBaseName(driverText, driverFile)
+    yamlPrimaryBase = os.path.splitext(primaryBase)[0] + ".yaml"
+    yamlText = yamlDeckConverter.convert_moordyn(os.path.join(yamlDir, primaryBase))
+    with open(os.path.join(yamlDir, yamlPrimaryBase), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, primaryBase))
+
+    if primaryBase not in driverText:
+        rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, primaryBase))
+    with open(driverFile, "w") as f:
+        f.write(driverText.replace(primaryBase, yamlPrimaryBase))
+
+    ### run both
+    for d in (textDir, yamlDir):
+        returnCode = openfastDrivers.runMoordynDriverCase(os.path.join(d, DRIVER), executable)
         if returnCode != 0:
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 

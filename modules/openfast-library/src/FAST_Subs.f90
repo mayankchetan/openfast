@@ -1205,6 +1205,15 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_MD%FileName  = p_FAST%MooringFile         ! This needs to be set according to what is in the FAST input file.
       Init%InData_MD%RootName  = p_FAST%OutFileRoot
 
+      Init%InData_MD%UsePrimaryInputFile = .not. m_FAST%MDIsInline
+      IF ( m_FAST%MDIsInline ) THEN      ! inline MoorDyn input from a YAML primary file
+         Init%InData_MD%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%MDInlineFileInfo, Init%InData_MD%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      ELSE
+         Init%InData_MD%PassedFileIsYaml = .FALSE.
+      END IF
+
       Init%InData_MD%PtfmInit(:,1)  = p_FAST%PlatformPosInit ! initial position of the platform (when a FAST module, MoorDyn just takes one row in this matrix)
       Init%InData_MD%FarmSize       = 0                           ! 0 here indicates normal FAST module use of MoorDyn, for a single turbine
       Init%InData_MD%TurbineRefPos(:,1) = 0.0_DbKi                ! for normal FAST use, the global reference frame is at 0,0,0

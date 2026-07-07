@@ -346,7 +346,15 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    call GetModFile( 'SeaStFile',   p%SeaStFile,    Required=(p%CompSeaSt   == Module_SeaSt), InlineTarget='SeaState' ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'HydroFile',   p%HydroFile,    Required=(p%CompHydro   == Module_HD), InlineTarget='HydroDyn' ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
-   call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   ! inline MooringFile is legal only when CompMooring selects MoorDyn (=3); for any
+   ! other CompMooring value (esp. MAP++ =1) a mapping value hits GetModFile's "does
+   ! not (yet) support inline YAML input" fatal below, since InlineTarget is then not
+   ! passed at all (mirrors the AeroFile/CompAero and EDFile/CompElast gating patterns)
+   if (p%CompMooring == Module_MD) then
+      call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE), InlineTarget='MoorDyn' ); if (ErrStat >= AbortErrLev) return
+   else
+      call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   end if
    call GetModFile( 'IceFile',     p%IceFile,      Required=(p%CompIce     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'SoilFile',    p%SoilFile,     Required=(p%CompSoil    == Module_SlD) ); if (ErrStat >= AbortErrLev) return
 
@@ -512,7 +520,7 @@ contains
    !> Uniform value rule for one input_files entry: a string is a path (resolved
    !! relative to the .fst); a mapping is inline module input, legal only for modules
    !! that support it (currently InflowWind, AeroDisk, AeroDyn, Simplified ElastoDyn,
-   !! ServoDyn, SeaState, and HydroDyn).
+   !! ServoDyn, SeaState, HydroDyn, and MoorDyn).
    subroutine GetModFile( KeyName, FileVar, Required, InlineTarget )
       character(*), intent(in   )           :: KeyName
       character(*), intent(inout)           :: FileVar
@@ -597,6 +605,15 @@ contains
                ! inside the inline section resolve relative to the deck file through this
                ! PriPath)
                FileVar = trim(PriPath)//'inline_AeroDyn.yaml'
+            case ('MoorDyn')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%MDInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%MDIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (bathymetry/WaterKin/lookup-table/Syrope file paths written inside the
+               ! inline section resolve relative to the deck file through this PriPath)
+               FileVar = trim(PriPath)//'inline_MoorDyn.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

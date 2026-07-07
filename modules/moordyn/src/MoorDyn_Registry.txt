@@ -41,6 +41,7 @@ typedef   ^           ^                CHARACTER(1024)       FileName       -   
 typedef   ^           ^                CHARACTER(1024)       RootName       -   -      -   "RootName for writing output files"              -
 typedef   ^           ^                LOGICAL               UsePrimaryInputFile    -   .TRUE.  -  "Read input file instead of passed data"   -
 typedef   ^           ^                FileInfoType          PassedPrimaryInputData -   -       -  "Primary input file as FileInfoType (set by driver/glue code) -- String array with metadata"   -
+typedef   ^           ^                LOGICAL               PassedFileIsYaml       -   .FALSE. -  "PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UsePrimaryInputFile = .FALSE.]"   -
 typedef   ^           ^                LOGICAL               Echo           -   ""     -   "echo parameter - do we want to echo the header line describing the input file?"
 typedef   ^           ^                CHARACTER(ChanLen)    OutList        {:}   ""   -   "string containing list of output channels requested in input file"
 typedef   ^           ^                Logical               Linearize      -   .FALSE. -  "Flag that tells this module if the glue code wants to linearize." -

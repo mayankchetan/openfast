@@ -59,6 +59,7 @@ IMPLICIT NONE
     CHARACTER(1024)  :: RootName      !< RootName for writing output files [-]
     LOGICAL  :: UsePrimaryInputFile = .TRUE.      !< Read input file instead of passed data [-]
     TYPE(FileInfoType)  :: PassedPrimaryInputData      !< Primary input file as FileInfoType (set by driver/glue code) -- String array with metadata [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UsePrimaryInputFile = .FALSE.] [-]
     LOGICAL  :: Echo = .false.      !< echo parameter - do we want to echo the header line describing the input file? [-]
     CHARACTER(ChanLen) , DIMENSION(:), ALLOCATABLE  :: OutList      !< string containing list of output channels requested in input file [-]
     LOGICAL  :: Linearize = .FALSE.      !< Flag that tells this module if the glue code wants to linearize. [-]
@@ -657,6 +658,7 @@ subroutine MD_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrSta
    call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
    DstInitInputData%Echo = SrcInitInputData%Echo
    if (allocated(SrcInitInputData%OutList)) then
       LB(1:1) = lbound(SrcInitInputData%OutList)
@@ -715,6 +717,7 @@ subroutine MD_PackInitInput(RF, Indata)
    call RegPack(RF, InData%RootName)
    call RegPack(RF, InData%UsePrimaryInputFile)
    call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    call RegPack(RF, InData%Echo)
    call RegPackAlloc(RF, InData%OutList)
    call RegPack(RF, InData%Linearize)
@@ -750,6 +753,7 @@ subroutine MD_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%RootName); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%UsePrimaryInputFile); if (RegCheckErr(RF, RoutineName)) return
    call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%Echo); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%OutList); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%Linearize); if (RegCheckErr(RF, RoutineName)) return

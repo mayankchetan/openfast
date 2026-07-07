@@ -27,6 +27,7 @@ add_library(moordynlib STATIC
   src/MoorDyn_Point.f90
   src/MoorDyn_Rod.f90
   src/MoorDyn_Types.f90
+  src/MoorDyn_Yaml.f90
 )
 target_link_libraries(moordynlib seastlib nwtclibs)
 

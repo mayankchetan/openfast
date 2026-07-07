@@ -28,7 +28,9 @@ MODULE MoorDyn
    USE MoorDyn_Rod
    USE MoorDyn_Body
    USE MoorDyn_Misc
-   
+   USE MoorDyn_Yaml, only: MD_ParseYamlFile, MD_ParseYamlFileInfo
+   USE YamlInput, only: IsYamlExt
+
 
    IMPLICIT NONE
 
@@ -261,13 +263,28 @@ CONTAINS
       ! -----------------------------------------------------------------
       ! Read the primary MoorDyn input file, or copy from passed input
       if (InitInp%UsePrimaryInputFile) then
-         ! Read the entire input file, minus any comment lines, into the FileInfo_In
-         ! data structure in memory for further processing.
-         call ProcessComFile( InitInp%FileName, FileInfo_In, ErrStat2, ErrMsg2 )
+         if (IsYamlExt(InitInp%FileName)) then
+            ! YAML-format primary input: parse the YAML schema and materialize the
+            ! equivalent canonical text deck into FileInfo_In; the walker below
+            ! consumes it unchanged (see MoorDyn_Yaml.f90)
+            call MD_ParseYamlFile( InitInp%FileName, FileInfo_In, ErrStat2, ErrMsg2 )
+         else
+            ! Read the entire input file, minus any comment lines, into the FileInfo_In
+            ! data structure in memory for further processing.
+            call ProcessComFile( InitInp%FileName, FileInfo_In, ErrStat2, ErrMsg2 )
+         endif
          CALL GetPath( InitInp%FileName, p%PriPath )    ! Input files will be relative to the path where the primary input file is located.
       else
-         call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
-         p%PriPath = ""
+         if (InitInp%PassedFileIsYaml) then
+            ! inline YAML module input from a YAML primary file: same materialization,
+            ! from the passed lines; sub-file paths resolve relative to the deck file
+            ! through the glue code's pseudo input-file path
+            call MD_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, FileInfo_In, ErrStat2, ErrMsg2 )
+            CALL GetPath( InitInp%FileName, p%PriPath )
+         else
+            call NWTC_Library_CopyFileInfoType( InitInp%PassedPrimaryInputData, FileInfo_In, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+            p%PriPath = ""
+         endif
       endif
       if (Failed()) return;
 

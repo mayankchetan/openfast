@@ -1578,6 +1578,276 @@ def convert_aerodyn(text_path, n_rotors=1, num_blades_total=None):
     return '\n'.join(out)
 
 
+#-------------------------------- MoorDyn ---------------------------------------------
+
+# The word-separator set of NWTC_IO's CountWords/GetWords (space, tab, comma, semicolon,
+# single quote, double quote), which is also how MoorDyn's list-directed table READs
+# tokenize a row.
+_MD_SEPS = re.compile(r"[ \t,;'\"]+")
+
+# A token safe to emit as a bare YAML plain scalar: only [A-Za-z0-9_.+-] characters and
+# at least one alphanumeric (so "-", "|1e8", "SYROPE:f.dat" etc. get quoted instead).
+_MD_PLAIN = re.compile(r'^(?=.*[A-Za-z0-9])[A-Za-z0-9_.+\-]+$')
+
+
+def _md_cell(tok):
+    """Emit one MoorDyn table cell verbatim: bare when it is a safe plain scalar,
+    double-quoted otherwise (bar-separated multi-values, SYROPE:<file> prefixes, the
+    lone "-" output-flag placeholder, ...). MoorDyn_Yaml.f90 reads every cell back as
+    raw scalar text and re-emits it into the materialized row unchanged."""
+    return tok if _MD_PLAIN.match(tok) else _as_str(tok)
+
+
+def _md_words(line):
+    """Tokenize like CountWords/GetWords: split on the shared separator set; quoted
+    strings lose their quotes exactly as list-directed READ strips them."""
+    return [w for w in _MD_SEPS.split(line) if w]
+
+
+def convert_moordyn(text_path):
+    """Convert a text-format MoorDyn primary input file to its YAML schema
+    (modules/moordyn/src/MoorDyn_Yaml.f90 is the source of truth: the YAML reader
+    materializes the canonical text deck back for MD_Init's free-form walker, every
+    cell verbatim).
+
+    The text format is free-form: "---" section headers found by case-insensitive
+    substring match (mirrored here in MD_Init's own branch order), two skipped
+    label/units lines per table, rows until the next header. All numeric literals,
+    keyword cells (attachments, "seabed" depths, bar-separated multi-values,
+    SYROPE:/lookup-table filenames, output-flag character sets) pass through
+    verbatim as strings. Options keep their original keyword spellings (aliases and
+    unknown keywords included) and document order; sub-files (bathymetry grids,
+    WaterKin, lookup tables, Syrope working curves) stay referenced by path."""
+
+    # mirror ProcessComFile: strip inline comments ('!', '#', '%'), drop lines that
+    # are blank or comment-only -- the walker only ever sees this processed stream
+    with open(text_path, 'r', errors='replace') as f:
+        raw = f.read().splitlines()
+    lines = []
+    for line in raw:
+        if _is_comment_or_blank(line):
+            continue
+        s = _strip_inline_comment(line).strip()
+        if s:
+            lines.append(s)
+
+    line_types, rod_types, bodies, rods, points, md_lines = [], [], [], [], [], []
+    syrope_ic, ext_loads, control, failure = [], [], [], []
+    options = []   # (keyword, value) in document order
+    channels = []
+
+    n = len(lines)
+
+    def collect_table(start):
+        """Skip the two label/units lines after the header at `start`, then collect
+        raw rows until the next '---' header (or EOF); return (rows, next_index)."""
+        i = start + 3   # header + 2 label/units lines
+        rows = []
+        while i < n and '---' not in lines[i]:
+            rows.append(lines[i])
+            i += 1
+        return rows, i
+
+    i = 0
+    while i < n:
+        u = lines[i].upper()
+        if '---' not in u:
+            i += 1
+            continue
+        # branch order mirrors MD_Init's own header-matching chain
+        if 'LINE DICTIONARY' in u or 'LINE TYPES' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) not in (10, 11, 13):
+                    raise ValueError('convert_moordyn: LINE TYPES row must have 10, 11, or 13 '
+                                     'columns (got {}): "{}"'.format(len(toks), r))
+                line_types.append(toks)
+        elif 'ROD DICTIONARY' in u or 'ROD TYPES' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) < 7:
+                    raise ValueError('convert_moordyn: ROD TYPES row must have at least 7 '
+                                     'columns: "{}"'.format(r))
+                rod_types.append(toks[:7])   # the walker READs 7; trailing extras are ignored
+        elif 'BODIES' in u or 'BODY LIST' in u or 'BODY PROPERTIES' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) != 14:
+                    raise ValueError('convert_moordyn: BODIES row must have 14 columns '
+                                     '(got {}): "{}"'.format(len(toks), r))
+                bodies.append(toks)
+        elif 'RODS' in u or 'ROD LIST' in u or 'ROD PROPERTIES' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) != 11:
+                    raise ValueError('convert_moordyn: RODS row must have 11 columns '
+                                     '(got {}): "{}"'.format(len(toks), r))
+                rods.append(toks)
+        elif ('POINTS' in u or 'CONNECTION PROPERTIES' in u or 'NODE PROPERTIES' in u
+              or 'POINT PROPERTIES' in u or 'POINT LIST' in u):
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) != 9:
+                    raise ValueError('convert_moordyn: POINTS row must have 9 columns '
+                                     '(got {}): "{}"'.format(len(toks), r))
+                points.append(toks)
+        elif 'LINES' in u or 'LINE PROPERTIES' in u or 'LINE LIST' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) < 7:
+                    raise ValueError('convert_moordyn: LINES row must have at least 7 '
+                                     'columns: "{}"'.format(r))
+                md_lines.append(toks[:7])   # the walker READs 7; trailing extras are ignored
+        elif 'SYROPE IC' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                nids = r.count(',') + 1     # the walker derives the ID count from commas
+                toks = _md_words(r)
+                if len(toks) != nids + 2:
+                    raise ValueError('convert_moordyn: SYROPE IC row must be <lineIDs>, '
+                                     'Tmax, Tmean: "{}"'.format(r))
+                syrope_ic.append((toks[:nids], toks[nids], toks[nids+1]))
+        elif 'EXTERNAL LOADS' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                toks = _md_words(r)
+                if len(toks) != 6:
+                    raise ValueError('convert_moordyn: EXTERNAL LOADS row must have 6 '
+                                     'columns (got {}): "{}"'.format(len(toks), r))
+                ext_loads.append(toks)
+        elif 'CONTROL' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                nids = r.count(',') + 1
+                toks = _md_words(r)
+                if len(toks) != nids + 1:
+                    raise ValueError('convert_moordyn: CONTROL row must be CtrlChan, '
+                                     '<lineIDs>: "{}"'.format(r))
+                control.append((toks[0], toks[1:1+nids]))
+        elif 'FAILURE' in u:
+            rows, i = collect_table(i)
+            for r in rows:
+                nids = r.count(',') + 1
+                toks = _md_words(r)
+                if len(toks) != nids + 4:
+                    raise ValueError('convert_moordyn: FAILURE row must be FailID, Point, '
+                                     '<lineIDs>, FailTime, FailTen: "{}"'.format(r))
+                failure.append((toks[0], toks[1], toks[2:2+nids], toks[2+nids], toks[3+nids]))
+        elif 'OPTIONS' in u:
+            i += 1   # no label/units lines in the options section
+            while i < n and '---' not in lines[i]:
+                toks = _md_words(lines[i])
+                if len(toks) < 2:
+                    raise ValueError('convert_moordyn: OPTIONS line needs "<value> '
+                                     '<keyword>": "{}"'.format(lines[i]))
+                if any(k.lower() == toks[1].lower() for k, _ in options):
+                    raise ValueError('convert_moordyn: duplicate option keyword "{}" cannot '
+                                     'be represented as a YAML mapping'.format(toks[1]))
+                options.append((toks[1], toks[0]))
+                i += 1
+        elif 'OUTPUT' in u:
+            i += 1
+            while i < n:
+                s = lines[i]
+                su = s.upper()
+                if '---' in su or 'END' in su:
+                    break
+                # mirror the walker's leading-quote handling: a quoted channel list
+                # keeps only the quoted content (anything after the close quote is a
+                # comment)
+                if s[0] in '\'"':
+                    close = s.find(s[0], 1)
+                    if close > 0:
+                        s = s[:close+1]
+                channels.extend(_md_words(s))
+                i += 1
+        else:
+            i += 1   # unrecognized header: skipped silently, exactly like the walker
+
+    out = []
+    w = out.append
+    w('# MoorDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    if line_types:
+        w('line_types:')
+        base_keys = ['Name', 'Diam', 'MassDen', 'EA', 'BA', 'EI', 'Cd', 'Ca', 'CdAx', 'CaAx']
+        for toks in line_types:
+            keys = list(base_keys)
+            if len(toks) >= 11:
+                keys.append('Cl')
+            if len(toks) == 13:
+                keys += ['dF', 'cF']
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if rod_types:
+        w('rod_types:')
+        keys = ['Name', 'Diam', 'MassDen', 'Cd', 'Ca', 'CdEnd', 'CaEnd']
+        for toks in rod_types:
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if bodies:
+        w('bodies:')
+        keys = ['ID', 'Attachment', 'X0', 'Y0', 'Z0', 'r0', 'p0', 'y0', 'M', 'CG', 'I', 'V', 'CdA', 'Ca']
+        for toks in bodies:
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if rods:
+        w('rods:')
+        keys = ['ID', 'RodType', 'Attachment', 'Xa', 'Ya', 'Za', 'Xb', 'Yb', 'Zb', 'NumSegs', 'Outputs']
+        for toks in rods:
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if points:
+        w('points:')
+        keys = ['ID', 'Attachment', 'X', 'Y', 'Z', 'M', 'V', 'CdA', 'Ca']
+        for toks in points:
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if md_lines:
+        w('lines:')
+        keys = ['ID', 'LineType', 'AttachA', 'AttachB', 'UnstrLen', 'NumSegs', 'Outputs']
+        for toks in md_lines:
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if syrope_ic:
+        w('syrope_ic:')
+        for ids, tmax, tmean in syrope_ic:
+            w('    - Lines: [' + ', '.join(ids) + ']')
+            w('      Tmax: ' + _md_cell(tmax))
+            w('      Tmean: ' + _md_cell(tmean))
+    if ext_loads:
+        w('external_loads:')
+        keys = ['ID', 'Object', 'Fext', 'Blin', 'Bquad', 'CSys']
+        for toks in ext_loads:
+            w(_row_map(keys, [_md_cell(t) for t in toks]))
+    if control:
+        w('control:')
+        for chan, ids in control:
+            w('    - ChannelID: ' + _md_cell(chan))
+            w('      Lines: [' + ', '.join(ids) + ']')
+    if failure:
+        w('failure:')
+        for fid, attach, ids, ftime, ften in failure:
+            w('    - ID: ' + _md_cell(fid))
+            w('      Attachment: ' + _md_cell(attach))
+            w('      Lines: [' + ', '.join(ids) + ']')
+            w('      FailTime: ' + _md_cell(ftime))
+            w('      FailTen: ' + _md_cell(ften))
+    if options:
+        w('options:')
+        for key, val in options:
+            w('  {}: {}'.format(key, _md_cell(val)))
+    if channels:
+        w('outputs:')
+        w('  OutList:')
+        for c in channels:
+            w('    - ' + c)
+    w('')
+
+    return '\n'.join(out)
+
+
 def convert_fst(text_path, mode='per-file'):
     """Convert a text-format OpenFAST primary (.fst) input file to its YAML schema
     (modules/openfast-library/src/FAST_Yaml.f90 is the source of truth).
@@ -1591,20 +1861,24 @@ def convert_fst(text_path, mode='per-file'):
                       paths), EDFile (if CompElast == 3, i.e. Simplified ElastoDyn),
                       ServoFile (if CompServo == 1, including its referenced StC
                       sub-files as their own .yaml file type), SeaStFile (if
-                      CompSeaSt == 1), and/or HydroFile (if CompHydro == 1; its
-                      referenced PotFile/GeoFile potential-flow data stay paths) are
+                      CompSeaSt == 1), HydroFile (if CompHydro == 1; its
+                      referenced PotFile/GeoFile potential-flow data stay paths),
+                      and/or MooringFile (if CompMooring == 3, MoorDyn; its
+                      bathymetry/WaterKin/lookup-table/Syrope sub-files stay paths) are
                       ALSO converted to YAML and their input_files entries are repointed
                       at the new .yaml files. Other module files stay as text paths.
       'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk or AeroDyn
                       input (if CompAero == 1 or 2 respectively), the EDFile input (if
                       CompElast == 3), the ServoFile input (if CompServo == 1; its StC
                       sub-files stay referenced by path -- StC input is never inlined),
-                      the SeaStFile input (if CompSeaSt == 1), and/or the HydroFile
-                      input (if CompHydro == 1) are inlined as a nested mapping under
+                      the SeaStFile input (if CompSeaSt == 1), the HydroFile input
+                      (if CompHydro == 1), and/or the MooringFile input (if
+                      CompMooring == 3, MoorDyn) are inlined as a nested mapping under
                       input_files:InflowFile / input_files:AeroFile / input_files:EDFile
                       / input_files:ServoFile / input_files:SeaStFile /
-                      input_files:HydroFile (the uniform value rule: a mapping value is
-                      inline module input). Other modules stay as text paths.
+                      input_files:HydroFile / input_files:MooringFile (the uniform
+                      value rule: a mapping value is inline module input). Other
+                      modules stay as text paths.
 
     Returns (yaml_text, extra_files):
       yaml_text   - the YAML document for the .fst itself (str).
@@ -1875,7 +2149,28 @@ def convert_fst(text_path, mode='per-file'):
         w('  HydroFile: ' + _as_str(hydro_rel))
 
     w('  SubFile: '     + _as_str(sub_file))
-    w('  MooringFile: ' + _as_str(mooring_file))
+
+    # MooringFile conversion/inlining is gated on CompMooring == 3 (MoorDyn) -- the
+    # only mooring module with a YAML reader; MAP++/FEAM/OrcaFlex files stay text paths
+    convert_mooring = (comp_mooring == 3) and (mode in ('all-yaml', 'single-file'))
+    mooring_rel = _unquote(mooring_file)
+    if convert_mooring:
+        mooring_abs = os.path.join(base_dir, mooring_rel)
+        md_yaml_text = convert_moordyn(mooring_abs)
+        if mode == 'single-file':
+            w('  MooringFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under MooringFile:
+            md_doc_lines = md_yaml_text.split('\n')
+            md_body = '\n'.join(md_doc_lines[2:]) if len(md_doc_lines) > 2 else md_yaml_text
+            w(_indent_block(md_body, '    '))
+        else:  # all-yaml
+            md_yaml_rel = os.path.splitext(mooring_rel)[0] + '.yaml'
+            extra_files[md_yaml_rel] = md_yaml_text
+            w('  MooringFile: ' + _as_str(md_yaml_rel))
+    else:
+        w('  MooringFile: ' + _as_str(mooring_file))
+
     w('  IceFile: '     + _as_str(ice_file))
     w('  SoilFile: '    + _as_str(soil_file))
 
