@@ -656,6 +656,27 @@ yaml_equiv_openfast("MHK_RM1_Fixed" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" 
 yaml_equiv_openfast("MHK_RM1_Fixed" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("MHK_RM1_Fixed" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
+# HydroDyn standalone-driver yaml-equivalence: hd_5MW_OC4Semi_WSt_WavesWN (PotMod=1
+# WAMIT semisubmersible with 44 joints/25 cylindrical members/2 fill groups, exercising
+# the AddCLin/AddBLin/AddBQuad WAMIT-object matrix list and an external PotFile
+# rootname), hd_MCF_WaveStMod1 (the MacCamy-Fuchs "MCF" keyword substitution across the
+# simple/depth-based/member-based cylindrical coefficient tables), and
+# hd_MHstLMod2_RectMmbr (rectangular member cross-sections/coefficients, the RdtnDT
+# "default" sentinel, the short 11-column Members row form, and member/joint output
+# lists) together span nearly the full HydroDyn schema.
+yaml_equiv("hydrodyn" "hd_5MW_OC4Semi_WSt_WavesWN" "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
+yaml_equiv("hydrodyn" "hd_MCF_WaveStMod1"          "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
+yaml_equiv("hydrodyn" "hd_MHstLMod2_RectMmbr"      "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
+
+# MHK_RM1_Floating: CompHydro=1 (self-contained WAMIT PotFile, RdtnDT="default") with no
+# DISCON DLL (CompServo=0), so the inline HydroFile glue path (all-yaml/single-file) can
+# be exercised directly via ctest. (MHK_RM1_Fixed above has CompHydro=0 -- HydroFile is
+# "unused" there -- so it does not exercise HydroDyn; MHK_RM1_Floating is the DLL-free
+# CompHydro==1 case this module actually needs.)
+yaml_equiv_openfast("MHK_RM1_Floating" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("MHK_RM1_Floating" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("MHK_RM1_Floating" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

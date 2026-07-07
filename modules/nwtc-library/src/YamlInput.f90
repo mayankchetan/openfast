@@ -1954,7 +1954,16 @@ recursive subroutine ParseBlockSeq(SL, Cur, Indent, Doc, iNode, PS, ErrStat, Err
       if (NSlice == 0) then
          Doc%Nodes(iChild)%Kind   = YAML_SCALAR  ! bare "-" with nothing nested
          Doc%Nodes(iChild)%Scalar = ''
-      else if (NSlice == 1 .and. ItemLine == Slice(1)%FileLine .and. FindColon(Slice(1)%Text) == 0) then
+      else if (NSlice == 1 .and. ItemLine == Slice(1)%FileLine .and. FindColon(Slice(1)%Text) == 0 &
+               .and. .not. IsSeqItem(Slice(1)%Text)) then
+         ! One content line with no mapping separator: a plain scalar item -- unless that
+         ! line is itself a sequence item ("- ..."), which is a nested sequence ("- - 0"
+         ! in flowed-out form). The IsSeqItem exclusion matters for serialized inline
+         ! module input (Yaml_Serialize emits nested sequences as a bare "-" line plus
+         ! deeper "- <scalar>" lines, all carrying the SAME source-line provenance when
+         ! the original was a one-line flow collection, so the ItemLine==FileLine check
+         ! alone cannot tell "- 0" apart from an inline scalar; a single-column matrix
+         ! row like AddF0's "[0]" would otherwise collapse to the scalar "- 0").
          call SetScalar(Doc, iChild, Slice(1)%Text, Slice(1), PS, ErrStat2, ErrMsg2)
          call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
          if (ErrStat >= AbortErrLev) return

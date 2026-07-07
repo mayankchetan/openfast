@@ -27,6 +27,7 @@ endif()
 
 add_library(hydrodynlib STATIC
   src/Conv_Radiation.f90
+  src/HydroDyn_Yaml.f90
   src/HydroDyn.f90
   src/HydroDyn_Input.f90
   src/HydroDyn_Output.f90

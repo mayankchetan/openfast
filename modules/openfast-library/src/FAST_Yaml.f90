@@ -50,8 +50,8 @@ module FAST_Yaml
 contains
 
 !> YAML counterpart of FAST_ReadPrimaryFile. Inline module inputs (currently
-!! InflowFile, AeroFile, EDFile, ServoFile, and SeaStFile) are serialized into m_FAST
-!! for hand-off at module init.
+!! InflowFile, AeroFile, EDFile, ServoFile, SeaStFile, and HydroFile) are serialized
+!! into m_FAST for hand-off at module init.
 subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, ErrStat, ErrMsg )
    character(*),             intent(in   ) :: InputFile           !< the .fst.yaml primary file
    type(FAST_ParameterType), intent(inout) :: p                   !< glue-code parameters
@@ -341,7 +341,7 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    end if
    call GetModFile( 'ServoFile',   p%ServoFile(1), Required=(p%CompServo   == Module_SrvD), InlineTarget='ServoDyn' ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'SeaStFile',   p%SeaStFile,    Required=(p%CompSeaSt   == Module_SeaSt), InlineTarget='SeaState' ); if (ErrStat >= AbortErrLev) return
-   call GetModFile( 'HydroFile',   p%HydroFile,    Required=(p%CompHydro   == Module_HD) ); if (ErrStat >= AbortErrLev) return
+   call GetModFile( 'HydroFile',   p%HydroFile,    Required=(p%CompHydro   == Module_HD), InlineTarget='HydroDyn' ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'IceFile',     p%IceFile,      Required=(p%CompIce     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
@@ -509,7 +509,7 @@ contains
    !> Uniform value rule for one input_files entry: a string is a path (resolved
    !! relative to the .fst); a mapping is inline module input, legal only for modules
    !! that support it (currently InflowWind, AeroDisk, Simplified ElastoDyn, ServoDyn,
-   !! and SeaState).
+   !! SeaState, and HydroDyn).
    subroutine GetModFile( KeyName, FileVar, Required, InlineTarget )
       character(*), intent(in   )           :: KeyName
       character(*), intent(inout)           :: FileVar
@@ -575,6 +575,15 @@ contains
                ! (StC sub-file paths written inside the inline section resolve
                ! relative to the deck file through this PriPath)
                FileVar = trim(PriPath)//'inline_ServoDyn.yaml'
+            case ('HydroDyn')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%HDInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%HDIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (PotFile/GeoFile paths written inside the inline section resolve
+               ! relative to the deck file through this PriPath)
+               FileVar = trim(PriPath)//'inline_HydroDyn.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

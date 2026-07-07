@@ -14,6 +14,7 @@
         convert_seastate(text_path) -> str      (YAML document)
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
         convert_stc(text_path) -> str           (YAML document)
+        convert_hydrodyn(text_path) -> str      (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -837,6 +838,480 @@ def convert_stc(text_path):
     return '\n'.join(out)
 
 
+def _row_tokens(raw):
+    """Whitespace/comma-separated tokens of one already-comment-stripped table row."""
+    return [t for t in re.split(r'[,\s]+', raw.strip()) if t]
+
+
+def _matrix_rows(d, nrows, ncols, skip=0):
+    """Read `nrows` text rows and slice each to its first `ncols` tokens.
+
+    HydroDyn's AddF0/AddCLin/AddBLin/AddBQuad rows carry a descriptive keyword label
+    ("AddF0", "AddCLin", ...) as trailing text on their first row only (not a comment
+    -- there is no comment character before it); HydroDyn_Input.f90's ParseAry-based
+    reads simply stop once they have consumed the expected number of values, so any
+    trailing label text is never read. Slicing to `ncols` here reproduces that."""
+    rows = []
+    for raw in d.table_rows(nrows, skip=skip):
+        toks = _row_tokens(raw)
+        if len(toks) < ncols:
+            raise ValueError('_matrix_rows: row "{}" has {} value(s); expected at least {}'.format(
+                raw, len(toks), ncols))
+        rows.append(toks[:ncols])
+    return rows
+
+
+def _row_map(keys, toks, indent='    '):
+    """One YAML block-mapping table row ("- Key1: val1\\n  Key2: val2\\n..."), using
+    only as many of `keys` as `toks` supplies (fewer toks than keys means the trailing
+    keys are omitted -- HydroDyn_Yaml.f90 applies the same fallback defaults for those
+    as the text path's variant-length reads).
+
+    A flow mapping ("- {k: v, ...}") would be more compact, but YamlInput.f90's
+    block-sequence-item reader only special-cases a bare scalar or a single "key:
+    value" line for a one-line item; a "{...}" item falls through to being split on
+    its first colon as if it were itself "key: value", which is wrong. Multi-line
+    block-mapping items (one key per line, all sharing the same indent) are the
+    reliably-parsed form, so every table row here uses that instead."""
+    pairs = list(zip(keys, toks))
+    lines = ['{}- {}: {}'.format(indent, pairs[0][0], pairs[0][1])]
+    for k, t in pairs[1:]:
+        lines.append('{}  {}: {}'.format(indent, k, t))
+    return '\n'.join(lines)
+
+
+def convert_hydrodyn(text_path):
+    """Convert a text-format HydroDyn primary input file to its YAML schema
+    (modules/hydrodyn/src/HydroDyn_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners (general, floating_platform,
+    second_order_wamit_forces, additional_stiffness_damping, strip_theory,
+    axial_coefficients, member_joints, cylindrical_member_cross_section,
+    rectangular_member_cross_section, simple_hydrodynamic_coefficients_cylindrical,
+    simple_hydrodynamic_coefficients_rectangular,
+    depth_based_hydrodynamic_coefficients_cylindrical/rectangular,
+    member_based_hydrodynamic_coefficients_cylindrical/rectangular, members,
+    filled_members, marine_growth_by_depth, member_output_list, joint_output_list,
+    output, output_channels).
+
+    Every counted table (axial_coefficients:AxialCoefs, member_joints:Joints,
+    {cylindrical,rectangular}_member_cross_section:MPropSets{Cyl,Rec},
+    {depth_based,member_based}_hydrodynamic_coefficients_*:Coef*, members:Members,
+    filled_members:FilledGroups, marine_growth_by_depth:MGDepths,
+    member_output_list:MOutLst) becomes a YAML list of flow mappings, one per row,
+    keyed by the documented column names -- so the N* counts (NAxCoef, NJoints, ...)
+    are consumed here only to know how many rows to read, and are never themselves
+    emitted (HydroDyn_Yaml.f90 derives them back from the list lengths).
+    joint_output_list:JOutLst (a flat list of joint IDs) is the one counted table that
+    stays a plain list, since it is not itself tabular.
+
+    RdtnDT and each filled_members row's FillDens accept the literal scalar
+    "default"/"DEFAULT" (ParseVarWDefault / a Conv2UC-then-compare in the text path).
+    The MacCamy-Fuchs "MCF" keyword (ParseRAryWKywrd in the text path) is copied
+    through verbatim wherever it appears (SimplCp/SimplCpMG, SimplRecCp/SimplRecCpMG,
+    DpthCp/DpthCpMG, MemberCp1/MemberCp2/MemberCpMG1/MemberCpMG2) -- HydroDyn_Yaml.f90
+    accepts either a number or literal "MCF" for those keys.
+
+    additional_stiffness_damping:AddCLin/AddBLin/AddBQuad are 3-D in the text format
+    (NDOF rows of nWAMITObj*NDOF flattened values -- nWAMITObj blocks of NDOF values
+    concatenated); here they become a YAML list of nWAMITObj NDOF x NDOF matrices (one
+    per WAMIT object), matching HydroDyn_Yaml.f90's per-object matrix reads."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# HydroDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    #-------------------- floating_platform -----------------------------------------
+    w('floating_platform:')
+    w('  PotMod: ' + d.scalar('PotMod'))
+    w('  ExctnMod: ' + d.scalar('ExctnMod'))
+    w('  ExctnDisp: ' + d.scalar('ExctnDisp'))
+    w('  ExctnCutOff: ' + d.scalar('ExctnCutOff'))
+    w('  PtfmYMod: ' + d.scalar('PtfmYMod'))
+    w('  PtfmRefY: ' + d.scalar('PtfmRefY'))
+    w('  PtfmYCutOff: ' + d.scalar('PtfmYCutOff'))
+    w('  NExctnHdg: ' + d.scalar('NExctnHdg'))
+    w('  RdtnMod: ' + d.scalar('RdtnMod'))
+    w('  RdtnTMax: ' + d.scalar('RdtnTMax'))
+    w('  RdtnDT: ' + _default_or_num(d.scalar('RdtnDT')))
+
+    n_body = int(d.scalar('NBody'))
+    n_body_mod = int(d.scalar('NBodyMod'))
+    w('  NBody: ' + str(n_body))
+    w('  NBodyMod: ' + str(n_body_mod))
+    if n_body_mod == 1:
+        n_wamit_obj = 1
+        vec_multiplier = n_body
+    else:
+        n_wamit_obj = n_body
+        vec_multiplier = 1
+
+    pot_file_toks = _file_list_tokens(d.find('PotFile'), n_wamit_obj)
+    w('  PotFile: [' + ', '.join(_as_str(t) for t in pot_file_toks) + ']')
+    w('  WAMITULEN: [' + _list_join(d.find('WAMITULEN')[:n_wamit_obj]) + ']')
+    w('  PtfmRefxt: [' + _list_join(d.find('PtfmRefxt')[:n_body]) + ']')
+    w('  PtfmRefyt: [' + _list_join(d.find('PtfmRefyt')[:n_body]) + ']')
+    w('  PtfmRefzt: [' + _list_join(d.find('PtfmRefzt')[:n_body]) + ']')
+    w('  PtfmRefztRot: [' + _list_join(d.find('PtfmRefztRot')[:n_body]) + ']')
+    w('  PtfmVol0: [' + _list_join(d.find('PtfmVol0')[:n_body]) + ']')
+    w('  PtfmCOBxt: [' + _list_join(d.find('PtfmCOBxt')[:n_body]) + ']')
+    w('  PtfmCOByt: [' + _list_join(d.find('PtfmCOByt')[:n_body]) + ']')
+    naddDOF_toks = [t.rstrip(',') for t in d.find('NAddDOF')][:n_body]
+    w('  NAddDOF: [' + ', '.join(naddDOF_toks) + ']')
+    w('  FKMod: [' + _list_join(d.find('FKMod')[:n_wamit_obj]) + ']')
+    geo_file_toks = _file_list_tokens(d.find('GeoFile'), n_body)
+    w('  GeoFile: [' + ', '.join(_as_str(t) for t in geo_file_toks) + ']')
+    w('')
+
+    #-------------------- second_order_wamit_forces ---------------------------------
+    w('second_order_wamit_forces:')
+    w('  MnDrift: '   + d.scalar('MnDrift'))
+    w('  NewmanApp: ' + d.scalar('NewmanApp'))
+    w('  DiffQTF: '   + d.scalar('DiffQTF'))
+    w('  SumQTF: '    + d.scalar('SumQTF'))
+    w('')
+
+    #-------------------- additional_stiffness_damping ------------------------------
+    # NDOF matches HydroDyn_Input.f90's own computation, needed to know how many
+    # values each AddF0/AddCLin/AddBLin/AddBQuad row holds
+    if n_body == 1:
+        ndof = 6 + int(naddDOF_toks[0])
+    else:
+        ndof = 6 * vec_multiplier
+
+    w('additional_stiffness_damping:')
+    # AddF0: NDOF rows of nWAMITObj values; the section banner (a real, non-comment
+    # line) precedes the first row and must be skipped
+    addf0_rows = _matrix_rows(d, ndof, n_wamit_obj, skip=1)
+    w('  AddF0: [' + ', '.join('[' + ', '.join(row) + ']' for row in addf0_rows) + ']')
+
+    def read_matrix_list(key):
+        rows = _matrix_rows(d, ndof, n_wamit_obj * ndof, skip=0)
+        mats = []
+        for j in range(n_wamit_obj):
+            mat = [rows[i][j*ndof:(j+1)*ndof] for i in range(ndof)]
+            mats.append('[' + ', '.join('[' + ', '.join(r) + ']' for r in mat) + ']')
+        return '  {}: [{}]'.format(key, ', '.join(mats))
+
+    w(read_matrix_list('AddCLin'))
+    w(read_matrix_list('AddBLin'))
+    w(read_matrix_list('AddBQuad'))
+    w('')
+
+    #-------------------- strip_theory -----------------------------------------------
+    w('strip_theory:')
+    w('  WaveDisp: ' + d.scalar('WaveDisp'))
+    w('  AMMod: '    + d.scalar('AMMod'))
+    w('  HstMod: '   + d.scalar('HstMod'))
+    w('')
+
+    #-------------------- axial_coefficients ------------------------------------------
+    # AxCoefID, AxCd, AxCa, AxCp are always present; AxFDMod/AxVnCOff/AxFDLoFSc are
+    # optional trailing entries (the text path's 5- and 4-entry fallback reads)
+    AX_KEYS = ('AxCoefID', 'AxCd', 'AxCa', 'AxCp', 'AxFDMod', 'AxVnCOff', 'AxFDLoFSc')
+    n_ax = int(d.scalar('NAxCoef'))
+    # the two header/units lines are always present, even when NAxCoef==0
+    ax_rows = d.table_rows(n_ax, skip=2)
+    w('axial_coefficients:')
+    if n_ax > 0:
+        w('  AxialCoefs:')
+        for raw in ax_rows:
+            w(_row_map(AX_KEYS, _row_tokens(raw)))
+    else:
+        w('  AxialCoefs: []')
+    w('')
+
+    #-------------------- member_joints ------------------------------------------------
+    J_KEYS = ('JointID', 'Jointxi', 'Jointyi', 'Jointzi', 'JointAxID', 'JointOvrlp')
+    n_joints = int(d.scalar('NJoints'))
+    joint_rows = d.table_rows(n_joints, skip=2)
+    w('member_joints:')
+    if n_joints > 0:
+        w('  Joints:')
+        for raw in joint_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(J_KEYS):
+                raise ValueError('convert_hydrodyn: Joints row "{}" in {} has {} value(s); expected {}'.format(
+                    raw, text_path, len(toks), len(J_KEYS)))
+            w(_row_map(J_KEYS, toks))
+    else:
+        w('  Joints: []')
+    w('')
+
+    #-------------------- cylindrical_member_cross_section -----------------------------
+    CYL_PROP_KEYS = ('PropSetID', 'PropD', 'PropThck')
+    n_cyl_props = int(d.scalar('NPropSetsCyl'))
+    cyl_prop_rows = d.table_rows(n_cyl_props, skip=2)
+    w('cylindrical_member_cross_section:')
+    if n_cyl_props > 0:
+        w('  MPropSetsCyl:')
+        for raw in cyl_prop_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(CYL_PROP_KEYS):
+                raise ValueError('convert_hydrodyn: MPropSetsCyl row "{}" in {} has {} value(s); expected {}'.format(
+                    raw, text_path, len(toks), len(CYL_PROP_KEYS)))
+            w(_row_map(CYL_PROP_KEYS, toks))
+    else:
+        w('  MPropSetsCyl: []')
+    w('')
+
+    #-------------------- rectangular_member_cross_section -----------------------------
+    REC_PROP_KEYS = ('PropSetID', 'PropA', 'PropB', 'PropThck')
+    n_rec_props = int(d.scalar('NPropSetsRec'))
+    rec_prop_rows = d.table_rows(n_rec_props, skip=2)
+    w('rectangular_member_cross_section:')
+    if n_rec_props > 0:
+        w('  MPropSetsRec:')
+        for raw in rec_prop_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(REC_PROP_KEYS):
+                raise ValueError('convert_hydrodyn: MPropSetsRec row "{}" in {} has {} value(s); expected {}'.format(
+                    raw, text_path, len(toks), len(REC_PROP_KEYS)))
+            w(_row_map(REC_PROP_KEYS, toks))
+    else:
+        w('  MPropSetsRec: []')
+    w('')
+
+    #-------------------- simple_hydrodynamic_coefficients_cylindrical -----------------
+    SIMPL_CYL_KEYS = ('SimplCd', 'SimplCdMG', 'SimplCa', 'SimplCaMG', 'SimplCp', 'SimplCpMG',
+                       'SimplAxCd', 'SimplAxCdMG', 'SimplAxCa', 'SimplAxCaMG', 'SimplAxCp',
+                       'SimplAxCpMG', 'SimplCb', 'SimplCbMG')
+    w('simple_hydrodynamic_coefficients_cylindrical:')
+    # unlike the counted tables, there is no keyword line to anchor a forward keyword
+    # search on here, so the section banner (a real, non-comment line) must be skipped
+    # explicitly too, in addition to the two column-name/units header lines
+    toks = _row_tokens(d.table_rows(1, skip=3)[0])
+    if len(toks) != len(SIMPL_CYL_KEYS):
+        raise ValueError('convert_hydrodyn: simple cylindrical coefficients row in {} has {} value(s); '
+                         'expected {}'.format(text_path, len(toks), len(SIMPL_CYL_KEYS)))
+    for k, t in zip(SIMPL_CYL_KEYS, toks):
+        w('  {}: {}'.format(k, t))
+    w('')
+
+    #-------------------- simple_hydrodynamic_coefficients_rectangular -----------------
+    SIMPL_REC_KEYS = ('SimplRecCdA', 'SimplRecCdAMG', 'SimplRecCdB', 'SimplRecCdBMG',
+                       'SimplRecCaA', 'SimplRecCaAMG', 'SimplRecCaB', 'SimplRecCaBMG',
+                       'SimplRecCp', 'SimplRecCpMG', 'SimplRecAxCd', 'SimplRecAxCdMG',
+                       'SimplRecAxCa', 'SimplRecAxCaMG', 'SimplRecAxCp', 'SimplRecAxCpMG',
+                       'SimplRecCb', 'SimplRecCbMG')
+    w('simple_hydrodynamic_coefficients_rectangular:')
+    # same reasoning as simple_hydrodynamic_coefficients_cylindrical above: skip the
+    # section banner plus the two column-name/units header lines
+    toks = _row_tokens(d.table_rows(1, skip=3)[0])
+    if len(toks) != len(SIMPL_REC_KEYS):
+        raise ValueError('convert_hydrodyn: simple rectangular coefficients row in {} has {} value(s); '
+                         'expected {}'.format(text_path, len(toks), len(SIMPL_REC_KEYS)))
+    for k, t in zip(SIMPL_REC_KEYS, toks):
+        w('  {}: {}'.format(k, t))
+    w('')
+
+    #-------------------- depth_based_hydrodynamic_coefficients_cylindrical -----------
+    DPTH_CYL_KEYS = ('Dpth', 'DpthCd', 'DpthCdMG', 'DpthCa', 'DpthCaMG', 'DpthCp', 'DpthCpMG',
+                      'DpthAxCd', 'DpthAxCdMG', 'DpthAxCa', 'DpthAxCaMG', 'DpthAxCp',
+                      'DpthAxCpMG', 'DpthCb', 'DpthCbMG')
+    n_dpth_cyl = int(d.scalar('NCoefDpthCyl'))
+    dpth_cyl_rows = d.table_rows(n_dpth_cyl, skip=2)
+    w('depth_based_hydrodynamic_coefficients_cylindrical:')
+    if n_dpth_cyl > 0:
+        w('  CoefDpthsCyl:')
+        for raw in dpth_cyl_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(DPTH_CYL_KEYS):
+                raise ValueError('convert_hydrodyn: CoefDpthsCyl row "{}" in {} has {} value(s); expected {}'.format(
+                    raw, text_path, len(toks), len(DPTH_CYL_KEYS)))
+            w(_row_map(DPTH_CYL_KEYS, toks))
+    else:
+        w('  CoefDpthsCyl: []')
+    w('')
+
+    #-------------------- depth_based_hydrodynamic_coefficients_rectangular -----------
+    DPTH_REC_KEYS = ('Dpth', 'DpthCdA', 'DpthCdAMG', 'DpthCdB', 'DpthCdBMG', 'DpthCaA',
+                      'DpthCaAMG', 'DpthCaB', 'DpthCaBMG', 'DpthCp', 'DpthCpMG', 'DpthAxCd',
+                      'DpthAxCdMG', 'DpthAxCa', 'DpthAxCaMG', 'DpthAxCp', 'DpthAxCpMG',
+                      'DpthCb', 'DpthCbMG')
+    n_dpth_rec = int(d.scalar('NCoefDpthRec'))
+    dpth_rec_rows = d.table_rows(n_dpth_rec, skip=2)
+    w('depth_based_hydrodynamic_coefficients_rectangular:')
+    if n_dpth_rec > 0:
+        w('  CoefDpthsRec:')
+        for raw in dpth_rec_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(DPTH_REC_KEYS):
+                raise ValueError('convert_hydrodyn: CoefDpthsRec row "{}" in {} has {} value(s); expected {}'.format(
+                    raw, text_path, len(toks), len(DPTH_REC_KEYS)))
+            w(_row_map(DPTH_REC_KEYS, toks))
+    else:
+        w('  CoefDpthsRec: []')
+    w('')
+
+    #-------------------- member_based_hydrodynamic_coefficients_cylindrical ---------
+    MEMB_CYL_KEYS = ('MemberID', 'MemberCd1', 'MemberCd2', 'MemberCdMG1', 'MemberCdMG2',
+                      'MemberCa1', 'MemberCa2', 'MemberCaMG1', 'MemberCaMG2',
+                      'MemberCp1', 'MemberCp2', 'MemberCpMG1', 'MemberCpMG2',
+                      'MemberAxCd1', 'MemberAxCd2', 'MemberAxCdMG1', 'MemberAxCdMG2',
+                      'MemberAxCa1', 'MemberAxCa2', 'MemberAxCaMG1', 'MemberAxCaMG2',
+                      'MemberAxCp1', 'MemberAxCp2', 'MemberAxCpMG1', 'MemberAxCpMG2',
+                      'MemberCb1', 'MemberCb2', 'MemberCbMG1', 'MemberCbMG2')
+    n_memb_cyl = int(d.scalar('NCoefMembersCyl'))
+    memb_cyl_rows = d.table_rows(n_memb_cyl, skip=2)
+    w('member_based_hydrodynamic_coefficients_cylindrical:')
+    if n_memb_cyl > 0:
+        w('  CoefMembersCyl:')
+        for raw in memb_cyl_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(MEMB_CYL_KEYS):
+                raise ValueError('convert_hydrodyn: CoefMembersCyl row "{}" in {} has {} value(s); '
+                                 'expected {}'.format(raw, text_path, len(toks), len(MEMB_CYL_KEYS)))
+            w(_row_map(MEMB_CYL_KEYS, toks))
+    else:
+        w('  CoefMembersCyl: []')
+    w('')
+
+    #-------------------- member_based_hydrodynamic_coefficients_rectangular ---------
+    MEMB_REC_KEYS = ('MemberID', 'MemberCdA1', 'MemberCdA2', 'MemberCdAMG1', 'MemberCdAMG2',
+                      'MemberCdB1', 'MemberCdB2', 'MemberCdBMG1', 'MemberCdBMG2',
+                      'MemberCaA1', 'MemberCaA2', 'MemberCaAMG1', 'MemberCaAMG2',
+                      'MemberCaB1', 'MemberCaB2', 'MemberCaBMG1', 'MemberCaBMG2',
+                      'MemberCp1', 'MemberCp2', 'MemberCpMG1', 'MemberCpMG2',
+                      'MemberAxCd1', 'MemberAxCd2', 'MemberAxCdMG1', 'MemberAxCdMG2',
+                      'MemberAxCa1', 'MemberAxCa2', 'MemberAxCaMG1', 'MemberAxCaMG2',
+                      'MemberAxCp1', 'MemberAxCp2', 'MemberAxCpMG1', 'MemberAxCpMG2',
+                      'MemberCb1', 'MemberCb2', 'MemberCbMG1', 'MemberCbMG2')
+    n_memb_rec = int(d.scalar('NCoefMembersRec'))
+    memb_rec_rows = d.table_rows(n_memb_rec, skip=2)
+    w('member_based_hydrodynamic_coefficients_rectangular:')
+    if n_memb_rec > 0:
+        w('  CoefMembersRec:')
+        for raw in memb_rec_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(MEMB_REC_KEYS):
+                raise ValueError('convert_hydrodyn: CoefMembersRec row "{}" in {} has {} value(s); '
+                                 'expected {}'.format(raw, text_path, len(toks), len(MEMB_REC_KEYS)))
+            w(_row_map(MEMB_REC_KEYS, toks))
+    else:
+        w('  CoefMembersRec: []')
+    w('')
+
+    #-------------------- members -----------------------------------------------------
+    # FDMod/VnCOffA/VnCOffB/FDLoFScA/FDLoFScB are optional trailing entries (the text
+    # path's 11-entry fallback read); PropPot is the one LOGICAL entry in this table
+    MEMBER_KEYS = ('MemberID', 'MJointID1', 'MJointID2', 'MPropSetID1', 'MPropSetID2',
+                    'MSecGeom', 'MSpinOrient', 'MDivSize', 'MCoefMod', 'MHstLMod', 'PropPot',
+                    'FDMod', 'VnCOffA', 'VnCOffB', 'FDLoFScA', 'FDLoFScB')
+    n_members = int(d.scalar('NMembers'))
+    member_rows = d.table_rows(n_members, skip=2)
+    w('members:')
+    if n_members > 0:
+        w('  Members:')
+        for raw in member_rows:
+            toks = _row_tokens(raw)
+            if len(toks) not in (11, 16):
+                raise ValueError('convert_hydrodyn: Members row "{}" in {} has {} value(s); '
+                                 'expected 11 or 16'.format(raw, text_path, len(toks)))
+            vals = list(toks)
+            vals[10] = _as_bool(vals[10])  # PropPot
+            w(_row_map(MEMBER_KEYS, vals))
+    else:
+        w('  Members: []')
+    w('')
+
+    #-------------------- filled_members -----------------------------------------------
+    # FillNumM (the row's first token) is consumed only to know how many member IDs
+    # follow; it is never itself emitted (FillNumM is derived from the FillMList length)
+    n_fill = int(d.scalar('NFillGroups'))
+    fill_rows = d.table_rows(n_fill, skip=2)
+    w('filled_members:')
+    if n_fill > 0:
+        w('  FilledGroups:')
+        for raw in fill_rows:
+            toks = _row_tokens(raw)
+            fill_num_m = int(toks[0])
+            fill_mlist = toks[1:1 + fill_num_m]
+            fill_fsloc = toks[1 + fill_num_m]
+            fill_dens = _default_or_num(toks[2 + fill_num_m])
+            # block-style item (see _row_map's docstring for why: a flow mapping here
+            # would be misparsed as "key: value" split on its first colon)
+            w('    - FillMList: [{}]'.format(', '.join(fill_mlist)))
+            w('      FillFSLoc: {}'.format(fill_fsloc))
+            w('      FillDens: {}'.format(fill_dens))
+    else:
+        w('  FilledGroups: []')
+    w('')
+
+    #-------------------- marine_growth_by_depth ---------------------------------------
+    MG_KEYS = ('MGDpth', 'MGThck', 'MGDens')
+    n_mg = int(d.scalar('NMGDepths'))
+    mg_rows = d.table_rows(n_mg, skip=2)
+    w('marine_growth_by_depth:')
+    if n_mg > 0:
+        w('  MGDepths:')
+        for raw in mg_rows:
+            toks = _row_tokens(raw)
+            if len(toks) != len(MG_KEYS):
+                raise ValueError('convert_hydrodyn: MGDepths row "{}" in {} has {} value(s); expected {}'.format(
+                    raw, text_path, len(toks), len(MG_KEYS)))
+            w(_row_map(MG_KEYS, toks))
+    else:
+        w('  MGDepths: []')
+    w('')
+
+    #-------------------- member_output_list -------------------------------------------
+    # NOutLoc (the row's second token) is consumed only to know how many node
+    # locations follow; it is never itself emitted (derived from the NodeLocs length)
+    n_mout = int(d.scalar('NMOutputs'))
+    mout_rows = d.table_rows(n_mout, skip=2)
+    w('member_output_list:')
+    if n_mout > 0:
+        w('  MOutLst:')
+        for raw in mout_rows:
+            toks = _row_tokens(raw)
+            member_id = toks[0]
+            n_out_loc = int(toks[1])
+            node_locs = toks[2:2 + n_out_loc]
+            # block-style item (see _row_map's docstring for why)
+            w('    - MemberID: {}'.format(member_id))
+            w('      NodeLocs: [{}]'.format(', '.join(node_locs)))
+    else:
+        w('  MOutLst: []')
+    w('')
+
+    #-------------------- joint_output_list ---------------------------------------------
+    # a flat list of joint IDs (not itself tabular; no table header lines precede it)
+    n_jout = int(d.scalar('NJOutputs'))
+    jout_toks = [t.rstrip(',') for t in d.find('JOutLst')]
+    w('joint_output_list:')
+    if n_jout > 0:
+        w('  JOutLst: [' + ', '.join(jout_toks[:n_jout]) + ']')
+    else:
+        w('  JOutLst: []')
+    w('')
+
+    #-------------------- output -----------------------------------------------------
+    w('output:')
+    w('  HDSum: '    + _as_bool(d.scalar('HDSum')))
+    w('  OutAll: '   + _as_bool(d.scalar('OutAll')))
+    w('  OutSwtch: ' + d.scalar('OutSwtch'))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    w('  OutSFmt: '  + _as_str(d.scalar('OutSFmt')))
+    w('')
+
+    #-------------------- output_channels ----------------------------------------------
+    w('output_channels:')
+    # like SeaState's text format, there is no literal "OutList" keyword line -- channel
+    # names start immediately after the "OUTPUT CHANNELS" section banner
+    channels = d.outlist(keyword='OUTPUT CHANNELS')
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
 def _quote_line(text):
     """Double-quote an arbitrary raw line of text (e.g. the .fst description),
     escaping backslashes/quotes so it is always a valid YAML scalar even when
@@ -861,18 +1336,20 @@ def convert_fst(text_path, mode='per-file'):
                       AeroDisk file (if CompAero == 1), EDFile (if CompElast == 3, i.e.
                       Simplified ElastoDyn), ServoFile (if CompServo == 1, including
                       its referenced StC sub-files as their own .yaml file type),
-                      and/or SeaStFile (if CompSeaSt == 1) are ALSO converted to YAML
-                      and their input_files entries are repointed at the new .yaml
-                      files. Other module files stay as text paths.
+                      SeaStFile (if CompSeaSt == 1), and/or HydroFile (if CompHydro == 1;
+                      its referenced PotFile/GeoFile potential-flow data stay paths) are
+                      ALSO converted to YAML and their input_files entries are repointed
+                      at the new .yaml files. Other module files stay as text paths.
       'single-file' - the InflowWind input (if CompInflow == 1), the AeroDisk input
                       (if CompAero == 1), the EDFile input (if CompElast == 3), the
                       ServoFile input (if CompServo == 1; its StC sub-files stay
-                      referenced by path -- StC input is never inlined), and/or
-                      the SeaStFile input (if CompSeaSt == 1) are inlined as a nested
-                      mapping under input_files:InflowFile / input_files:AeroFile /
-                      input_files:EDFile / input_files:ServoFile / input_files:SeaStFile
-                      (the uniform value rule: a mapping value is inline module input).
-                      Other modules stay as text paths.
+                      referenced by path -- StC input is never inlined), the SeaStFile
+                      input (if CompSeaSt == 1), and/or the HydroFile input (if
+                      CompHydro == 1) are inlined as a nested mapping under
+                      input_files:InflowFile / input_files:AeroFile / input_files:EDFile
+                      / input_files:ServoFile / input_files:SeaStFile /
+                      input_files:HydroFile (the uniform value rule: a mapping value is
+                      inline module input). Other modules stay as text paths.
 
     Returns (yaml_text, extra_files):
       yaml_text   - the YAML document for the .fst itself (str).
@@ -1099,7 +1576,25 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  SeaStFile: ' + _as_str(seast_rel))
 
-    w('  HydroFile: '   + _as_str(hydro_file))
+    convert_hydro = (comp_hydro == 1) and (mode in ('all-yaml', 'single-file'))
+    hydro_rel = _unquote(hydro_file)
+    if convert_hydro:
+        hydro_abs = os.path.join(base_dir, hydro_rel)
+        hydro_yaml_text = convert_hydrodyn(hydro_abs)
+        if mode == 'single-file':
+            w('  HydroFile:')
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under HydroFile:
+            hydro_lines = hydro_yaml_text.split('\n')
+            hydro_body = '\n'.join(hydro_lines[2:]) if len(hydro_lines) > 2 else hydro_yaml_text
+            w(_indent_block(hydro_body, '    '))
+        else:  # all-yaml
+            hydro_yaml_rel = os.path.splitext(hydro_rel)[0] + '.yaml'
+            extra_files[hydro_yaml_rel] = hydro_yaml_text
+            w('  HydroFile: ' + _as_str(hydro_yaml_rel))
+    else:
+        w('  HydroFile: ' + _as_str(hydro_rel))
+
     w('  SubFile: '     + _as_str(sub_file))
     w('  MooringFile: ' + _as_str(mooring_file))
     w('  IceFile: '     + _as_str(ice_file))

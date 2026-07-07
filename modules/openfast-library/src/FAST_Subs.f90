@@ -1071,11 +1071,16 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
    IF (p_FAST%CompHydro == Module_HD) THEN
 
       Init%InData_HD%Gravity       = p_FAST%Gravity
-      Init%InData_HD%UseInputFile  = .TRUE.
+      Init%InData_HD%UseInputFile  = .not. m_FAST%HDIsInline
       Init%InData_HD%InputFile     = p_FAST%HydroFile
       Init%InData_HD%OutRootName   = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_HD))
       Init%InData_HD%TMax          = p_FAST%TMax
       Init%InData_HD%Linearize     = p_FAST%Linearize
+      IF ( m_FAST%HDIsInline ) THEN      ! inline HydroDyn input from a YAML primary file
+         Init%InData_HD%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%HDInlineFileInfo, Init%InData_HD%PassedFileData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      END IF
 
       ! Initial platform position; PlatformPos(1:3) is effectively the initial position of the HD origin
       if ( p_FAST%CompSub == Module_SD ) then

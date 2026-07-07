@@ -1066,3 +1066,216 @@ If HydroDyn encounters an unknown/invalid
 channel name, it warns the users but will remove the suspect channel
 from the output file. Please refer to Appendix C for a complete list of
 possible output parameters.
+
+.. _hydrodyn-yaml-input:
+
+YAML input file
+----------------
+
+The HydroDyn primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); see :ref:`yaml_input` for the conventions shared by all modules.
+Parameters keep their documented names, grouped into sections that mirror the
+text format's banners: ``general`` (``Echo``), ``floating_platform`` (the
+potential-flow settings ``PotMod`` through ``GeoFile``),
+``second_order_wamit_forces`` (``MnDrift``, ``NewmanApp``, ``DiffQTF``,
+``SumQTF``), ``additional_stiffness_damping`` (``AddF0``, ``AddCLin``,
+``AddBLin``, ``AddBQuad``), ``strip_theory`` (``WaveDisp``, ``AMMod``,
+``HstMod``), ``axial_coefficients``, ``member_joints``,
+``cylindrical_member_cross_section``, ``rectangular_member_cross_section``,
+``simple_hydrodynamic_coefficients_cylindrical``,
+``simple_hydrodynamic_coefficients_rectangular``,
+``depth_based_hydrodynamic_coefficients_cylindrical``,
+``depth_based_hydrodynamic_coefficients_rectangular``,
+``member_based_hydrodynamic_coefficients_cylindrical``,
+``member_based_hydrodynamic_coefficients_rectangular``, ``members``,
+``filled_members``, ``marine_growth_by_depth``, ``member_output_list``,
+``joint_output_list``, ``output`` (``HDSum``, ``OutAll``, ``OutSwtch``,
+``OutFmt``, ``OutSFmt``), and ``output_channels`` (``OutList``).
+
+Counted tables become YAML lists of mappings — one mapping per table row, with
+the documented column names as keys — so the ``N*`` count parameters
+(``NAxCoef``, ``NJoints``, ``NPropSetsCyl``, ``NPropSetsRec``, ``NCoefDpthCyl``,
+``NCoefDpthRec``, ``NCoefMembersCyl``, ``NCoefMembersRec``, ``NMembers``,
+``NFillGroups``, ``NMGDepths``, ``NMOutputs``, ``NJOutputs``) are not YAML
+keys: each is derived from the length of the corresponding list
+(``AxialCoefs``, ``Joints``, ``MPropSetsCyl``, ``MPropSetsRec``,
+``CoefDpthsCyl``, ``CoefDpthsRec``, ``CoefMembersCyl``, ``CoefMembersRec``,
+``Members``, ``FilledGroups``, ``MGDepths``, ``MOutLst``, ``JOutLst``). An
+empty table is an empty list (``[]``). Within a table row:
+
+- ``axial_coefficients:AxialCoefs`` rows may omit ``AxFDMod``, ``AxVnCOff``,
+  and ``AxFDLoFSc`` (defaults 0, -1.0, and 1.0 — the same fallbacks the text
+  format applies to short rows).
+- ``members:Members`` rows may omit the rectangular-member drag entries
+  ``FDMod``, ``VnCOffA``, ``VnCOffB``, ``FDLoFScA``, and ``FDLoFScB``
+  (defaults 0, -1.0, -1.0, 1.0, and 1.0, matching the text format's short-row
+  form; as in the text format, these entries are ignored — with a warning —
+  for non-rectangular members or when ``FDMod`` is 0).
+- ``filled_members:FilledGroups`` rows give the member IDs as the list
+  ``FillMList`` (``FillNumM`` is its length) plus ``FillFSLoc`` and
+  ``FillDens``; ``FillDens`` accepts the literal scalar ``default`` (fill
+  density = water density), exactly like ``DEFAULT`` in the text format.
+- ``member_output_list:MOutLst`` rows give ``MemberID`` plus the ``NodeLocs``
+  list (``NOutLoc`` is its length).
+- ``joint_output_list:JOutLst`` is a flat list of joint IDs.
+
+``RdtnDT`` accepts the literal scalar ``default`` exactly like ``DEFAULT`` in
+the text format (the radiation time step falls back to the glue-code/driver
+simulation time step). The MacCamy-Fuchs keyword ``MCF`` is accepted exactly
+where the text format accepts it: ``SimplCp``/``SimplCpMG``,
+``SimplRecCp``/``SimplRecCpMG``, ``DpthCp``/``DpthCpMG`` (both depth-based
+tables), and ``MemberCp1``/``MemberCp2``/``MemberCpMG1``/``MemberCpMG2`` (both
+member-based tables) may each hold a number or the string ``MCF``; within one
+such group of related entries all must say ``MCF`` or none may, and in the
+depth-based tables the choice must agree across all rows.
+
+``floating_platform``'s per-body arrays are lists: ``PotFile``, ``WAMITULEN``,
+and ``FKMod`` with ``NBodyMod = 1`` have one entry (otherwise ``NBody``
+entries), and ``PtfmRefxt``/``PtfmRefyt``/``PtfmRefzt``/``PtfmRefztRot``/
+``PtfmVol0``/``PtfmCOBxt``/``PtfmCOByt``/``NAddDOF``/``GeoFile`` always have
+``NBody`` entries. ``AddF0`` is a matrix of NDOF rows (one column per WAMIT
+object); ``AddCLin``/``AddBLin``/``AddBQuad`` are lists of NDOF x NDOF
+matrices, one matrix per WAMIT object (the text format flattens these
+side-by-side into NDOF rows of ``nWAMITObj*NDOF`` values). ``PotFile`` and
+``GeoFile`` remain file-path/rootname strings, resolved relative to the primary
+input file — potential-flow data files are never written in YAML.
+
+.. code-block:: yaml
+
+   # HydroDyn primary input file (YAML form; abridged)
+   general:
+     Echo: false
+
+   floating_platform:
+     PotMod: 1
+     ExctnMod: 1
+     ExctnDisp: 0
+     ExctnCutOff: 10
+     PtfmYMod: 0
+     PtfmRefY: 0
+     PtfmYCutOff: 0.01
+     NExctnHdg: 36
+     RdtnMod: 1
+     RdtnTMax: 60
+     RdtnDT: default          # or a value in seconds
+     NBody: 1
+     NBodyMod: 1
+     PotFile: ["HydroData/marin_semi"]   # WAMIT rootname(s); data files stay external
+     WAMITULEN: [1]
+     PtfmRefxt: [0]
+     PtfmRefyt: [0]
+     PtfmRefzt: [0]
+     PtfmRefztRot: [0]
+     PtfmVol0: [13917]
+     PtfmCOBxt: [0]
+     PtfmCOByt: [0]
+     NAddDOF: [0]
+     FKMod: [0]
+     GeoFile: ["unused"]
+
+   second_order_wamit_forces:
+     MnDrift: 0
+     NewmanApp: 0
+     DiffQTF: 12
+     SumQTF: 12
+
+   additional_stiffness_damping:
+     AddF0: [[0], [0], [0], [0], [0], [0]]
+     AddCLin: [[[0, 0, 0, 0, 0, 0],       # one NDOF x NDOF matrix per WAMIT object
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0]]]
+     AddBLin:  [ ... ]                    # same shape as AddCLin
+     AddBQuad: [ ... ]                    # same shape as AddCLin
+
+   strip_theory:
+     WaveDisp: 0
+     AMMod: 0
+     HstMod: 1
+
+   axial_coefficients:
+     AxialCoefs:
+       - AxCoefID: 1
+         AxCd: 0.0
+         AxCa: 0.0
+         AxCp: 1.0            # AxFDMod/AxVnCOff/AxFDLoFSc omitted: defaults 0/-1.0/1.0
+
+   member_joints:
+     Joints:
+       - {JointID: 1, Jointxi: 0.0, Jointyi: 0.0, Jointzi: -20.0, JointAxID: 1, JointOvrlp: 0}
+       - {JointID: 2, Jointxi: 0.0, Jointyi: 0.0, Jointzi:  10.0, JointAxID: 1, JointOvrlp: 0}
+
+   cylindrical_member_cross_section:
+     MPropSetsCyl:
+       - {PropSetID: 1, PropD: 6.5, PropThck: 0.03}
+
+   rectangular_member_cross_section:
+     MPropSetsRec: []
+
+   simple_hydrodynamic_coefficients_cylindrical:
+     SimplCd: 0.0
+     SimplCdMG: 0.0
+     SimplCa: 0.0
+     SimplCaMG: 0.0
+     SimplCp: MCF             # a number, or "MCF" (then SimplCpMG must be "MCF" too)
+     SimplCpMG: MCF
+     SimplAxCd: 0.0
+     SimplAxCdMG: 0.0
+     SimplAxCa: 0.0
+     SimplAxCaMG: 0.0
+     SimplAxCp: 1.0
+     SimplAxCpMG: 1.0
+     SimplCb: 1.0
+     SimplCbMG: 1.0
+
+   # ... simple_hydrodynamic_coefficients_rectangular,
+   # depth_based_hydrodynamic_coefficients_*, and
+   # member_based_hydrodynamic_coefficients_* follow the same pattern ...
+
+   members:
+     Members:
+       - MemberID: 1
+         MJointID1: 1
+         MJointID2: 2
+         MPropSetID1: 1
+         MPropSetID2: 1
+         MSecGeom: 1
+         MSpinOrient: 0
+         MDivSize: 1.0
+         MCoefMod: 1
+         MHstLMod: 1
+         PropPot: true        # FDMod/VnCOffA/VnCOffB/FDLoFScA/FDLoFScB omitted
+
+   filled_members:
+     FilledGroups:
+       - FillMList: [2, 3, 4]      # FillNumM = 3 (derived from list length)
+         FillFSLoc: -6.17
+         FillDens: default         # or a value in kg/m^3
+
+   marine_growth_by_depth:
+     MGDepths: []
+
+   member_output_list:
+     MOutLst:
+       - MemberID: 1
+         NodeLocs: [0.0, 0.5, 1.0]     # NOutLoc = 3 (derived from list length)
+
+   joint_output_list:
+     JOutLst: [1, 2]
+
+   output:
+     HDSum: false
+     OutAll: false
+     OutSwtch: 2
+     OutFmt: "E16.8e2"
+     OutSFmt: "A11"
+
+   output_channels:
+     OutList: [HydroFxi, HydroFyi, HydroFzi, HydroMxi, HydroMyi, HydroMzi]
+
+HydroDyn's input file may also be given inline under an OpenFAST primary (.fst)
+file's ``input_files:HydroFile`` (only legal when ``CompHydro`` selects
+HydroDyn; see :ref:`yaml_input`). Potential-flow data files (``PotFile``
+rootnames, ``GeoFile`` geometry files) always stay referenced by path.
