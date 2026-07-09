@@ -19,6 +19,7 @@ if (GENERATE_TYPES)
 endif()
 
 add_library(feamlib STATIC
+  src/FEAM_Yaml.f90
   src/FEAM.f90
   src/FEAMooring_Types.f90
 )

@@ -733,6 +733,16 @@ yaml_equiv("moordyn" "md_5MW_OC4Semi"   "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;y
 yaml_equiv("moordyn" "md_lineFail"      "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 yaml_equiv("moordyn" "md_VIV"           "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 
+# NOTE: no yaml_equiv registration for FEAMooring (CompMooring=2). Its YAML support is
+# implemented (FEAM_Yaml.f90 + funnel + full glue inline path) and was verified
+# bit-identical out-of-harness against the OC4Semi FEAMooring deck, but there is no honest
+# in-harness vehicle: no r-test glue deck selects CompMooring=2 (the *_FEAMooring.dat files
+# in the OC3Spar/OC4Semi/TLP/ITIBarge decks are inactive alternates -- those decks run MAP++
+# or MoorDyn), the r-test submodule has no FEAMooring driver case, and the FEAM driver is
+# idiosyncratic (takes the input file directly, no .dvr; writes a non-standard FEAM.out) so it
+# does not fit the executeYamlEquivalenceCase.py driver conventions. Coverage gap accepted by
+# the user for this legacy module (2026-07-09); revisit if a CompMooring=2 r-test case is added.
+
 # BeamDyn standalone-driver yaml-equivalence: bd_5MW_dynamic (dynamic solve, GA2 time
 # integration, quadrature=2/Trapezoidal so refine's non-"default" path is live, 9 node
 # outputs + full OutList) and bd_static_cantilever_beam (static/QuasiStaticInit path,

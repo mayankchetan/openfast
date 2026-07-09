@@ -118,10 +118,11 @@ sections. Inline input is available for modules whose YAML schema exists
 them; ElastoDyn or Simplified ElastoDyn when ``CompElast`` selects one of
 them; ServoDyn when ``CompServo`` selects it; SeaState when ``CompSeaSt``
 selects it; HydroDyn when ``CompHydro`` selects it; SubDyn or ExtPtfm when
-``CompSub`` selects one of them; and MoorDyn when ``CompMooring`` selects it);
+``CompSub`` selects one of them; and MoorDyn or FEAMooring when ``CompMooring``
+selects one of them);
 an inline mapping for any other module -- or for ``MooringFile`` when
 ``CompMooring``
-selects a module without a YAML schema (MAP++, FEAMooring, OrcaFlex) -- is a
+selects a module without a YAML schema (MAP++, OrcaFlex) -- is a
 clear fatal error suggesting a file path instead. Combined with ``!include``
 and anchors, this supports fully single-file models. Second-order files (e.g.
 Structural Control files under ServoDyn, potential-flow data under HydroDyn,
@@ -226,9 +227,14 @@ supported:
   under ``input_files:AeroFile`` (when ``CompAero`` selects AeroDyn); airfoil,
   blade, tailfin, AeroAcoustics, and OLAF files stay referenced by path
 - MoorDyn primary input file (:ref:`moordyn-yaml-input`), including inline use
-  under ``input_files:MooringFile`` (when ``CompMooring`` selects MoorDyn);
+  under ``input_files:MooringFile`` (when ``CompMooring`` selects MoorDyn,
+  ``CompMooring`` = 3);
   bathymetry grids, water-kinematics files, stiffness/damping lookup tables,
   and Syrope working-curve files stay referenced by path
+- FEAMooring primary input file (:ref:`feamooring-yaml-input`), including inline
+  use under ``input_files:MooringFile`` (when ``CompMooring`` selects FEAMooring,
+  ``CompMooring`` = 2). FEAMooring's primary input references no further data
+  files, so nothing stays a path -- every field is inlined
 - SubDyn primary input file (:ref:`subdyn-yaml-input`), including inline use
   under ``input_files:SubFile`` (when ``CompSub`` selects SubDyn, ``CompSub`` = 1)
 - ExtPtfm_MCKF primary input file (:ref:`extptfm-yaml-input`), including inline
@@ -242,3 +248,81 @@ supported:
   ElastoDyn + BeamDyn); BeamDyn has no inline-input glue path, so
   ``BDBldFile`` is always a file path, never inlined. The blade properties
   file stays referenced by path.
+
+
+.. _feamooring-yaml-input:
+
+FEAMooring YAML input file
+--------------------------
+
+The FEAMooring primary input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); the conventions above apply. (FEAMooring has no formal
+module-documentation page of its own -- see the FEAMooring Theory Manual and
+User's Guide linked from :ref:`user_guide` -- so its YAML schema is documented
+here.) Top-level keys mirror the text format's section banners:
+``simulation_control``, ``lines``, ``output``, and ``outputs``. When
+``CompMooring`` selects FEAMooring (``CompMooring`` = 2), a glue-code YAML
+primary file may inline the whole ``MooringFile`` section as a mapping instead of
+a path, following the general inline-input rule above.
+
+Unlike the text format, the following counts are never given explicitly -- they
+derive from list lengths: **NumLines** (the ``lines`` sequence length) and
+**NumOuts** (the ``outputs:OutList`` length). ``NumElems`` (the finite-element
+count per line) is a scalar, not a list count, so it is kept.
+
+Notable schema points:
+
+- ``simulation_control:DT``, ``:Gravity``, and ``:WtrDens`` each accept the
+  literal ``default`` (the glue code's coupling interval / gravitational
+  acceleration / water density is used) or a number, exactly like the text
+  format.
+- ``lines`` is a sequence with one mapping per mooring line. Each mapping holds
+  the line's material and geometry scalars (``LEAStiff``, ``LMassDen``,
+  ``LDMassDen``, ``LineCI``, ``LineCD``, ``LUnstrLen``, ``BottmStiff``,
+  ``LRadAnch``, ``LAngAnch``, ``LDpthAnch``, ``LRadFair``, ``LAngFair``,
+  ``LDrftFair``, ``Tension``) and ``GSL``, a 3-element list of linear spring
+  stiffnesses in x, y, z. The anchor/fairlead azimuth angles ``LAngAnch`` and
+  ``LAngFair`` are given in **degrees**, exactly as in the text format.
+- FEAMooring's primary input references no second-order / external data files,
+  so nothing stays a path -- every field is inlined.
+- There is no ``FileFormat``/legacy-format branch: the primary file is a single
+  fixed-schema file, so the YAML schema is a straight one-to-one of it.
+
+.. code-block:: yaml
+
+   # FEAMooring primary input file (YAML form)
+   simulation_control:
+     Echo: false
+     DT: default
+     NumElems: 20
+     Gravity: default
+     WtrDens: default
+     MaxIter: 100
+     Eps: 1e-4
+
+   lines:
+     - LEAStiff: 7.536E8
+       LMassDen: 113.35
+       LDMassDen: 4.72
+       LineCI: 0
+       LineCD: 6.67377
+       LUnstrLen: 835.35
+       BottmStiff: 1.0E4
+       LRadAnch: 837.6
+       LAngAnch: 60.0
+       LDpthAnch: 200.0
+       LRadFair: 40.868
+       LAngFair: 60.0
+       LDrftFair: 14.0
+       Tension: 1.0E6
+       GSL: [1.0E10, 1.0E10, 1.0E10]
+
+   output:
+     SumPrint: true
+     OutFile: 1
+     TabDelim: true
+     OutFmt: "G0"
+     Tstart: 0
+
+   outputs:
+     OutList: ["FairT1", "AnchT1"]

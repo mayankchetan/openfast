@@ -357,12 +357,15 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    else
       call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    end if
-   ! inline MooringFile is legal only when CompMooring selects MoorDyn (=3); for any
-   ! other CompMooring value (esp. MAP++ =1) a mapping value hits GetModFile's "does
-   ! not (yet) support inline YAML input" fatal below, since InlineTarget is then not
-   ! passed at all (mirrors the AeroFile/CompAero and EDFile/CompElast gating patterns)
+   ! inline MooringFile is legal when CompMooring selects MoorDyn (=3, InlineTarget='MoorDyn')
+   ! or FEAMooring (=2, InlineTarget='FEAMooring'); for any other CompMooring value (esp.
+   ! MAP++ =1, which has no YAML schema) a mapping value hits GetModFile's "does not (yet)
+   ! support inline YAML input" fatal below, since InlineTarget is then not passed at all
+   ! (mirrors the AeroFile/CompAero, EDFile/CompElast, and SubFile/CompSub gating patterns)
    if (p%CompMooring == Module_MD) then
       call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE), InlineTarget='MoorDyn' ); if (ErrStat >= AbortErrLev) return
+   else if (p%CompMooring == Module_FEAM) then
+      call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE), InlineTarget='FEAMooring' ); if (ErrStat >= AbortErrLev) return
    else
       call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    end if
@@ -652,6 +655,15 @@ contains
                ! (the RedFile/ConnFile/ForceFile/FConnFile paths written inside the inline
                ! section resolve relative to the deck file through this PriPath)
                FileVar = trim(PriPath)//'inline_ExtPtfm.yaml'
+            case ('FEAMooring')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%FEAMInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%FEAMIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (FEAMooring's primary input references no further files, so PriPath is
+               ! unused by its reader, but is kept for parity with the other inline targets)
+               FileVar = trim(PriPath)//'inline_FEAMooring.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

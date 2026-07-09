@@ -79,6 +79,9 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: WaveVel0      !<  [-]
     REAL(ReKi)  :: Gravity = 0.0_ReKi      !< Gravity [-]
     REAL(ReKi)  :: WtrDens = 0.0_ReKi      !< Water density [-]
+    LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
+    TYPE(FileInfoType)  :: PassedPrimaryInputData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
   END TYPE FEAM_InitInputType
 ! =======================
 ! =========  FEAM_InitOutputType  =======
@@ -628,6 +631,7 @@ subroutine FEAM_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    character(*),    intent(  out) :: ErrMsg
    integer(B4Ki)                  :: LB(3), UB(3)
    integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'FEAM_CopyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -673,12 +677,19 @@ subroutine FEAM_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    end if
    DstInitInputData%Gravity = SrcInitInputData%Gravity
    DstInitInputData%WtrDens = SrcInitInputData%WtrDens
+   DstInitInputData%UseInputFile = SrcInitInputData%UseInputFile
+   call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
 end subroutine
 
 subroutine FEAM_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
    type(FEAM_InitInputType), intent(inout) :: InitInputData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'FEAM_DestroyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -691,6 +702,8 @@ subroutine FEAM_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
    if (allocated(InitInputData%WaveVel0)) then
       deallocate(InitInputData%WaveVel0)
    end if
+   call NWTC_Library_DestroyFileInfoType(InitInputData%PassedPrimaryInputData, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
 subroutine FEAM_PackInitInput(RF, Indata)
@@ -707,6 +720,9 @@ subroutine FEAM_PackInitInput(RF, Indata)
    call RegPackAlloc(RF, InData%WaveVel0)
    call RegPack(RF, InData%Gravity)
    call RegPack(RF, InData%WtrDens)
+   call RegPack(RF, InData%UseInputFile)
+   call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -727,6 +743,9 @@ subroutine FEAM_UnPackInitInput(RF, OutData)
    call RegUnpackAlloc(RF, OutData%WaveVel0); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%Gravity); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%WtrDens); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine FEAM_CopyInitOutput(SrcInitOutputData, DstInitOutputData, CtrlCode, ErrStat, ErrMsg)

@@ -20,6 +20,8 @@
 
     USE FEAMooring_Types
     USE NWTC_Library
+    USE FEAM_Yaml, only: FEAM_ParseYamlFile, FEAM_ParseYamlFileInfo
+    USE YamlInput, only: IsYamlExt
 
     IMPLICIT NONE
 
@@ -150,7 +152,7 @@ SUBROUTINE FEAM_Init(  InitInp, u, p, x, xd, z, OtherState, y, misc, Interval, I
     !............................................................................................      
     p%RootName = TRIM(InitInp%RootName) ! all of the output file names from this module will end with '.FEAM.*'   
 
-    CALL FEAM_ReadInput( InitInp%InputFile, InputFileData, p%RootName, Interval, InitInp%gravity, InitInp%WtrDens, ErrStat2, ErrMsg2 )
+    CALL FEAM_ReadInput( InitInp, InputFileData, p%RootName, Interval, InitInp%gravity, InitInp%WtrDens, ErrStat2, ErrMsg2 )
     CALL CheckError( ErrStat2, ErrMsg2 )
     IF (ErrStat >= AbortErrLev) RETURN
 
@@ -1607,14 +1609,14 @@ CONTAINS
     !...............................................................................................................................
 END SUBROUTINE FEAM_CalcOutput
 !----------------------------------------------------------------------------------------------------------------------------------
-SUBROUTINE FEAM_ReadInput( InputFileName, InputFileData, OutFileRoot, Default_DT, Default_grav, Default_WaterDens, ErrStat, ErrMsg )
+SUBROUTINE FEAM_ReadInput( InitInp, InputFileData, OutFileRoot, Default_DT, Default_grav, Default_WaterDens, ErrStat, ErrMsg )
 ! This subroutine reads the input file and stores all the data in the SrvD_InputFile structure.
 ! It does not perform data validation.
 !..................................................................................................................................
 
     ! Passed variables
 
-    CHARACTER(*), INTENT(IN)               :: InputFileName       ! Name of the input file
+    TYPE(FEAM_InitInputType), INTENT(IN)   :: InitInp             ! Initialization input (input-file name + inline-input handover: UseInputFile / PassedPrimaryInputData / PassedFileIsYaml)
     CHARACTER(*), INTENT(IN)               :: OutFileRoot         ! The rootname of all the output files written by this routine.
 
     !BJJ MODIFIED HERE ONLY FOR TESTING:
@@ -1643,7 +1645,7 @@ SUBROUTINE FEAM_ReadInput( InputFileName, InputFileData, OutFileRoot, Default_DT
 
     ! get the primary/platform input-file data
 
-    CALL ReadPrimaryFile( InputFileName, InputFileData, OutFileRoot, UnEcho, ErrStat2, ErrMsg2 )
+    CALL ReadPrimaryFile( InitInp, InputFileData, OutFileRoot, UnEcho, ErrStat2, ErrMsg2 )
     CALL CheckError(ErrStat2,ErrMsg2)
     IF ( ErrStat >= AbortErrLev ) RETURN
 
@@ -1690,9 +1692,14 @@ CONTAINS
 
 END SUBROUTINE FEAM_ReadInput
 !----------------------------------------------------------------------------------------------------------------------------------
-SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, UnEc, ErrStat, ErrMsg )
+SUBROUTINE ReadPrimaryFile( InitInp, InputFileData, OutFileRoot, UnEc, ErrStat, ErrMsg )
 ! This routine reads in the primary FEAMooring input file and places the values it reads in the InputFileData structure.
 !   It opens and prints to an echo file if requested.
+!
+!   Format funnel (mirrors SubDyn's SD_Input / ExtPtfm's ReadPrimaryFile): the text-reading
+!   branch below is what the YAML path replaces. The one shared post-processing step (the
+!   anchor/fairlead azimuth deg->rad conversion) runs identically -- and only once -- for both
+!   formats after the IF/ELSE. Echo-file cleanup (CLOSE) is confined to the text branch.
 !..................................................................................................................................
 
 
@@ -1702,7 +1709,7 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, UnEc, ErrStat
     INTEGER(IntKi),     INTENT(OUT)     :: UnEc                                ! I/O unit for echo file. If > 0, file is open for writing.
     INTEGER(IntKi),     INTENT(OUT)     :: ErrStat                             ! Error status
 
-    CHARACTER(*),       INTENT(IN)      :: InputFile                           ! Name of the file containing the primary input data
+    TYPE(FEAM_InitInputType), INTENT(IN):: InitInp                             ! Initialization input: InputFile name + inline-input handover (UseInputFile / PassedPrimaryInputData / PassedFileIsYaml)
     CHARACTER(*),       INTENT(OUT)     :: ErrMsg                              ! Error message
     CHARACTER(*),       INTENT(IN)      :: OutFileRoot                         ! The rootname of the echo file, possibly opened in this routine
 
@@ -1718,6 +1725,7 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, UnEc, ErrStat
     LOGICAL                       :: Echo                                      ! Determines if an echo file should be written
     CHARACTER(ErrMsgLen)          :: ErrMsg2                                   ! Temporary Error message
     CHARACTER(1024)               :: PriPath                                   ! Path name of the primary file
+    CHARACTER(1024)               :: InputFile                                 ! Name of the primary input file (text .dat or YAML .yaml/.yml)
     CHARACTER(1024)               :: FTitle                                    ! "File Title": the 2nd line of the input file, which contains a description of its contents
     CHARACTER(200)                :: Line                                      ! Temporary storage of a line from the input file (to compare with "default")
 
@@ -1727,12 +1735,19 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, UnEc, ErrStat
     ErrMsg  = ""
 
     UnEc = -1
-    Echo = .FALSE.  
+    Echo = .FALSE.
+    InputFile = InitInp%InputFile
     CALL GetPath( InputFile, PriPath )     ! Input files will be relative to the path where the primary input file is located.
+
+    ! --- Format funnel: the text-reading branch below is what the YAML path replaces. The
+    !     shared post-processing after this IF/ELSE (the anchor/fairlead deg->rad conversion)
+    !     runs identically -- and only once -- for both formats. The OutList allocation to
+    !     MaxOutPts is text-only (the YAML reader allocates OutList to its own list length).
+    IF ( InitInp%UseInputFile .and. .not. IsYamlExt(InputFile) ) THEN   ! text-format input file (.dat and friends)
 
     CALL AllocAry( InputFileData%OutList, MaxOutPts, "FEAMooring Input File's Outlist", ErrStat2, ErrMsg2 )
     CALL CheckError( ErrStat2, ErrMsg2 )
-    IF ( ErrStat >= AbortErrLev ) RETURN   
+    IF ( ErrStat >= AbortErrLev ) RETURN
 
 
     ! Get an available unit number for the file.
@@ -2000,10 +2015,10 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, UnEc, ErrStat
     ! GSL - Linear Stiffness:
     CALL ReadAryLines( UnIn, InputFile, InputFileData%GSL(J,2,:), SIZE(InputFileData%GSL,3), "GSL", "Linear Stiffness", ErrStat2, ErrMsg2, UnEc)
     CALL CheckError( ErrStat2, ErrMsg2 )
-    IF ( ErrStat >= AbortErrLev ) RETURN 
+    IF ( ErrStat >= AbortErrLev ) RETURN
 
-    InputFileData%LAngAnch(J)                           =  InputFileData%LAngAnch(J)*D2R                            ! Convert the azimuth angle of the current
-    InputFileData%LAngFair(J)                           =  InputFileData%LAngFair(J)*D2R                            ! anchor and fairlead from degrees to radians.      
+    ! (deg->rad conversion of LAngAnch/LAngFair is hoisted to the shared post-processing
+    !  after the format funnel, so it runs once for both the text and YAML paths)
 
     ENDDO
 
@@ -2060,6 +2075,31 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, UnEc, ErrStat
     !---------------------- END OF FILE -----------------------------------------
 
     CLOSE ( UnIn )
+
+    ELSE IF ( InitInp%UseInputFile ) THEN          ! YAML-format input file (.yaml/.yml)
+
+       CALL FEAM_ParseYamlFile( InputFile, PriPath, InputFileData, ErrStat2, ErrMsg2 )
+       CALL CheckError( ErrStat2, ErrMsg2 )
+       IF ( ErrStat >= AbortErrLev ) RETURN
+
+    ELSE IF ( InitInp%PassedFileIsYaml ) THEN      ! inline YAML content (inline module input from a YAML primary file)
+
+       CALL FEAM_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, PriPath, InputFileData, ErrStat2, ErrMsg2 )
+       CALL CheckError( ErrStat2, ErrMsg2 )
+       IF ( ErrStat >= AbortErrLev ) RETURN
+
+    ELSE
+       CALL CheckError( ErrID_Fatal, 'FEAMooring passed (inline) input data must be in YAML format.' )
+       RETURN
+    END IF
+
+    ! --- Shared post-processing (runs once for both the text and YAML formats):
+    !     convert each line's anchor/fairlead azimuth angle from degrees to radians.
+    DO J = 1, InputFileData%NumLines
+       InputFileData%LAngAnch(J) = InputFileData%LAngAnch(J)*D2R
+       InputFileData%LAngFair(J) = InputFileData%LAngFair(J)*D2R
+    END DO
+
     RETURN
 
 

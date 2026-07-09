@@ -38,6 +38,7 @@ PROGRAM Main
   Integer(IntKi)                         :: i                    ! counter for various loops
   Integer(IntKi)                         :: j                    ! counter for various loops
   integer(intKi)                         :: Un
+  CHARACTER(1024)                        :: InputFileArg         ! optional command-line override for the input-file name
   
   ! -------------------------------------------------------------------------
   ! Initialization of glue-code time-step variables
@@ -62,7 +63,19 @@ PROGRAM Main
   Allocate(FEAM_Input(FEAM_interp_order + 1))  
     
   ! set the FEAM input file name and other environment terms.
-  FEAM_InitInput%InputFile    = "FE_Mooring.dat"  ! @bonnie : This needs to be set according to what is in the FAST input file. 
+  ! An input file may be supplied on the command line (text .dat or YAML .yaml/.yml -- the
+  ! IsYamlExt funnel inside ReadPrimaryFile dispatches on the extension); otherwise fall back
+  ! to the historical hard-coded demo default.
+  InputFileArg = ''
+  IF ( COMMAND_ARGUMENT_COUNT() >= 1 ) CALL GET_COMMAND_ARGUMENT( 1, InputFileArg )
+  IF ( LEN_TRIM(InputFileArg) > 0 ) THEN
+     FEAM_InitInput%InputFile = InputFileArg
+  ELSE
+     FEAM_InitInput%InputFile = "FE_Mooring.dat"  ! @bonnie : This needs to be set according to what is in the FAST input file.
+  END IF
+  ! Read from an input file (text or YAML): FEAM_Init -> ReadPrimaryFile's IsYamlExt funnel
+  ! dispatches on the InputFile extension automatically.
+  FEAM_InitInput%UseInputFile = .TRUE.
   FEAM_InitInput%NStepWave   = 1                          ! an arbitrary number > 0 (to set the size of the wave data, which currently contains all zero values)     
   FEAM_InitInput%gravity     = 9.81     ! This need to be according to g used in ElastoDyn 
   FEAM_InitInput%WtrDens     = 1025     ! This needs to be set according to seawater density in HydroDyn      

@@ -1283,6 +1283,16 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_FEAM%WtrDens     = Init%OutData_SeaSt%WaveField%WtrDens    ! This needs to be set according to seawater density in SeaState
       ! Init%InData_FEAM%depth     = Init%OutData_SeaSt%WaveField%WtrDpth    ! This need to be set according to the water depth in SeaState
 
+      ! inline FEAMooring input from a YAML primary file (input_files:MooringFile)
+      Init%InData_FEAM%UseInputFile = .not. m_FAST%FEAMIsInline
+      IF ( m_FAST%FEAMIsInline ) THEN
+         Init%InData_FEAM%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%FEAMInlineFileInfo, Init%InData_FEAM%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      ELSE
+         Init%InData_FEAM%PassedFileIsYaml = .FALSE.
+      END IF
+
       ! Call module initialization routine
       dt_module = p_FAST%DT
       CALL FEAM_Init(Init%InData_FEAM, FEAM%Input(INPUT_CURR), FEAM%p, &

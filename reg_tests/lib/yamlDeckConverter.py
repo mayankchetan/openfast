@@ -1008,6 +1008,90 @@ def convert_extptfm(text_path):
     return '\n'.join(out)
 
 
+def convert_feamooring(text_path):
+    """Convert a text-format FEAMooring primary input file to its YAML schema
+    (modules/feamooring/src/FEAM_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners: simulation_control, lines (one mapping per
+    mooring line), output, outputs.
+
+    NumLines/NumOuts are NOT emitted -- counts derive from list lengths, per
+    FEAM_Yaml.f90's header (NumLines == len(lines), NumOuts == len(outputs:OutList)).
+    NumElems is kept as a scalar (it is the finite-element count per line, not a list
+    count). DT/Gravity/WtrDens pass a literal "default" through, exactly like the text
+    path (the reader keeps the glue code's pre-seeded value in that case).
+
+    FEAMooring's primary input references no further data files, so nothing stays a
+    path -- every field is inlined. The per-line azimuth angles (LAngAnch, LAngFair)
+    are emitted in raw degrees, exactly as they appear in the text file; the reader's
+    shared post-processing applies the deg->rad conversion once for both formats."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# FEAMooring primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- simulation_control -------------------------------------
+    # Read in the text file's order (the sequential scanner advances a cursor):
+    # Echo, DT, NumLines, NumElem, Gravity, WtrDens, MaxIter, Eps.
+    echo    = d.scalar('Echo')
+    dt      = d.scalar('DT')
+    n_lines = int(d.scalar('NumLines'))          # not emitted -- derives from len(lines)
+    numelem = d.scalar('NumElem')                # text label is "NumElem"
+    gravity = d.scalar('Gravity')
+    wtrdens = d.scalar('WtrDens')
+    maxiter = d.scalar('MaxIter')
+    eps     = d.scalar('Eps')
+    w('simulation_control:')
+    w('  Echo: '     + _as_bool(echo))
+    w('  DT: '       + _default_or_num(dt))
+    w('  NumElems: ' + numelem)
+    w('  Gravity: '  + _default_or_num(gravity))
+    w('  WtrDens: '  + _default_or_num(wtrdens))
+    w('  MaxIter: '  + maxiter)
+    w('  Eps: '      + eps)
+    w('')
+
+    #-------------------- lines (one mapping per mooring line) -------------------
+    w('lines:')
+    for _ in range(n_lines):
+        w('  - LEAStiff: '  + d.scalar('LEAStiff'))
+        w('    LMassDen: '  + d.scalar('LMassDen'))
+        w('    LDMassDen: ' + d.scalar('LDMassDen'))
+        w('    LineCI: '    + d.scalar('LineCI'))
+        w('    LineCD: '    + d.scalar('LineCD'))
+        w('    LUnstrLen: ' + d.scalar('LUnstrLen'))
+        w('    BottmStiff: '+ d.scalar('BottmStiff'))
+        w('    LRadAnch: '  + d.scalar('LRadAnch'))
+        w('    LAngAnch: '  + d.scalar('LAngAnch'))
+        w('    LDpthAnch: ' + d.scalar('LDpthAnch'))
+        w('    LRadFair: '  + d.scalar('LRadFair'))
+        w('    LAngFair: '  + d.scalar('LAngFair'))
+        w('    LDrftFair: ' + d.scalar('LDrftFair'))
+        w('    Tension: '   + d.scalar('Tension'))
+        # GSL: the three linear spring stiffnesses (text labels GSL21/GSL22/GSL23)
+        gsl = [d.scalar('GSL21'), d.scalar('GSL22'), d.scalar('GSL23')]
+        w('    GSL: [' + _list_join(gsl) + ']')
+    w('')
+
+    #-------------------- output -------------------------------------------------
+    w('output:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  OutFile: '  + d.scalar('OutFile'))
+    w('  TabDelim: ' + _as_bool(d.scalar('TabDelim')))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    w('  Tstart: '   + d.scalar('TStart'))
+    w('')
+
+    #-------------------- outputs (OutList) --------------------------------------
+    channels = d.outlist(keyword='OutList')
+    w('outputs:')
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+
+    return '\n'.join(out)
+
+
 def convert_beamdyn(text_path):
     """Convert a text-format BeamDyn primary input file to its YAML schema.
 
@@ -3070,20 +3154,31 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  SubFile: ' + _as_str(sub_rel))
 
-    # MooringFile conversion/inlining is gated on CompMooring == 3 (MoorDyn) -- the
-    # only mooring module with a YAML reader; MAP++/FEAM/OrcaFlex files stay text paths
-    convert_mooring = (comp_mooring == 3) and (mode in ('all-yaml', 'single-file'))
+    # MooringFile conversion/inlining is gated on CompMooring == 3 (MoorDyn) or
+    # CompMooring == 2 (FEAMooring) -- both have a YAML reader now (MoorDyn_IO.f90's
+    # reader / FEAM_Yaml.f90, and FAST_Yaml.f90's InlineTarget='MoorDyn'/'FEAMooring'
+    # gating). MAP++ (=1) and OrcaFlex (=4) files stay text paths in every mode.
+    if comp_mooring == 3:
+        mooring_module_key = 'moordyn'
+        mooring_converter = convert_moordyn
+    elif comp_mooring == 2:
+        mooring_module_key = 'feamooring'
+        mooring_converter = convert_feamooring
+    else:
+        mooring_module_key = None
+        mooring_converter = None
+    convert_mooring = (mooring_converter is not None) and (mode in ('all-yaml', 'single-file'))
     mooring_rel = _unquote(mooring_file)
     if convert_mooring:
         mooring_abs = os.path.join(base_dir, mooring_rel)
-        md_yaml_text = convert_moordyn(mooring_abs)
+        md_yaml_text = mooring_converter(mooring_abs)
         if mode == 'single-file':
             w('  MooringFile:')
-            # rewrite any relative paths inside the inlined section (e.g. a WaterKin
-            # bathymetry/water-kinematics file) so they keep resolving once nested
-            # under a deck at a different directory
+            # rewrite any relative paths inside the inlined section (MoorDyn: a WaterKin
+            # bathymetry/water-kinematics file; FEAMooring has none) so they keep
+            # resolving once nested under a deck at a different directory
             md_yaml_text = _rewrite_inline_paths(
-                md_yaml_text, 'moordyn', _relpath_prefix(os.path.dirname(mooring_abs), base_dir))
+                md_yaml_text, mooring_module_key, _relpath_prefix(os.path.dirname(mooring_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under MooringFile:
             md_doc_lines = md_yaml_text.split('\n')
