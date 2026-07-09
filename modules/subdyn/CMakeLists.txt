@@ -20,6 +20,7 @@ endif()
 
 add_library(subdynlib STATIC
   src/SubDyn.f90
+  src/SubDyn_Yaml.f90
   src/FEM.f90
   src/SD_FEM.f90
   src/SubDyn_Output.f90

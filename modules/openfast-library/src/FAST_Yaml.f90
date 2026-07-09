@@ -343,7 +343,15 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    call GetModFile( 'ServoFile',   p%ServoFile(1), Required=(p%CompServo   == Module_SrvD), InlineTarget='ServoDyn' ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'SeaStFile',   p%SeaStFile,    Required=(p%CompSeaSt   == Module_SeaSt), InlineTarget='SeaState' ); if (ErrStat >= AbortErrLev) return
    call GetModFile( 'HydroFile',   p%HydroFile,    Required=(p%CompHydro   == Module_HD), InlineTarget='HydroDyn' ); if (ErrStat >= AbortErrLev) return
-   call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   ! inline SubFile is legal only when CompSub selects SubDyn (=1); ExtPtfm (=2) has no
+   ! YAML schema, so a mapping value then hits GetModFile's "does not (yet) support inline
+   ! YAML input" fatal below, since InlineTarget is then not passed at all (mirrors the
+   ! AeroFile/CompAero, EDFile/CompElast, and MooringFile/CompMooring gating patterns)
+   if (p%CompSub == Module_SD) then
+      call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE), InlineTarget='SubDyn' ); if (ErrStat >= AbortErrLev) return
+   else
+      call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   end if
    ! inline MooringFile is legal only when CompMooring selects MoorDyn (=3); for any
    ! other CompMooring value (esp. MAP++ =1) a mapping value hits GetModFile's "does
    ! not (yet) support inline YAML input" fatal below, since InlineTarget is then not
@@ -621,6 +629,15 @@ contains
                ! (bathymetry/WaterKin/lookup-table/Syrope file paths written inside the
                ! inline section resolve relative to the deck file through this PriPath)
                FileVar = trim(PriPath)//'inline_MoorDyn.yaml'
+            case ('SubDyn')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%SDInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%SDIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (each reaction joint's optional SSIfile path written inside the inline
+               ! section resolves relative to the deck file through this PriPath)
+               FileVar = trim(PriPath)//'inline_SubDyn.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

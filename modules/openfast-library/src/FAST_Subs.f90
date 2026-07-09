@@ -994,6 +994,16 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_SD%SDInputFile   = p_FAST%SubFile
       Init%InData_SD%RootName      = p_FAST%OutFileRoot
 
+      ! inline SubDyn input from a YAML primary file (input_files:SubFile)
+      Init%InData_SD%UseInputFile   = .not. m_FAST%SDIsInline
+      IF ( m_FAST%SDIsInline ) THEN
+         Init%InData_SD%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%SDInlineFileInfo, Init%InData_SD%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      ELSE
+         Init%InData_SD%PassedFileIsYaml = .FALSE.
+      END IF
+
       ! If SoilDyn is enabled
       if (p_FAST%CompSoil == Module_SlD) then
 

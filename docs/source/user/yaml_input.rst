@@ -117,14 +117,15 @@ sections. Inline input is available for modules whose YAML schema exists
 (currently InflowWind; AeroDisk or AeroDyn when ``CompAero`` selects one of
 them; ElastoDyn or Simplified ElastoDyn when ``CompElast`` selects one of
 them; ServoDyn when ``CompServo`` selects it; SeaState when ``CompSeaSt``
-selects it; HydroDyn when ``CompHydro`` selects it; and MoorDyn when
-``CompMooring`` selects it); an inline mapping for any other module -- or for
-``MooringFile`` when ``CompMooring`` selects a module without a YAML schema
-(MAP++, FEAMooring, OrcaFlex) -- is a clear fatal error suggesting a file path
-instead. Combined with ``!include`` and anchors, this supports fully
-single-file models. Second-order files (e.g. Structural Control files under
-ServoDyn, potential-flow data under HydroDyn, AeroDyn's
-airfoil/blade/tailfin/AeroAcoustics/OLAF files, ElastoDyn's
+selects it; HydroDyn when ``CompHydro`` selects it; SubDyn when ``CompSub``
+selects it; and MoorDyn when ``CompMooring`` selects it); an inline mapping
+for any other module -- or for ``SubFile`` when ``CompSub`` selects ExtPtfm
+(which has no YAML schema), or for ``MooringFile`` when ``CompMooring``
+selects a module without a YAML schema (MAP++, FEAMooring, OrcaFlex) -- is a
+clear fatal error suggesting a file path instead. Combined with ``!include``
+and anchors, this supports fully single-file models. Second-order files (e.g.
+Structural Control files under ServoDyn, potential-flow data under HydroDyn,
+AeroDyn's airfoil/blade/tailfin/AeroAcoustics/OLAF files, ElastoDyn's
 blade/tower/furling files, or MoorDyn's bathymetry/water-kinematics/lookup-
 table files) are never inlined: they stay referenced by path, in text or YAML
 form where a schema exists (of the above, only Structural Control files have
@@ -228,6 +229,10 @@ supported:
   under ``input_files:MooringFile`` (when ``CompMooring`` selects MoorDyn);
   bathymetry grids, water-kinematics files, stiffness/damping lookup tables,
   and Syrope working-curve files stay referenced by path
+- SubDyn primary input file (:ref:`subdyn-yaml-input`), including inline use
+  under ``input_files:SubFile`` (when ``CompSub`` selects SubDyn); ExtPtfm
+  (``CompSub`` = 2) has no YAML schema, so ``SubFile`` must stay a text file
+  path in that case
 - BeamDyn primary input file (:ref:`beamdyn-yaml-input`), referenced by path
   from a glue-code deck's ``BDBldFile`` entries (when ``CompElast`` selects
   ElastoDyn + BeamDyn); BeamDyn has no inline-input glue path, so

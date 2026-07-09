@@ -107,6 +107,9 @@ IMPLICIT NONE
 ! =========  SD_InitInputType  =======
   TYPE, PUBLIC :: SD_InitInputType
     CHARACTER(1024)  :: SDInputFile      !< Name of the input file [-]
+    LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
+    TYPE(FileInfoType)  :: PassedPrimaryInputData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
     CHARACTER(1024)  :: RootName      !< SubDyn rootname [-]
     REAL(ReKi)  :: g = 0.0_ReKi      !< Gravity acceleration [-]
     REAL(ReKi)  :: WtrDpth = 0.0_ReKi      !< Water Depth (positive valued) [-]
@@ -960,6 +963,11 @@ subroutine SD_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrSta
    ErrStat = ErrID_None
    ErrMsg  = ''
    DstInitInputData%SDInputFile = SrcInitInputData%SDInputFile
+   DstInitInputData%UseInputFile = SrcInitInputData%UseInputFile
+   call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
    DstInitInputData%RootName = SrcInitInputData%RootName
    DstInitInputData%g = SrcInitInputData%g
    DstInitInputData%WtrDpth = SrcInitInputData%WtrDpth
@@ -1005,6 +1013,8 @@ subroutine SD_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
    character(*), parameter        :: RoutineName = 'SD_DestroyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
+   call NWTC_Library_DestroyFileInfoType(InitInputData%PassedPrimaryInputData, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (allocated(InitInputData%TP_RefPoint)) then
       deallocate(InitInputData%TP_RefPoint)
    end if
@@ -1021,6 +1031,9 @@ subroutine SD_PackInitInput(RF, Indata)
    character(*), parameter         :: RoutineName = 'SD_PackInitInput'
    if (RF%ErrStat >= AbortErrLev) return
    call RegPack(RF, InData%SDInputFile)
+   call RegPack(RF, InData%UseInputFile)
+   call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    call RegPack(RF, InData%RootName)
    call RegPack(RF, InData%g)
    call RegPack(RF, InData%WtrDpth)
@@ -1043,6 +1056,9 @@ subroutine SD_UnPackInitInput(RF, OutData)
    logical         :: IsAllocAssoc
    if (RF%ErrStat /= ErrID_None) return
    call RegUnpack(RF, OutData%SDInputFile); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%RootName); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%g); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%WtrDpth); if (RegCheckErr(RF, RoutineName)) return

@@ -755,6 +755,29 @@ yaml_equiv_openfast("5MW_Land_BD_Init" "perfile"    "${CTEST_OPENFAST_EXECUTABLE
 yaml_equiv_openfast("5MW_Land_BD_Init" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("5MW_Land_BD_Init" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
+# SubDyn standalone-driver yaml-equivalence: SD_Cable_5Joints (2 reaction joints with
+# the plain 7-column reactions table, both beam ("1c") and cable (MType=2) members,
+# cable properties with a non-zero CtrlChannel, and a 4-entry member_output_list) and
+# SD_MultiTP (a floating structure -- NReact=0 -- with 2 transition pieces and 3
+# interface joints whose TPIdx values are 0/1/2, exercising the TPIdx-per-interface
+# path and the Guyan-damping/GuyanDampMat block with a non-zero GuyanDampMod) together
+# cover both the reactions-with-fixed-base and the floating/multi-TP configurations,
+# both member-type branches (MSpin vs. COSMID last-column semantics), and the cable
+# property table's optional CtrlChannel field.
+yaml_equiv("subdyn" "SD_Cable_5Joints" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
+yaml_equiv("subdyn" "SD_MultiTP"       "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
+
+# 5MW_OC3Mnpl_Linear: CompSub=1 (SubDyn), CompHydro=0, CompServo=0 (no DISCON DLL) --
+# the cheapest CompSub=1 glue case in r-test (TMax=DT=0.005s), so the SubFile
+# conversion/inlining (yamlDeckConverter.py's convert_fst) and SubDyn's read-input
+# funnel are exercised end-to-end through the full glue path in all three modes.
+# The underlying monopile deck (NRELOffshrBsline5MW_OC3Monopile_SubDyn.dat) has a
+# non-empty (quoted-empty, "") SSIfile column on its reaction row and a non-zero
+# GuyanDampMod=2 block, both round-tripped verbatim by the converter.
+yaml_equiv_openfast("5MW_OC3Mnpl_Linear" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC3Mnpl_Linear" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC3Mnpl_Linear" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

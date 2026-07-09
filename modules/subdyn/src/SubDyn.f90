@@ -29,7 +29,9 @@ Module SubDyn
    USE SubDyn_Tests, only: SD_Tests
    USE SD_FEM
    USE FEM, only: FINDLOCI
-
+   USE SubDyn_Yaml
+   USE YamlInput, only: IsYamlExt
+   
    IMPLICIT NONE
 
    PRIVATE
@@ -268,9 +270,9 @@ SUBROUTINE SD_Init( InitInput, u, p, x, xd, z, OtherState, y, m, Interval, InitO
    ELSE
       Init%RootName = TRIM(InitInput%RootName)//'.SD'
    END IF
-
-   ! Parse the SubDyn inputs
-   CALL SD_Input(InitInput%SDInputFile, Init, p, ErrStat2, ErrMsg2); if(Failed()) return
+   
+   ! Parse the SubDyn inputs 
+   CALL SD_Input(InitInput, Init, p, ErrStat2, ErrMsg2); if(Failed()) return
    if (p%Floating) then
       call WrScr('   Floating case detected')
    else
@@ -1049,13 +1051,14 @@ CONTAINS
 END SUBROUTINE SD_CalcContStateDeriv
 
 !-----------------------------------------------------------------------------------------------------------------------
-SUBROUTINE SD_Input(SDInputFile, Init, p, ErrStat,ErrMsg)
-   CHARACTER(*),            INTENT(IN)     :: SDInputFile
+SUBROUTINE SD_Input(InitInput, Init, p, ErrStat,ErrMsg)
+   TYPE(SD_InitInputType) , INTENT(IN)     :: InitInput
    TYPE(SD_InitType) ,      INTENT(INOUT)  :: Init
    TYPE(SD_ParameterType) , INTENT(INOUT)  :: p
    INTEGER(IntKi),          INTENT(  OUT)  :: ErrStat   ! Error status of the operation
    CHARACTER(*),            INTENT(  OUT)  :: ErrMsg    ! Error message if ErrStat /= ErrID_None
 ! local variable for input and output
+CHARACTER(1024)              :: SDInputFile      ! Name of the primary input file (InitInput%SDInputFile, or a pseudo-path for inline YAML input)
 CHARACTER(1024)              :: PriPath          ! The path to the primary input file
 CHARACTER(1024)              :: Line, Dummy_Str, MemberLine  ! String to temporarially hold value of read line
 CHARACTER(64), ALLOCATABLE   :: StrArray(:)  ! Array of strings, for better control of table inputs
@@ -1086,7 +1089,13 @@ ErrStat = ErrID_None
 ErrMsg  = ""
 
 UnEc = -1
+UnIn = -1
 Echo = .FALSE.
+SDInputFile = InitInput%SDInputFile
+
+CALL GetPath( SDInputFile, PriPath )    ! Input files will be relative to the path where the primary input file is located.
+
+IF ( InitInput%UseInputFile .and. .not. IsYamlExt(SDInputFile) ) THEN   ! text-format input file (.dat and friends)
 
 !$OMP critical(fileopen_critical)
 CALL GetNewUnit( UnIn )
@@ -1098,9 +1107,6 @@ IF ( ErrStat2 /= ErrID_None ) THEN
    Call Fatal('Could not open SubDyn input file')
    return
 END IF
-
-CALL GetPath( SDInputFile, PriPath )    ! Input files will be relative to the path where the primary input file is located.
-
 
 !-------------------------- HEADER ---------------------------------------------
 CALL ReadCom( UnIn, SDInputFile, 'SubDyn input file header line 1', ErrStat2, ErrMsg2 ); if(Failed()) return
@@ -1278,9 +1284,6 @@ DO I = 2, Init%NJoints
 ENDDO
 IF (Check(  Init%NJoints < 2, 'NJoints must be greater than 1')) return
 
-!---------- GO AHEAD  and ROTATE STRUCTURE IF DESIRED TO SIMULATE WINDS FROM OTHER DIRECTIONS -------------
-CALL SubRotate(Init%Joints,Init%NJoints,Init%SubRotateZ)
-
 !------------------- BASE REACTION JOINTS: T/F for Locked/Free DOF @ each Reaction Node ---------------------
 ! The joints should be all clamped for now
 CALL ReadCom  ( UnIn, SDInputFile,           'BASE REACTION JOINTS'                           ,ErrStat2, ErrMsg2, UnEc ); if(Failed()) return
@@ -1318,17 +1321,6 @@ do I = 1, p%nNodes_C
    endif
 enddo
 IF (Check ( p%nNodes_C > Init%NJoints , 'NReact must be less than number of joints')) return
-call CheckBCs(p, ErrStat2, ErrMsg2); if (Failed()) return
-
-! Trigger - Reading SSI matrices  if present
-DO I = 1, p%nNodes_C
-   if ( Init%SSIfile(I)/='' .and. (ANY(p%Nodes_C(I,2:ReactCol)==idBC_Internal))) then
-      Init%SSIfile(I) = trim(PriPath)//trim(Init%SSIfile(I))
-      CALL ReadSSIfile( Init%SSIfile(I), p%Nodes_C(I,1), Init%SSIK(:,I),Init%SSIM(:,I), ErrStat, ErrMsg, UnEc ); if(Failed()) return
-   endif
-enddo
-! Trigger: determine if floating/fixed  based on BCs and SSI file
-p%Floating  = isFloating(Init,p)
 
 !------- INTERFACE JOINTS: T/F for Locked (to the TP)/Free DOF @each Interface Joint (only Locked-to-TP implemented thus far (=rigid TP)) ---------
 ! Joints with reaction forces, joint number and locked/free dof
@@ -1366,9 +1358,7 @@ DO I = 1, p%nNodes_I
    TPIdxInput(I)    = tmpIntAry(  2)
 ENDDO
 IF (Check( ( p%nNodes_I < 0 ) .OR. (p%nNodes_I > Init%NJoints), 'NInterf must be non-negative and less than number of joints.')) RETURN
-call CheckIntf(p, TPIdxInput, Init%RB_RefJoint, ErrStat2, ErrMsg2); if (Failed()) return
 
-deallocate(TPIdxInput)
 deallocate(tmpIntAry)
 
 !----------------------------------- MEMBERS --------------------------------------
@@ -1752,6 +1742,47 @@ If (Check( ErrStat2 /= ErrID_None ,'Error allocating SSOutList arrays')) return
 CALL ReadOutputList ( UnIn, SDInputFile, Init%SSOutList, p%NumOuts, 'SSOutList', 'List of outputs requested', ErrStat2, ErrMsg2, UnEc ); if(Failed()) return
 CALL CleanUp()
 
+ELSE   ! YAML-format input (a .yaml/.yml file, or inline YAML input passed from the glue code)
+
+   IF ( InitInput%UseInputFile ) THEN          ! YAML-format input file (.yaml/.yml)
+
+      CALL SD_ParseYamlFile( SDInputFile, Init, p, TPIdxInput, ErrStat2, ErrMsg2 ); if(Failed()) return
+
+   ELSE IF ( InitInput%PassedFileIsYaml ) THEN  ! inline YAML content (e.g. inline module input from a YAML primary file)
+
+      CALL SD_ParseYamlFileInfo( InitInput%PassedPrimaryInputData, Init, p, TPIdxInput, ErrStat2, ErrMsg2 ); if(Failed()) return
+
+   ELSE
+      CALL Fatal('SubDyn passed (inline) input data must be in YAML format.')
+      return
+   END IF
+
+END IF
+
+!------------------------------------------------------------------------------------------------------------------------------
+! Shared post-processing for both input formats: rotate the joint coordinates, remap the
+! reaction-node and interface-node boundary conditions, read any on-the-fly SSI files, and
+! determine whether the structure is floating or fixed-bottom. These steps are independent of
+! how the raw Joints/Nodes_C/SSIfile/Nodes_I/TPIdxInput/Members/etc. arrays were populated
+! above, so they run identically -- and only once -- for both the text and YAML paths.
+!------------------------------------------------------------------------------------------------------------------------------
+CALL SubRotate(Init%Joints,Init%NJoints,Init%SubRotateZ)
+
+call CheckBCs(p, ErrStat2, ErrMsg2); if (Failed()) return
+
+! Trigger - Reading SSI matrices  if present
+DO I = 1, p%nNodes_C
+   if ( Init%SSIfile(I)/='' .and. (ANY(p%Nodes_C(I,2:ReactCol)==idBC_Internal))) then
+      Init%SSIfile(I) = trim(PriPath)//trim(Init%SSIfile(I))
+      CALL ReadSSIfile( Init%SSIfile(I), p%Nodes_C(I,1), Init%SSIK(:,I),Init%SSIM(:,I), ErrStat, ErrMsg, UnEc ); if(Failed()) return
+   endif
+enddo
+! Trigger: determine if floating/fixed  based on BCs and SSI file
+p%Floating  = isFloating(Init,p)
+
+call CheckIntf(p, TPIdxInput, Init%RB_RefJoint, ErrStat2, ErrMsg2); if (Failed()) return
+if (allocated(TPIdxInput)) deallocate(TPIdxInput)
+
 CONTAINS
 
    subroutine LegacyWarning(Message)
@@ -1783,7 +1814,10 @@ CONTAINS
    END SUBROUTINE Fatal
 
    SUBROUTINE CleanUp()
-      CLOSE( UnIn )
+      ! UnIn stays -1 (never opened) on the YAML-format path (both the file and the
+      ! inline/passed-data entry points): only close it when the text-format branch
+      ! actually opened it, so an error on the YAML path doesn't crash on CLOSE(-1).
+      IF (UnIn > 0) CLOSE( UnIn )
       if(allocated(StrArray)) deallocate(StrArray)
       IF (Echo) CLOSE( UnEc )
    END SUBROUTINE

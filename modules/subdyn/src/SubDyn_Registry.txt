@@ -70,6 +70,9 @@ typedef  ^   ElemPropType  R8Ki    DirCos  {3}{3}  -  -  "Element direction cosi
 
 # ============================== Input Initialization (from glue code)  ============================================================================================================================================
 typedef  ^  InitInputType  CHARACTER(1024)  SDInputFile  - - -       "Name of the input file"
+typedef  ^  InitInputType  LOGICAL          UseInputFile - .TRUE. -  "Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller"
+typedef  ^  InitInputType  FileInfoType     PassedPrimaryInputData - - -  "If we don't use the input file, pass everything through this"
+typedef  ^  InitInputType  LOGICAL          PassedFileIsYaml - .FALSE. -  "PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.]"
 typedef  ^  InitInputType  CHARACTER(1024)  RootName     - - -       "SubDyn rootname"
 typedef  ^  InitInputType  ReKi             g            - - -       "Gravity acceleration"
 typedef  ^  InitInputType  ReKi             WtrDpth      - - -       "Water Depth (positive valued)"

@@ -616,6 +616,312 @@ def _default_or_bool(tok):
     return _as_bool(tok)
 
 
+#-------------------- SubDyn column-count constants (SD_FEM.f90) ---------------------
+_SD_JOINTS_COL   = 9   # JointID, JointXss, JointYss, JointZss, JointType, JointDirX/Y/Z, JointStiff
+_SD_PROPSETSBC_COL = 6   # PropSetID, YoungE, ShearG, MatDens, XsecD, XsecT
+_SD_PROPSETSBR_COL = 7   # PropSetID, YoungE, ShearG, MatDens, XsecSa, XsecSb, XsecT
+_SD_PROPSETSX_COL  = 11  # PropSetID, YoungE, ShearG, MatDens, XsecA, XsecAsx, XsecAsy, XsecJxx, XsecJyy, XsecJ0, XsecJt
+_SD_PROPSETSR_COL  = 2   # PropSetID, MatDens
+_SD_PROPSETSS_COL  = 22  # PropSetID, k11..k66 (21 stiffness terms)
+_SD_COSM_COL       = 10  # COSMID, COSM11..COSM33
+
+# MType codes (SD_FEM.f90): beam-type members carry MSpin as their last field; all
+# others (cable, rigid, or any other/spring value) carry COSMID instead.
+_SD_MTYPE_BEAM = (1, -1, 4)  # idMemberBeamCirc, idMemberBeamRect, idMemberBeamArb
+
+
+def _sd_mtype_code(tok):
+    """Normalize a SubDyn MType token ("1c"/"1r"/an integer) to its integer code."""
+    unquoted = _unquote(tok).strip()
+    up = unquoted.upper()
+    if up == '1C':
+        return 1
+    if up == '1R':
+        return -1
+    return int(float(unquoted))
+
+
+def convert_subdyn(text_path):
+    """Convert a text-format SubDyn primary input file to its YAML schema
+    (modules/subdyn/src/SubDyn_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners: simulation_control,
+    fea_and_craig_bampton, guyan_damping, initial_rigid_body_position,
+    structure_joints, base_reaction_joints, interface_joints, members,
+    member_cross_section_properties, cable_properties, rigid_link_properties,
+    spring_element_properties, member_direction_cosine_matrices,
+    concentrated_masses, output, member_output_list, outputs.
+
+    NJoints/nNodes_C/nNodes_I/NMembers/NPropSetsBC/BR/X/C/R/S/NCOSMs/nCMass/
+    NMOutputs/NumOuts are NOT emitted -- all derive from list lengths, per
+    SubDyn_Yaml.f90's module header. Joints, the three beam cross-section-property
+    tables, the rigid-link and spring-element property tables, and the cosine-matrix
+    table are plain fixed-column numeric row lists (flow-sequence rows); reactions
+    (optional SSIfile), interfaces (optional TPIdx), members (MSpin vs. COSMID
+    depending on MType), cable properties (optional CtrlChannel), concentrated
+    masses (optional off-diagonal terms), and member_output_list rows are written
+    as block-mapping list items keyed by column name."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# SubDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- simulation_control -------------------------------------
+    w('simulation_control:')
+    w('  Echo: '      + _as_bool(d.scalar('Echo')))
+    w('  SDdeltaT: '  + _default_or_num(d.scalar('SDdeltaT')))
+    w('  IntMethod: ' + d.scalar('IntMethod'))
+    # SttcSolve accepts either an integer or a logical (text is read into a plain
+    # character buffer and dispatched with is_numeric/is_logical on both paths) --
+    # pass the original literal through unchanged, exactly like SttcSolve's
+    # dual-typed sibling fields elsewhere in the project (_default_or_num-style
+    # pass-through) rather than coercing it to a YAML bool or number.
+    w('  SttcSolve: ' + _unquote(d.scalar('SttcSolve')))
+    w('')
+
+    #-------------------- fea_and_craig_bampton -----------------------------------
+    w('fea_and_craig_bampton:')
+    w('  FEMMod: ' + d.scalar('FEMMod'))
+    w('  NDiv: '   + d.scalar('NDiv'))
+    w('  Nmodes: ' + d.scalar('Nmodes'))
+    jdampings = d.find('JDampings')
+    w('  JDampings: [' + _list_join(jdampings) + ']')
+    w('')
+
+    #-------------------- guyan_damping --------------------------------------------
+    # Always present in the modern (non-legacy) text format this converter targets;
+    # the text reader reads GuyanDampMod/RayleighDamp/GuyanDampSize/GuyanDampMat
+    # unconditionally whenever the GuyanDampMod line parses as numeric, regardless
+    # of its value (0 still reads -- and requires -- a full GuyanDampSize x
+    # GuyanDampSize matrix).
+    w('guyan_damping:')
+    w('  GuyanDampMod: ' + d.scalar('GuyanDampMod'))
+    rayleigh_damp = d.find('RayleighDamp')
+    w('  RayleighDamp: [' + _list_join(rayleigh_damp) + ']')
+    guyan_size = int(d.scalar('GuyanDampSize'))
+    w('  GuyanDampSize: ' + str(guyan_size))
+    guyan_rows = _matrix_rows(d, guyan_size, guyan_size, skip=0)
+    w('  GuyanDampMat:')
+    for row in guyan_rows:
+        w('    - [' + ', '.join(row) + ']')
+    w('')
+
+    #-------------------- initial_rigid_body_position ------------------------------
+    # No anchor keyword on the data line itself; skip the section banner and the
+    # two header/units lines that precede it (3 significant lines).
+    qr0_row = _matrix_rows(d, 1, 6, skip=3)[0]
+    w('initial_rigid_body_position:')
+    w('  qR0: [' + ', '.join(qr0_row) + ']')
+    w('')
+
+    #-------------------- structure_joints ------------------------------------------
+    n_joints = int(d.scalar('NJoints'))
+    joint_rows = _matrix_rows(d, n_joints, _SD_JOINTS_COL, skip=2)
+    w('structure_joints:')
+    w('  joints:')
+    for row in joint_rows:
+        w('    - [' + ', '.join(row) + ']')
+    w('')
+
+    #-------------------- base_reaction_joints --------------------------------------
+    REACT_KEYS = ('JointID', 'Rctx', 'Rcty', 'Rctz', 'Rctxss', 'Rctyss', 'Rctzss', 'SSIfile')
+    n_react = int(d.scalar('NReact'))
+    react_rows = d.table_rows(n_react, skip=2)
+    w('base_reaction_joints:')
+    if n_react > 0:
+        w('  reactions:')
+        for raw in react_rows:
+            toks = _row_tokens(raw)
+            if len(toks) == 8:
+                toks = toks[:7] + [_as_str(toks[7])]
+            elif len(toks) != 7:
+                raise ValueError('convert_subdyn: reaction row "{}" in {} has {} value(s); expected 7 or 8'.format(
+                    raw, text_path, len(toks)))
+            w(_row_map(REACT_KEYS, toks))
+    else:
+        w('  reactions: []')
+    w('')
+
+    #-------------------- interface_joints -------------------------------------------
+    # Only JointID and TPIdx are exposed (the six DOF flags are always written as
+    # "locked to TP" internally; the text path fatally rejects anything else).
+    INTERF_KEYS = ('JointID', 'TPIdx')
+    n_interf = int(d.scalar('NInterf'))
+    interf_rows = d.table_rows(n_interf, skip=2)
+    w('interface_joints:')
+    if n_interf > 0:
+        w('  interfaces:')
+        for raw in interf_rows:
+            toks = _row_tokens(raw)
+            if len(toks) < 2:
+                raise ValueError('convert_subdyn: interface row "{}" in {} has {} value(s); expected >= 2'.format(
+                    raw, text_path, len(toks)))
+            w(_row_map(INTERF_KEYS, toks[:2]))
+    else:
+        w('  interfaces: []')
+    w('')
+
+    #-------------------- members ----------------------------------------------------
+    n_members = int(d.scalar('NMembers'))
+    member_rows = d.table_rows(n_members, skip=2)
+    w('members:')
+    w('  members:')
+    for raw in member_rows:
+        toks = _row_tokens(raw)
+        if len(toks) != 7:
+            raise ValueError('convert_subdyn: members row "{}" in {} has {} value(s); expected 7'.format(
+                raw, text_path, len(toks)))
+        mtype_code = _sd_mtype_code(toks[5])
+        last_key = 'MSpin' if mtype_code in _SD_MTYPE_BEAM else 'COSMID'
+        keys = ('MemberID', 'MJointID1', 'MJointID2', 'MPropSetID1', 'MPropSetID2', 'MType', last_key)
+        # MType stays exactly as written ("1c"/"1r"/int); only its case/spelling is
+        # preserved verbatim so SD_ParseMembers' own "1C"/"1R" dispatch sees the same text
+        w(_row_map(keys, toks))
+    w('')
+
+    #-------------------- member_cross_section_properties + cable/rigid/spring -------
+    n_bc = int(d.scalar('NPropSetsCyl'))
+    bc_rows = _matrix_rows(d, n_bc, _SD_PROPSETSBC_COL, skip=2)
+    w('member_cross_section_properties:')
+    if n_bc > 0:
+        w('  circular_beam_props:')
+        for row in bc_rows:
+            w('    - [' + ', '.join(row) + ']')
+    else:
+        w('  circular_beam_props: []')
+
+    n_br = int(d.scalar('NPropSetsRec'))
+    br_rows = _matrix_rows(d, n_br, _SD_PROPSETSBR_COL, skip=2)
+    if n_br > 0:
+        w('  rectangular_beam_props:')
+        for row in br_rows:
+            w('    - [' + ', '.join(row) + ']')
+    else:
+        w('  rectangular_beam_props: []')
+
+    n_x = int(d.scalar('NXPropSets'))
+    x_rows = _matrix_rows(d, n_x, _SD_PROPSETSX_COL, skip=2)
+    if n_x > 0:
+        w('  arbitrary_beam_props:')
+        for row in x_rows:
+            w('    - [' + ', '.join(row) + ']')
+    else:
+        w('  arbitrary_beam_props: []')
+    w('')
+
+    CABLE_KEYS = ('PropSetID', 'EA', 'MatDens', 'T0', 'CtrlChannel')
+    n_cable = int(d.scalar('NCablePropSets'))
+    cable_rows = d.table_rows(n_cable, skip=2)
+    w('cable_properties:')
+    if n_cable > 0:
+        w('  cables:')
+        for raw in cable_rows:
+            toks = _row_tokens(raw)
+            if len(toks) not in (4, 5):
+                raise ValueError('convert_subdyn: cable row "{}" in {} has {} value(s); expected 4 or 5'.format(
+                    raw, text_path, len(toks)))
+            w(_row_map(CABLE_KEYS, toks))
+    else:
+        w('  cables: []')
+    w('')
+
+    n_rigid = int(d.scalar('NRigidPropSets'))
+    rigid_rows = _matrix_rows(d, n_rigid, _SD_PROPSETSR_COL, skip=2)
+    w('rigid_link_properties:')
+    if n_rigid > 0:
+        w('  rigid_props:')
+        for row in rigid_rows:
+            w('    - [' + ', '.join(row) + ']')
+    else:
+        w('  rigid_props: []')
+    w('')
+
+    n_spring = int(d.scalar('NSpringPropSets'))
+    spring_rows = _matrix_rows(d, n_spring, _SD_PROPSETSS_COL, skip=2)
+    w('spring_element_properties:')
+    if n_spring > 0:
+        w('  spring_props:')
+        for row in spring_rows:
+            w('    - [' + ', '.join(row) + ']')
+    else:
+        w('  spring_props: []')
+    w('')
+
+    #-------------------- member_direction_cosine_matrices ----------------------------
+    n_cosm = int(d.scalar('NCOSMs'))
+    cosm_rows = _matrix_rows(d, n_cosm, _SD_COSM_COL, skip=2)
+    w('member_direction_cosine_matrices:')
+    if n_cosm > 0:
+        w('  cosm:')
+        for row in cosm_rows:
+            w('    - [' + ', '.join(row) + ']')
+    else:
+        w('  cosm: []')
+    w('')
+
+    #-------------------- concentrated_masses -----------------------------------------
+    CMASS_KEYS = ('JointID', 'JMass', 'JMXX', 'JMYY', 'JMZZ', 'JMXY', 'JMXZ', 'JMYZ', 'CGX', 'CGY', 'CGZ')
+    n_cmass = int(d.scalar('NCmass'))
+    cmass_rows = d.table_rows(n_cmass, skip=2)
+    w('concentrated_masses:')
+    if n_cmass > 0:
+        w('  masses:')
+        for raw in cmass_rows:
+            toks = _row_tokens(raw)
+            if len(toks) not in (5, 11):
+                raise ValueError('convert_subdyn: concentrated mass row "{}" in {} has {} value(s); expected 5 or 11'.format(
+                    raw, text_path, len(toks)))
+            w(_row_map(CMASS_KEYS, toks))
+    else:
+        w('  masses: []')
+    w('')
+
+    #-------------------- output --------------------------------------------------------
+    w('output:')
+    w('  SumPrint: '    + _as_bool(d.scalar('SumPrint')))
+    w('  OutCBModes: '  + d.scalar('OutCBModes'))
+    w('  OutFEMModes: ' + d.scalar('OutFEMModes'))
+    w('  OutCOSM: '     + _as_bool(d.scalar('OutCOSM')))
+    w('  OutAll: '      + _as_bool(d.scalar('OutAll')))
+    w('  OutSwtch: '    + d.scalar('OutSwtch'))
+    w('  TabDelim: '    + _as_bool(d.scalar('TabDelim')))
+    w('  OutDec: '      + d.scalar('OutDec'))
+    w('  OutFmt: '      + _as_str(d.scalar('OutFmt')))
+    w('  OutSFmt: '     + _as_str(d.scalar('OutSFmt')))
+    w('')
+
+    #-------------------- member_output_list ---------------------------------------------
+    n_mout = int(d.scalar('NMOutputs'))
+    mout_rows = d.table_rows(n_mout, skip=2)
+    w('member_output_list:')
+    if n_mout > 0:
+        w('  members:')
+        for raw in mout_rows:
+            toks = _row_tokens(raw)
+            if len(toks) < 3:
+                raise ValueError('convert_subdyn: member_output_list row "{}" in {} has {} value(s); expected >= 3'.format(
+                    raw, text_path, len(toks)))
+            member_id = toks[0]
+            n_out_cnt = int(toks[1])
+            node_cnt = toks[2:2 + n_out_cnt]
+            w('    - MemberID: ' + member_id)
+            w('      NodeCnt: [' + ', '.join(node_cnt) + ']')
+    else:
+        w('  members: []')
+    w('')
+
+    #-------------------- outputs (SSOutList) --------------------------------------------
+    # The banner line itself ("...SSOutList: The next line(s)...") is the only anchor;
+    # there is no standalone "OutList" keyword line in SubDyn's text format.
+    channels = d.outlist(keyword='SSOutList')
+    w('outputs:')
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+
+    return '\n'.join(out)
+
+
 def convert_beamdyn(text_path):
     """Convert a text-format BeamDyn primary input file to its YAML schema.
 
@@ -2177,6 +2483,7 @@ _INLINE_PATH_KEYS = {
                    'structural_control.TStCfiles', 'structural_control.SStCfiles'],
     'seastate':   ['waves.WvKinFile'],
     'hydrodyn':   ['floating_platform.PotFile', 'floating_platform.GeoFile'],
+    'subdyn':     ['base_reaction_joints.SSIfile'],
     'moordyn':    ['options.WaterKin'],
     # note: MoorDyn's variant "depth" option (a number OR a bathymetry filename --
     # MoorDyn_IO.f90 MDIO_getBathymetry) is intentionally not listed above:
@@ -2638,7 +2945,33 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  HydroFile: ' + _as_str(hydro_rel))
 
-    w('  SubFile: '     + _as_str(sub_file))
+    # SubFile conversion/inlining is gated on CompSub == 1 (SubDyn) -- ExtPtfm_MCKF
+    # (CompSub == 2) has no YAML schema of its own (see SubDyn_Yaml.f90's header
+    # comment and FAST_Yaml.f90's InlineTarget='SubDyn' gating), so a CompSub == 2
+    # SubFile always stays a plain (text) path, in every mode.
+    convert_sub = (comp_sub == 1) and (mode in ('all-yaml', 'single-file'))
+    sub_rel = _unquote(sub_file)
+    if convert_sub:
+        sub_abs = os.path.join(base_dir, sub_rel)
+        sub_yaml_text = convert_subdyn(sub_abs)
+        if mode == 'single-file':
+            w('  SubFile:')
+            # rewrite any relative paths inside the inlined section (e.g. a reaction
+            # joint's SSIfile) so they keep resolving once nested under a deck at a
+            # different directory
+            sub_yaml_text = _rewrite_inline_paths(
+                sub_yaml_text, 'subdyn', _relpath_prefix(os.path.dirname(sub_abs), base_dir))
+            # drop the two leading '# ...' header comments before inlining, then
+            # indent so the embedded document's top-level keys land under SubFile:
+            sub_lines = sub_yaml_text.split('\n')
+            sub_body = '\n'.join(sub_lines[2:]) if len(sub_lines) > 2 else sub_yaml_text
+            w(_indent_block(sub_body, '    '))
+        else:  # all-yaml
+            sub_yaml_rel = os.path.splitext(sub_rel)[0] + '.yaml'
+            extra_files[sub_yaml_rel] = sub_yaml_text
+            w('  SubFile: ' + _as_str(sub_yaml_rel))
+    else:
+        w('  SubFile: ' + _as_str(sub_rel))
 
     # MooringFile conversion/inlining is gated on CompMooring == 3 (MoorDyn) -- the
     # only mooring module with a YAML reader; MAP++/FEAM/OrcaFlex files stay text paths

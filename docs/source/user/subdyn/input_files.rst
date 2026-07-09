@@ -873,3 +873,153 @@ restrained nodes, the columns and rows associated with those DOFs will
 be removed, therefore the associated matrix elements will be ignored.
 
 A sample SubDyn SSI input file is given in :numref:`sd_appendix_C`.
+
+.. _subdyn-yaml-input:
+
+YAML input file
+----------------
+
+The SubDyn primary input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); see :ref:`yaml_input` for the conventions shared by
+all modules. Top-level keys mirror the text format's section banners:
+``simulation_control``, ``fea_and_craig_bampton``, ``guyan_damping``
+(optional), ``initial_rigid_body_position``, ``structure_joints``,
+``base_reaction_joints``, ``interface_joints``, ``members``,
+``member_cross_section_properties``, ``cable_properties``,
+``rigid_link_properties``, ``spring_element_properties``,
+``member_direction_cosine_matrices``, ``concentrated_masses``, ``output``,
+``member_output_list``, and ``outputs``. When ``CompSub`` selects SubDyn
+(=1), a glue-code YAML primary file may inline the whole ``SubFile`` section
+as a mapping instead of a path, following the general inline-input rule
+in :ref:`yaml_input`; ExtPtfm (``CompSub`` = 2) has no YAML schema, so a
+mapping there is a fatal error.
+
+Unlike the text format, the following counts are never given explicitly --
+they derive from list lengths: **NJoints** (``structure_joints:joints`` row
+count), **NReact**/**nNodes_C** (``base_reaction_joints:reactions`` list
+length), **NInterf**/**nNodes_I** (``interface_joints:interfaces`` list
+length), **NMembers** (``members:members`` list length),
+**NPropSets**/**NXPropSets**/**NCablePropertySets**/**NRigidPropertySets**/
+**NSpringPropertySets** (the corresponding property-table row/list counts),
+**NCOSMs** (``member_direction_cosine_matrices:cosm`` row count),
+**NCmass** (``concentrated_masses:masses`` list length), **NMOutputs**
+(``member_output_list:members`` list length, with each row's ``NodeCnt``
+list length giving that row's output-node count), and **NumOuts**
+(``outputs:OutList`` length).
+
+Pure-numeric fixed-column tables -- ``structure_joints:joints``, the three
+beam cross-section property tables under
+``member_cross_section_properties`` (``circular_beam_props``,
+``rectangular_beam_props``, ``arbitrary_beam_props``), ``rigid_props``,
+``spring_props``, and ``member_direction_cosine_matrices:cosm`` -- are
+written as a plain list-of-lists (one row per list entry), the same shape
+BeamDyn's ``key_points`` table uses, since their column layout never
+varies. Tables whose rows carry optional or typed fields --
+``base_reaction_joints:reactions`` (an optional ``SSIfile`` path),
+``members:members`` (whose last required column depends on ``MType``),
+``cable_properties:cables`` (an optional ``CtrlChannel``), and
+``concentrated_masses:masses`` (optional off-diagonal/offset terms) -- are
+written as a list of row mappings keyed by column name instead, mirroring
+MoorDyn/HydroDyn's table handling.
+
+Notable schema points:
+
+- ``structure_joints:joints`` is always the modern 9-column format
+  (``JointID``, ``JointXss``, ``JointYss``, ``JointZss``, ``JointType``,
+  ``JointDirX``, ``JointDirY``, ``JointDirZ``, ``JointStiff``); the legacy
+  4-column all-cantilever form has no YAML equivalent.
+- ``interface_joints:interfaces`` rows never expose per-DOF free/fixed
+  flags: the text reader already fatally rejects anything other than all
+  six DOF being locked to the transition piece (the only configuration
+  SubDyn currently implements), so a row only gives ``JointID`` and the
+  optional ``TPIdx`` (transition-piece index, for floating multi-TP
+  models; defaults to 1).
+- ``members:members`` rows give ``MemberID``, ``MJointID1``, ``MJointID2``,
+  ``MPropSetID1``, ``MPropSetID2``, and ``MType`` (an integer, or the text
+  format's ``"1c"``/``"1r"`` spellings for the circular/rectangular beam
+  types). ``MSpin`` (member spin about its own axis, degrees) is required
+  for beam-type members; ``COSMID`` is required for any other (spring-type)
+  member; neither is needed for cable or rigid members.
+- ``base_reaction_joints:reactions`` rows give ``JointID`` and the six
+  ``Rctx``/``Rcty``/``Rctz``/``Rctxss``/``Rctyss``/``Rctzss`` DOF flags,
+  plus an optional ``SSIfile`` path (resolved relative to the primary
+  input file, exactly like the text format).
+- ``cable_properties:cables`` rows give ``PropSetID``, ``EA``, ``MatDens``,
+  ``T0``, and an optional ``CtrlChannel`` (default 0); a non-zero ``T0``
+  prints the same pretension warning as the text path.
+- ``concentrated_masses:masses`` rows give ``JointID``, ``JMass``,
+  ``JMXX``, ``JMYY``, ``JMZZ``, and the optional off-diagonal/offset terms
+  ``JMXY``, ``JMXZ``, ``JMYZ``, ``CGX``, ``CGY``, ``CGZ`` (each defaulting
+  to 0) -- the text format's 5-vs-11-column legacy tolerance, made explicit
+  as per-field defaults instead of a column-count check.
+- ``member_output_list:members`` rows give ``MemberID`` and ``NodeCnt`` (a
+  list of output-node indices along that member); the section may be
+  omitted entirely when no member outputs are requested.
+- ``guyan_damping`` is optional; when absent, ``GuyanDampMod`` is 0 (no
+  Guyan damping) with no legacy-fallback warning -- unlike the text
+  format, which tolerates a missing ``GuyanDampMod`` block as an
+  old-file concession. When present, it gives ``GuyanDampMod``,
+  ``RayleighDamp`` (2 values), ``GuyanDampSize``, and a
+  ``GuyanDampSize`` x ``GuyanDampSize`` ``GuyanDampMat``.
+- ``output:OutCBModes``, ``OutFEMModes``, and ``OutCOSM`` are always
+  required in the YAML schema; the text format's fallback for missing
+  lines in old decks does not apply.
+- Second-order files: none, other than each reaction joint's optional
+  ``SSIfile``, which stays a path (text format only) in both the text and
+  YAML schemas.
+
+.. code-block:: yaml
+
+   # SubDyn primary input file (YAML form)
+   simulation_control:
+     Echo: false
+     SDdeltaT: default
+     IntMethod: 3
+     SttcSolve: true
+
+   fea_and_craig_bampton:
+     FEMMod: 3
+     NDiv: 1
+     Nmodes: 0
+     JDampings: [1]
+
+   initial_rigid_body_position:
+     qR0: [0, 0, 0, 0, 0, 0]
+
+   structure_joints:
+     joints:
+       - [1, 0, 0,  0, 1, 0, 0, 1, 0]
+       - [2, 0, 0, 10, 1, 0, 0, 1, 0]
+
+   base_reaction_joints:
+     reactions:
+       - {JointID: 1, Rctx: 1, Rcty: 1, Rctz: 1, Rctxss: 1, Rctyss: 1, Rctzss: 1}
+
+   interface_joints:
+     interfaces:
+       - {JointID: 2}
+
+   members:
+     members:
+       - {MemberID: 1, MJointID1: 1, MJointID2: 2, MPropSetID1: 1, MPropSetID2: 1, MType: "1c", MSpin: 0}
+
+   member_cross_section_properties:
+     circular_beam_props:
+       - [1, 8.5e9, 0.3, 7850, 6, 0.05]
+
+   output:
+     SumPrint: false
+     OutCBModes: false
+     OutFEMModes: false
+     OutCOSM: false
+     OutAll: false
+     OutSwtch: 2
+     TabDelim: true
+     OutDec: 1
+     OutFmt: "ES11.4e2"
+     OutSFmt: "A11"
+
+   outputs:
+     OutList:
+       - "ReactFXss"
+       - "ReactFYss"

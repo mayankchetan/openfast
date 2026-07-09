@@ -17,10 +17,12 @@
       aerodyn         - standalone AeroDyn driver case.
       moordyn         - standalone MoorDyn driver case.
       beamdyn         - standalone BeamDyn driver case.
+      subdyn          - standalone SubDyn driver case.
       openfast        - full glue-code (.fst) case; requires a mode (per-file |
                         all-yaml | single-file) selecting how convert_fst() should
                         transform input_files:InflowFile / input_files:AeroFile /
-                        input_files:EDFile / input_files:SeaStFile / input_files:HydroFile.
+                        input_files:EDFile / input_files:SeaStFile / input_files:HydroFile /
+                        input_files:SubFile.
 
     Usage: `executeYamlEquivalenceCase.py -h`
 """
@@ -59,7 +61,7 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "moordyn", "beamdyn", "openfast"):
+if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "moordyn", "beamdyn", "subdyn", "openfast"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
 
 
@@ -546,6 +548,85 @@ elif module == "beamdyn":
     ### run both
     for d in (textDir, yamlDir):
         returnCode = openfastDrivers.runBeamdynDriverCase(os.path.join(d, DRIVER), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+elif module == "subdyn":
+    #### subdyn (standalone driver) case ##############################################
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+
+    # Unlike BeamDyn/MoorDyn/HydroDyn, SubDyn r-test driver files are not all named
+    # alike (each case's driver is "<CaseName>.dvr"), so it is discovered by glob
+    # rather than hardcoded. The primary filename ("SDInputFile") and output rootname
+    # ("OutRootName") are both discovered from the driver file too, for the same
+    # robustness reason. *.dat/*.csv covers the primary file plus any sub-files kept
+    # as paths (interface/TP motion time series, applied-load unsteady-force files).
+    INPUT_GLOBS = ("*.dat", "*.dvr", "*.csv")
+
+    def stage(variant):
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        return d
+
+    def findDriverBaseName():
+        drivers = glob.glob(os.path.join(inputsDirectory, "*.dvr"))
+        if len(drivers) != 1:
+            rtl.exitWithError("Expected exactly one *.dvr file in {} (found {}).".format(
+                inputsDirectory, len(drivers)))
+        return os.path.basename(drivers[0])
+
+    def findPrimaryBaseName(driverText, driverPath):
+        m = re.search(r'(?im)^\s*("[^"]*"|\'[^\']*\'|\S+)\s+SDInputFile\b', driverText)
+        if m is None:
+            rtl.exitWithError("Could not find 'SDInputFile' entry in {}.".format(driverPath))
+        return os.path.basename(yamlDeckConverter._unquote(m.group(1)))
+
+    def findOutRootName(driverText, driverPath):
+        m = re.search(r'(?im)^\s*("[^"]*"|\'[^\']*\'|\S+)\s+OutRootName\b', driverText)
+        if m is None:
+            rtl.exitWithError("Could not find 'OutRootName' entry in {}.".format(driverPath))
+        return yamlDeckConverter._unquote(m.group(1))
+
+    DRIVER = findDriverBaseName()
+
+    ### text variant
+    textDir = stage("text")
+    with open(os.path.join(textDir, DRIVER)) as f:
+        OUTPUT = findOutRootName(f.read(), DRIVER) + ".SD.out"
+
+    ### yaml variant: discover the primary filename from the driver file, convert it,
+    ### repoint the driver at the new .yaml file
+    yamlDir = stage("yaml")
+    driverFile = os.path.join(yamlDir, DRIVER)
+    with open(driverFile) as f:
+        driverText = f.read()
+
+    primaryBase = findPrimaryBaseName(driverText, driverFile)
+    yamlPrimaryBase = os.path.splitext(primaryBase)[0] + ".yaml"
+    yamlText = yamlDeckConverter.convert_subdyn(os.path.join(yamlDir, primaryBase))
+    with open(os.path.join(yamlDir, yamlPrimaryBase), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, primaryBase))
+
+    if primaryBase not in driverText:
+        rtl.exitWithError("Driver file {} does not reference {}.".format(driverFile, primaryBase))
+    with open(driverFile, "w") as f:
+        f.write(driverText.replace(primaryBase, yamlPrimaryBase))
+
+    ### run both
+    for d in (textDir, yamlDir):
+        returnCode = openfastDrivers.runSubdynDriverCase(os.path.join(d, DRIVER), executable)
         if returnCode != 0:
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 
