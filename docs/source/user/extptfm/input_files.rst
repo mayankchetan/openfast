@@ -339,3 +339,79 @@ The files follow the following specifications:
       that the times in the first column need not match the simulation 
       time step or be evenly spaced. ExtPtfm will perform linear 
       interpolation between the provided times as needed. 
+
+
+
+.. _extptfm-yaml-input:
+
+YAML input file
+---------------
+
+The ExtPtfm_MCKF primary input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); see :ref:`yaml_input` for the conventions shared by
+all modules. Top-level keys mirror the text format's section banners:
+``simulation_control``, ``reduction_inputs``, ``connections``,
+``user_forcing``, ``output``, and ``outputs``. When ``CompSub`` selects
+ExtPtfm (``CompSub`` = 2), a glue-code YAML primary file may inline the whole
+``SubFile`` section as a mapping instead of a path, following the general
+inline-input rule in :ref:`yaml_input`.
+
+Unlike the text format, the following counts are never given explicitly --
+they derive from list lengths: **NActiveDOFList** (``reduction_inputs:ActiveCBDOF``
+list length), **NInitPosList** (``reduction_inputs:InitPosList`` list length),
+**NInitVelList** (``reduction_inputs:InitVelList`` list length), and **NumOuts**
+(``outputs:OutList`` length).
+
+Notable schema points:
+
+- ``simulation_control:DT`` accepts the literal ``default`` (the glue code's
+  coupling interval is used) or a number, exactly like the text format.
+- ``reduction_inputs:ActiveCBDOF`` is optional. Omit it entirely to keep all
+  Craig-Bampton modes active (the text format's ``NActiveDOFList`` = -1 case);
+  give an empty list ``[]`` for Guyan modes only (``NActiveDOFList`` = 0); or a
+  list of mode indices to reduce to exactly those DOF.
+- ``reduction_inputs:InitPosList`` and ``InitVelList`` are optional; omit them
+  (or give an empty list) to initialize all DOF to 0 (the text format's
+  ``NInitPosList``/``NInitVelList`` <= 0 case), or give a value per active CB
+  mode.
+- Second-order / path-only files (never inlined; each stays a path resolved
+  relative to the primary input file, exactly like the text format): the
+  Guyan/Craig-Bampton reduced superelement data file
+  ``reduction_inputs:RedFile`` (mass/damping/stiffness matrices), the
+  connection-points file ``connections:ConnFile``, and the user modal-forcing
+  and connection-forcing time-series files ``user_forcing:ForceFile`` and
+  ``user_forcing:FConnFile``.
+- There is no ``FileFormat``/legacy-format branch: the primary file is a single
+  fixed-schema file, so the YAML schema is a straight one-to-one of it.
+
+.. code-block:: yaml
+
+   # ExtPtfm_MCKF primary input file (YAML form)
+   simulation_control:
+     Echo: false
+     DT: default
+     IntMethod: 3
+
+   reduction_inputs:
+     RBMod: 0
+     RedFile: "ExtPtfm_SE.dat"
+
+   connections:
+     HasConnections: false
+     ConnFile: "not_used"
+
+   user_forcing:
+     HasUserForcing: true
+     ForceFile: "ExtPtfm_Frc.dat"
+     HasConnForcing: false
+     FConnFile: "not_used"
+
+   output:
+     SumPrint: true
+     OutFile: 1
+     TabDelim: true
+     OutFmt: "G0"
+     Tstart: 0
+
+   outputs:
+     OutList: ["IntrfFx", "IntrfFy", "IntrfFz"]

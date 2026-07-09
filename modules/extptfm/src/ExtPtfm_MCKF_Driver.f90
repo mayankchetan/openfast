@@ -64,6 +64,9 @@ PROGRAM ExtPtfm_Driver
    END IF            
 
    InitInData%InputFile = InputFile
+   ! Read from an input file (text .dat or YAML .yaml/.yml): ExtPtfm_Init -> ReadPrimaryFile's
+   ! IsYamlExt funnel dispatches on the InputFile extension automatically.
+   InitInData%UseInputFile = .TRUE.
    TimeInterval = 0.001    ! Glue code's request for delta time (likely based on information from other modules)
 
    ! Initialize the module

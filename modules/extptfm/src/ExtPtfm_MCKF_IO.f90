@@ -54,6 +54,8 @@ MODULE ExtPtfm_MCKF_IO
 
    USE ExtPtfm_MCKF_Parameters
    USE ExtPtfm_MCKF_Types
+   USE ExtPtfm_Yaml, only: ExtPtfm_ParseYamlFile, ExtPtfm_ParseYamlFileInfo
+   USE YamlInput,    only: IsYamlExt
 
    IMPLICIT NONE
    private
@@ -510,8 +512,15 @@ SUBROUTINE ReadPrimaryFile(InputFile, InitInp, p, OutFileRoot, InputFileData, Er
    Echo = .FALSE.
    UnEc = -1                             ! Echo file not opened, yet
    CALL GetPath(InputFile, PriPath)     ! Input files will be relative to the path where the primary input file is located.
+
+   ! --- Format funnel (mirrors SubDyn's SD_Input): the text-reading branch below is what the
+   !     YAML path replaces; the shared post-processing after this IF/ELSE (ReadReducedFile,
+   !     CheckReducedInputs, ReadConnFile/CheckConnInputs, ReadForceFile, ReduceNumberOfDOF)
+   !     runs identically -- and only once -- for both formats.
+   IF ( InitInp%UseInputFile .and. .not. IsYamlExt(InputFile) ) THEN   ! text-format input file (.dat and friends)
+
    CALL AllocAry(InputFileData%OutList, MaxOutChs, "ExtPtfm Input File's Outlist", ErrStat, ErrMsg); if(Failed()) return
-   
+
    ! Get an available unit number for the file.
    CALL GetNewUnit(UnIn, ErrStat, ErrMsg);              if(Failed()) return
    ! Open the Primary input file.
@@ -627,6 +636,19 @@ SUBROUTINE ReadPrimaryFile(InputFile, InitInp, p, OutFileRoot, InputFileData, Er
    CALL ReadOutputList(UnIn, InputFile, InputFileData%OutList, InputFileData%NumOuts, 'OutList', "List of user-requested output channels", ErrStat, ErrMsg, UnEc); if(LineFailed()) return
    !---------------------- END OF FILE -----------------------------------------
    call cleanup()
+
+   ELSE IF ( InitInp%UseInputFile ) THEN          ! YAML-format input file (.yaml/.yml)
+
+      call ExtPtfm_ParseYamlFile( InputFile, PriPath, InputFileData, ErrStat, ErrMsg ); if(Failed()) return
+
+   ELSE IF ( InitInp%PassedFileIsYaml ) THEN      ! inline YAML content (e.g. inline module input from a YAML primary file)
+
+      call ExtPtfm_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, PriPath, InputFileData, ErrStat, ErrMsg ); if(Failed()) return
+
+   ELSE
+      call SetErrStat( ErrID_Fatal, 'ExtPtfm_MCKF passed (inline) input data must be in YAML format.', ErrStat, ErrMsg, 'ExtPtfm_ReadPrimaryFile' )
+      return
+   END IF
 
    ! --- Reading Reduced file
    call ReadReducedFile(InputFileData%RedFile, p, ErrStat, ErrMsg); if(Failed()) return

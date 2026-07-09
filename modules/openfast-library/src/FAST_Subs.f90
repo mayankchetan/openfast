@@ -1071,6 +1071,16 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_ExtPtfm%PtfmRefyt = ED%p(1)%PtfmRefyt
       Init%InData_ExtPtfm%PtfmRefzt = ED%p(1)%PtfmRefzt ! Required
 
+      ! inline ExtPtfm_MCKF input from a YAML primary file (input_files:SubFile)
+      Init%InData_ExtPtfm%UseInputFile = .not. m_FAST%ExtPtfmIsInline
+      IF ( m_FAST%ExtPtfmIsInline ) THEN
+         Init%InData_ExtPtfm%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%ExtPtfmInlineFileInfo, Init%InData_ExtPtfm%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      ELSE
+         Init%InData_ExtPtfm%PassedFileIsYaml = .FALSE.
+      END IF
+
       ! Call module initialization routine
       dt_module = p_FAST%DT
       CALL ExtPtfm_Init(Init%InData_ExtPtfm, ExtPtfm%Input(1), ExtPtfm%p,  &

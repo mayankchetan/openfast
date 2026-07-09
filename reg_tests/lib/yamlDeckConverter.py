@@ -922,6 +922,92 @@ def convert_subdyn(text_path):
     return '\n'.join(out)
 
 
+def convert_extptfm(text_path):
+    """Convert a text-format ExtPtfm_MCKF primary input file to its YAML schema
+    (modules/extptfm/src/ExtPtfm_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners: simulation_control, reduction_inputs,
+    connections, user_forcing, output, outputs.
+
+    NActiveDOFList/NInitPosList/NInitVelList/NumOuts are NOT emitted -- counts derive
+    from list lengths, per ExtPtfm_Yaml.f90's header. The large Guyan/Craig-Bampton
+    reduced-data file (Red_FileName) and the connection/forcing time-series files
+    (Conn_FileName, Force_FileName, FConn_FileName) all stay path strings -- they are
+    second-order files read separately in ReadPrimaryFile's shared post-processing.
+
+    The three optional lists are emitted so that ExtPtfm_Yaml's allocation semantics
+    reproduce the text path's allocated/unallocated state exactly:
+      - ActiveCBDOF: emitted only when NActiveDOFList >= 0 (a value < 0 means "all CB
+        modes active", which the reader represents as the key being absent). When
+        NActiveDOFList == 0 an empty list [] is emitted (Guyan modes only).
+      - InitPosList / InitVelList: emitted only when their count is > 0 (a count <= 0
+        means "all DOF initialized to 0", represented by the key being absent)."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# ExtPtfm_MCKF primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- simulation_control -------------------------------------
+    w('simulation_control:')
+    w('  Echo: '      + _as_bool(d.scalar('Echo')))
+    w('  DT: '        + _default_or_num(d.scalar('DT')))
+    w('  IntMethod: ' + d.scalar('IntMethod'))
+    w('')
+
+    #-------------------- reduction_inputs ---------------------------------------
+    w('reduction_inputs:')
+    w('  RBMod: '   + d.scalar('RBMod'))
+    w('  RedFile: ' + _as_str(d.scalar('Red_FileName')))
+    # NActiveDOFList then the ActiveDOFList value line (blank when NActiveDOFList < 0).
+    n_active = int(d.scalar('NActiveDOFList'))
+    active_toks = d.find('ActiveDOFList')
+    if n_active >= 0:
+        w('  ActiveCBDOF: [' + _list_join(active_toks[:n_active]) + ']')
+    # NInitPosList then the InitPosList value line.
+    n_initpos = int(d.scalar('NInitPosList'))
+    initpos_toks = d.find('InitPosList')
+    if n_initpos > 0:
+        w('  InitPosList: [' + _list_join(initpos_toks[:n_initpos]) + ']')
+    # NInitVelList then the InitVelList value line.
+    n_initvel = int(d.scalar('NInitVelList'))
+    initvel_toks = d.find('InitVelList')
+    if n_initvel > 0:
+        w('  InitVelList: [' + _list_join(initvel_toks[:n_initvel]) + ']')
+    w('')
+
+    #-------------------- connections --------------------------------------------
+    w('connections:')
+    w('  HasConnections: ' + _as_bool(d.scalar('Connections')))
+    w('  ConnFile: '       + _as_str(d.scalar('Conn_FileName')))
+    w('')
+
+    #-------------------- user_forcing -------------------------------------------
+    w('user_forcing:')
+    w('  HasUserForcing: ' + _as_bool(d.scalar('UserForcing')))
+    w('  ForceFile: '      + _as_str(d.scalar('Force_FileName')))
+    w('  HasConnForcing: ' + _as_bool(d.scalar('ConnForcing')))
+    w('  FConnFile: '      + _as_str(d.scalar('FConn_FileName')))
+    w('')
+
+    #-------------------- output -------------------------------------------------
+    w('output:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  OutFile: '  + d.scalar('OutFile'))
+    w('  TabDelim: ' + _as_bool(d.scalar('TabDelim')))
+    w('  OutFmt: '   + _as_str(d.scalar('OutFmt')))
+    w('  Tstart: '   + d.scalar('TStart'))
+    w('')
+
+    #-------------------- outputs (OutList) --------------------------------------
+    channels = d.outlist(keyword='OutList')
+    w('outputs:')
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+
+    return '\n'.join(out)
+
+
 def convert_beamdyn(text_path):
     """Convert a text-format BeamDyn primary input file to its YAML schema.
 
@@ -2484,6 +2570,8 @@ _INLINE_PATH_KEYS = {
     'seastate':   ['waves.WvKinFile'],
     'hydrodyn':   ['floating_platform.PotFile', 'floating_platform.GeoFile'],
     'subdyn':     ['base_reaction_joints.SSIfile'],
+    'extptfm':    ['reduction_inputs.RedFile', 'connections.ConnFile',
+                   'user_forcing.ForceFile', 'user_forcing.FConnFile'],
     'moordyn':    ['options.WaterKin'],
     # note: MoorDyn's variant "depth" option (a number OR a bathymetry filename --
     # MoorDyn_IO.f90 MDIO_getBathymetry) is intentionally not listed above:
@@ -2945,22 +3033,31 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  HydroFile: ' + _as_str(hydro_rel))
 
-    # SubFile conversion/inlining is gated on CompSub == 1 (SubDyn) -- ExtPtfm_MCKF
-    # (CompSub == 2) has no YAML schema of its own (see SubDyn_Yaml.f90's header
-    # comment and FAST_Yaml.f90's InlineTarget='SubDyn' gating), so a CompSub == 2
-    # SubFile always stays a plain (text) path, in every mode.
-    convert_sub = (comp_sub == 1) and (mode in ('all-yaml', 'single-file'))
+    # SubFile conversion/inlining is gated on CompSub == 1 (SubDyn) or CompSub == 2
+    # (ExtPtfm_MCKF) -- both have a YAML reader now (SubDyn_Yaml.f90 / ExtPtfm_Yaml.f90,
+    # and FAST_Yaml.f90's InlineTarget='SubDyn'/'ExtPtfm' gating). Any other CompSub value
+    # keeps SubFile a plain (text) path in every mode.
+    if comp_sub == 1:
+        sub_module_key = 'subdyn'
+        sub_converter = convert_subdyn
+    elif comp_sub == 2:
+        sub_module_key = 'extptfm'
+        sub_converter = convert_extptfm
+    else:
+        sub_module_key = None
+        sub_converter = None
+    convert_sub = (sub_converter is not None) and (mode in ('all-yaml', 'single-file'))
     sub_rel = _unquote(sub_file)
     if convert_sub:
         sub_abs = os.path.join(base_dir, sub_rel)
-        sub_yaml_text = convert_subdyn(sub_abs)
+        sub_yaml_text = sub_converter(sub_abs)
         if mode == 'single-file':
             w('  SubFile:')
-            # rewrite any relative paths inside the inlined section (e.g. a reaction
-            # joint's SSIfile) so they keep resolving once nested under a deck at a
-            # different directory
+            # rewrite any relative paths inside the inlined section (SubDyn: a reaction
+            # joint's SSIfile; ExtPtfm: RedFile/ConnFile/ForceFile/FConnFile) so they keep
+            # resolving once nested under a deck at a different directory
             sub_yaml_text = _rewrite_inline_paths(
-                sub_yaml_text, 'subdyn', _relpath_prefix(os.path.dirname(sub_abs), base_dir))
+                sub_yaml_text, sub_module_key, _relpath_prefix(os.path.dirname(sub_abs), base_dir))
             # drop the two leading '# ...' header comments before inlining, then
             # indent so the embedded document's top-level keys land under SubFile:
             sub_lines = sub_yaml_text.split('\n')

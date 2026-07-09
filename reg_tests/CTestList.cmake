@@ -778,6 +778,18 @@ yaml_equiv_openfast("5MW_OC3Mnpl_Linear" "perfile"    "${CTEST_OPENFAST_EXECUTAB
 yaml_equiv_openfast("5MW_OC3Mnpl_Linear" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("5MW_OC3Mnpl_Linear" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
+# 5MW_OC4Jckt_ExtPtfm: CompSub=2 (ExtPtfm_MCKF), CompHydro=0, CompServo=0 (no DISCON
+# DLL) -- the only CompSub=2 glue case in r-test, so the SubFile conversion/inlining
+# (yamlDeckConverter.py's convert_fst -> convert_extptfm) and ExtPtfm's read-input
+# funnel are exercised end-to-end through the full glue path in all three modes. It
+# uses DT="default", a Craig-Bampton reduced superelement (Red_FileName=ExtPtfm_SE.dat,
+# with NActiveDOFList=-1 "all CB modes"/NInitPosList=NInitVelList=0), no connections,
+# and user modal forcing (UserForcing=True, Force_FileName=ExtPtfm_Frc.dat) -- the
+# reduced/forcing files stay path-only and round-trip verbatim through the converter.
+yaml_equiv_openfast("5MW_OC4Jckt_ExtPtfm" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC4Jckt_ExtPtfm" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC4Jckt_ExtPtfm" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

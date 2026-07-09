@@ -553,6 +553,8 @@ typedef	^	FAST_MiscVarType	FileInfoType	MDInlineFileInfo	-	-	-	"serialized inlin
 typedef	^	FAST_MiscVarType	LOGICAL	MDIsInline	-	.FALSE.	-	"MoorDyn input was given inline in the YAML primary file"	-
 typedef	^	FAST_MiscVarType	FileInfoType	SDInlineFileInfo	-	-	-	"serialized inline SubDyn input from a YAML primary file (YAML text lines with provenance)"	-
 typedef	^	FAST_MiscVarType	LOGICAL	SDIsInline	-	.FALSE.	-	"SubDyn input was given inline in the YAML primary file"	-
+typedef	^	FAST_MiscVarType	FileInfoType	ExtPtfmInlineFileInfo	-	-	-	"serialized inline ExtPtfm_MCKF input from a YAML primary file (YAML text lines with provenance)"	-
+typedef	^	FAST_MiscVarType	LOGICAL	ExtPtfmIsInline	-	.FALSE.	-	"ExtPtfm_MCKF input was given inline in the YAML primary file"	-
 
 
 # ..... FAST_InitData data .......................................................................................................
