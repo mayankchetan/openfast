@@ -2928,6 +2928,55 @@ def _rewrite_inline_paths(yaml_text, module_key, prefix):
     return '\n'.join(out_lines)
 
 
+def _emit_ed_file_lines(ed_rel, comp_elast, mode, base_dir, extra_files, key_indent):
+    """Return the output line(s) for a single EDFile entry -- shared by the primary
+    rotor and each additional multirotor rotor (reg_tests/CTestList.cmake's
+    MHK_RM1_Floating_MR case), so rotor 2+'s EDFile gets the same convert/inline
+    treatment as rotor 1's in all-yaml/single-file mode instead of staying a bare
+    text path. `ed_rel` must already be _unquote()'d. `key_indent` is the indent (in
+    spaces) of the 'EDFile:' key itself (2 for the primary rotor's top-level
+    input_files:, 4 for a '- EDFile:' list item under input_files:rotors); nested
+    inline content is indented key_indent + 2, matching the primary-rotor pattern.
+    """
+    pad = ' ' * key_indent
+    nested_pad = ' ' * (key_indent + 2)
+    lines = []
+    convert_sed_file = (comp_elast == 3) and (mode in ('all-yaml', 'single-file'))
+    convert_ed_file  = (comp_elast in (1, 2)) and (mode in ('all-yaml', 'single-file'))
+    if convert_sed_file:
+        ed_abs = os.path.join(base_dir, ed_rel)
+        sed_yaml_text = convert_sed(ed_abs)
+        if mode == 'single-file':
+            lines.append(pad + 'EDFile:')
+            sed_lines = sed_yaml_text.split('\n')
+            sed_body = '\n'.join(sed_lines[2:]) if len(sed_lines) > 2 else sed_yaml_text
+            lines.append(_indent_block(sed_body, nested_pad))
+        else:  # all-yaml
+            sed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
+            extra_files[sed_yaml_rel] = sed_yaml_text
+            lines.append(pad + 'EDFile: ' + _as_str(sed_yaml_rel))
+    elif convert_ed_file:
+        ed_abs = os.path.join(base_dir, ed_rel)
+        ed_yaml_text = convert_elastodyn(ed_abs)
+        if mode == 'single-file':
+            lines.append(pad + 'EDFile:')
+            # rewrite any relative paths inside the inlined section (BldFile/TwrFile/
+            # FurlFile -- second-order files, still referenced by path) so they keep
+            # resolving once nested under a deck at a different directory
+            ed_yaml_text = _rewrite_inline_paths(
+                ed_yaml_text, 'elastodyn', _relpath_prefix(os.path.dirname(ed_abs), base_dir))
+            ed_lines = ed_yaml_text.split('\n')
+            ed_body = '\n'.join(ed_lines[2:]) if len(ed_lines) > 2 else ed_yaml_text
+            lines.append(_indent_block(ed_body, nested_pad))
+        else:  # all-yaml
+            ed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
+            extra_files[ed_yaml_rel] = ed_yaml_text
+            lines.append(pad + 'EDFile: ' + _as_str(ed_yaml_rel))
+    else:
+        lines.append(pad + 'EDFile: ' + _as_str(ed_rel))
+    return lines
+
+
 def convert_fst(text_path, mode='per-file'):
     """Convert a text-format OpenFAST primary (.fst) input file to its YAML schema
     (modules/openfast-library/src/FAST_Yaml.f90 is the source of truth).
@@ -3087,45 +3136,12 @@ def convert_fst(text_path, mode='per-file'):
     w('input_files:')
 
     # EDFile serves ElastoDyn (CompElast 1/2) and Simplified ElastoDyn (CompElast == 3);
-    # both targets have a YAML reader now, so conversion/inlining is gated only on mode
-    convert_sed_file = (comp_elast == 3) and (mode in ('all-yaml', 'single-file'))
-    convert_ed_file  = (comp_elast in (1, 2)) and (mode in ('all-yaml', 'single-file'))
+    # both targets have a YAML reader now, so conversion/inlining is gated only on mode.
+    # _emit_ed_file_lines() is shared with each additional multirotor rotor's EDFile
+    # below, so rotor 2+ gets identical convert/inline treatment.
     ed_rel = _unquote(ed_file)
-    if convert_sed_file:
-        ed_abs = os.path.join(base_dir, ed_rel)
-        sed_yaml_text = convert_sed(ed_abs)
-        if mode == 'single-file':
-            w('  EDFile:')
-            # drop the two leading '# ...' header comments before inlining, then
-            # indent so the embedded document's top-level keys land under EDFile:
-            sed_lines = sed_yaml_text.split('\n')
-            sed_body = '\n'.join(sed_lines[2:]) if len(sed_lines) > 2 else sed_yaml_text
-            w(_indent_block(sed_body, '    '))
-        else:  # all-yaml
-            sed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
-            extra_files[sed_yaml_rel] = sed_yaml_text
-            w('  EDFile: ' + _as_str(sed_yaml_rel))
-    elif convert_ed_file:
-        ed_abs = os.path.join(base_dir, ed_rel)
-        ed_yaml_text = convert_elastodyn(ed_abs)
-        if mode == 'single-file':
-            w('  EDFile:')
-            # rewrite any relative paths inside the inlined section (BldFile/TwrFile/
-            # FurlFile -- second-order files, still referenced by path) so they keep
-            # resolving once nested under a deck at a different directory
-            ed_yaml_text = _rewrite_inline_paths(
-                ed_yaml_text, 'elastodyn', _relpath_prefix(os.path.dirname(ed_abs), base_dir))
-            # drop the two leading '# ...' header comments before inlining, then
-            # indent so the embedded document's top-level keys land under EDFile:
-            ed_lines = ed_yaml_text.split('\n')
-            ed_body = '\n'.join(ed_lines[2:]) if len(ed_lines) > 2 else ed_yaml_text
-            w(_indent_block(ed_body, '    '))
-        else:  # all-yaml
-            ed_yaml_rel = os.path.splitext(ed_rel)[0] + '.yaml'
-            extra_files[ed_yaml_rel] = ed_yaml_text
-            w('  EDFile: ' + _as_str(ed_yaml_rel))
-    else:
-        w('  EDFile: ' + _as_str(ed_rel))
+    for line in _emit_ed_file_lines(ed_rel, comp_elast, mode, base_dir, extra_files, key_indent=2):
+        w(line)
 
     # BDBldFile (CompElast == 2): unlike EDFile, BeamDyn has no PassedFileIsYaml/
     # FileInfoType inline entry point at all (BeamDyn_Yaml.f90's InitInputType carries
@@ -3402,8 +3418,26 @@ def convert_fst(text_path, mode='per-file'):
 
     if rotors_extra:
         w('  rotors:')
+        # additional rotors' EDFile: converted to YAML in all-yaml/single-file mode
+        # (never left a bare text path), same as rotor 1's -- but never *inlined* as a
+        # nested mapping even in single-file mode. Unlike rotor 1's input_files:EDFile
+        # (GetModFile in FAST_Yaml.f90), the per-rotor sequence entry is read by
+        # GetRotorFile, which only accepts a scalar file path (see its "plain path
+        # only" doc comment) -- it has no mapping/InlineTarget branch, so a genuine
+        # inline mapping here would be a Fortran-side parse error. Routing extra
+        # rotors' EDFile through 'all-yaml' handling regardless of the requested mode
+        # keeps every mode converter-only and still exercises the conversion path.
+        rotor_ed_mode = 'all-yaml' if mode == 'single-file' else mode
         for (r_ed, r_bd, r_serv) in rotors_extra:
-            w('  - EDFile: ' + _as_str(r_ed))
+            r_ed_rel = _unquote(r_ed)
+            ed_lines = _emit_ed_file_lines(r_ed_rel, comp_elast, rotor_ed_mode, base_dir, extra_files, key_indent=4)
+            # ed_lines[0] is 4-space-indented ('    EDFile: ...'); turn it into the
+            # sequence-item form '  - EDFile: ...' (dash + SPACE, so YAML reads it as a
+            # sequence entry, not a '-EDFile' scalar key). The continuation keys below
+            # keep the 4-space indent, aligning their column with EDFile's (column 5).
+            w('  - ' + ed_lines[0][len('    '):])
+            for extra_line in ed_lines[1:]:
+                w(extra_line)
             w('    BDBldFile: [' + ', '.join(_as_str(x) for x in r_bd) + ']')
             w('    ServoFile: ' + _as_str(r_serv))
     w('')

@@ -694,6 +694,16 @@ yaml_equiv_openfast("MHK_RM1_Floating" "perfile"    "${CTEST_OPENFAST_EXECUTABLE
 yaml_equiv_openfast("MHK_RM1_Floating" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("MHK_RM1_Floating" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
+# MHK_RM1_Floating_MR: NRotors=2, MirrorRotor "F T", CompServo=0 (ServoFile "unused" --
+# no DISCON DLL staging needed), with every active module inline-YAML-capable
+# (ElastoDyn per-rotor EDFile, AeroDyn, InflowWind, SeaState, HydroDyn, SubDyn,
+# MoorDyn). This is the multirotor `input_files:rotors` sequence exercise: rotor 1's
+# and rotor 2's (distinct) EDFile must each convert/inline correctly in allyaml/
+# single-file, and MirrorRotor's per-rotor list must round-trip.
+yaml_equiv_openfast("MHK_RM1_Floating_MR" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("MHK_RM1_Floating_MR" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("MHK_RM1_Floating_MR" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 # 5MW_OC3Spar_DLL_WTurb_WavesIrr (2.8, the headline offshore glue case): CompServo=1
 # with PCMode=VSContrl=5 (Bladed-style DISCON_OC3Hywind.dll), CompAero=2, CompHydro=1,
 # CompMooring=1 (MAP++, stays a text path), and InflowFile pointing at the shared
