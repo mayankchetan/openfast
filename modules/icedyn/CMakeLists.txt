@@ -19,6 +19,7 @@ if (GENERATE_TYPES)
 endif()
 
 add_library(icedynlib STATIC
+  src/IceDyn_Yaml.f90
   src/IceDyn.f90
   src/IceDyn_Types.f90
 )

@@ -248,6 +248,11 @@ supported:
   ElastoDyn + BeamDyn); BeamDyn has no inline-input glue path, so
   ``BDBldFile`` is always a file path, never inlined. The blade properties
   file stays referenced by path.
+- IceDyn primary input file (:ref:`icedyn-yaml-input`), including inline use
+  under ``input_files:IceFile`` (when ``CompIce`` selects IceDyn,
+  ``CompIce`` = 2). IceDyn's primary input references no further data files,
+  so nothing stays a path -- every field is inlined. (IceFloe, ``CompIce`` = 1,
+  has no YAML schema yet and always keeps ``IceFile`` a plain path.)
 
 
 .. _feamooring-yaml-input:
@@ -326,3 +331,117 @@ Notable schema points:
 
    outputs:
      OutList: ["FairT1", "AnchT1"]
+
+
+.. _icedyn-yaml-input:
+
+IceDyn YAML input file
+-----------------------
+
+The IceDyn primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); the conventions above apply. (IceDyn has no formal
+module-documentation page of its own -- see the Ice Module Manual linked from
+:ref:`user_guide` -- so its YAML schema is documented here.) Top-level keys
+mirror the text format's section banners: ``structure_properties``,
+``ice_models``, ``ice_general``, and ``ice_model_1`` through ``ice_model_6``
+(one section per ice-model number, each holding that model's parameters
+regardless of which ``IceModel`` is actually selected -- exactly like the text
+format, which reads every model's block unconditionally). When ``CompIce``
+selects IceDyn (``CompIce`` = 2), a glue-code YAML primary file may inline the
+whole ``IceFile`` section as a mapping instead of a path, following the
+general inline-input rule above; IceDyn is initialized once per
+support-structure leg, and the inline input is applied identically to every
+leg.
+
+Unlike the text format, **NumLegs** is never given explicitly -- it derives
+from the length of ``structure_properties:LegPosX`` (``LegPosY`` and
+``StWidth`` must have the same length).
+
+Notable schema points:
+
+- IceDyn's primary input references no second-order / external data files, so
+  nothing stays a path -- every field is inlined.
+- There is no ``OutList``/outputs section: IceDyn's text reader never reads an
+  output-channel list from its primary file, so the YAML schema has none
+  either.
+- There is no ``FileFormat``/legacy-format branch: the primary file is a
+  single fixed-schema file, so the YAML schema is a straight one-to-one of it.
+
+.. code-block:: yaml
+
+   # IceDyn primary input file (YAML form)
+   structure_properties:
+     LegPosX: [0]
+     LegPosY: [0]
+     StWidth: [6]
+
+   ice_models:
+     IceModel: 6
+     IceSubModel: 1
+
+   ice_general:
+     IceVel: 0.1
+     IceThks: 0.8
+     WtDen: 1000
+     IceDen: 900
+     InitLoc: 0.0
+     InitTm: 0.0
+     Seed1: 2
+     Seed2: 5
+
+   ice_model_1:
+     Ikm: 2.7
+     Ag: 3.5e6
+     Qg: 65000
+     Rg: 8.314
+     Tice: 269
+     Poisson: 0.3
+     WgAngle: 90.0
+     EIce: 9.5
+     SigNm: 5
+
+   ice_model_2:
+     Pitch: 1.0
+     IceStr2: 5.0
+     Delmax2: 1.0
+
+   ice_model_3:
+     ThkMean: 0.5
+     ThkVar: 0.04
+     VelMean: 0.001
+     VelVar: 1e-6
+     TeMean: 15
+     StrMean: 5
+     StrVar: 1
+     DelMean: 0.1
+     DelVar: 0.01
+     PMean: 0.2
+     PVar: 0.01
+
+   ice_model_4:
+     PrflMean: 0
+     PrflSig: 0.02
+     ZoneNo1: 10
+     ZoneNo2: 1
+     ZonePitch: 0.27
+     IceStr: 5.0
+     Delmax: 0.027
+
+   ice_model_5:
+     ConeAgl: 55.0
+     ConeDwl: 8.0
+     ConeDtp: 1.0
+     RdupThk: 0.3
+     mu: 0.3
+     FlxStr: 0.7
+     StrLim: 0.1
+     StrRtLim: 1e-2
+
+   ice_model_6:
+     FloeLth: 800
+     FloeWth: 800
+     CPrAr: 5.0
+     dPrAr: -0.5
+     Fdr: 9
+     Kic: 140
+     FspN: 3.3

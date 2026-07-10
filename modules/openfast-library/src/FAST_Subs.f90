@@ -1394,6 +1394,17 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
       Init%InData_IceD%TMax          = p_FAST%TMax
       Init%InData_IceD%LegNum        = 1
 
+      ! inline IceDyn input from a YAML primary file (input_files:IceFile); applied to every
+      ! leg (see the DO loop below), since IceDyn is initialized once per support-structure leg
+      Init%InData_IceD%UseInputFile = .not. m_FAST%IceDIsInline
+      IF ( m_FAST%IceDIsInline ) THEN
+         Init%InData_IceD%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%IceDInlineFileInfo, Init%InData_IceD%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      ELSE
+         Init%InData_IceD%PassedFileIsYaml = .FALSE.
+      END IF
+
       ! Call module initialization
       dt_module = p_FAST%DT
       CALL IceD_Init( Init%InData_IceD, IceD%Input(1,1), IceD%p(1),  IceD%x(1,STATE_CURR), IceD%xd(1,STATE_CURR), IceD%z(1,STATE_CURR), &
@@ -1419,6 +1430,18 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
 
          Init%InData_IceD%LegNum = i
          Init%InData_IceD%RootName = TRIM(p_FAST%OutFileRoot)//'.'//TRIM(y_FAST%Module_Abrev(Module_IceD))//TRIM(Num2LStr(i))
+
+         ! inline IceDyn input from a YAML primary file: re-apply for this leg (Init%InData_IceD
+         ! is reused across the leg loop, but set explicitly here so every leg's handover is
+         ! unambiguous, matching the inline FileInfo set up for leg 1 above)
+         Init%InData_IceD%UseInputFile = .not. m_FAST%IceDIsInline
+         IF ( m_FAST%IceDIsInline ) THEN
+            Init%InData_IceD%PassedFileIsYaml = .TRUE.
+            CALL NWTC_Library_CopyFileInfoType( m_FAST%IceDInlineFileInfo, Init%InData_IceD%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+            if (Failed()) return
+         ELSE
+            Init%InData_IceD%PassedFileIsYaml = .FALSE.
+         END IF
 
          ! Call module initialization routine
          dt_module = p_FAST%DT

@@ -598,6 +598,8 @@ IMPLICIT NONE
     LOGICAL  :: ExtPtfmIsInline = .FALSE.      !< ExtPtfm_MCKF input was given inline in the YAML primary file [-]
     TYPE(FileInfoType)  :: FEAMInlineFileInfo      !< serialized inline FEAMooring input from a YAML primary file (YAML text lines with provenance) [-]
     LOGICAL  :: FEAMIsInline = .FALSE.      !< FEAMooring input was given inline in the YAML primary file [-]
+    TYPE(FileInfoType)  :: IceDInlineFileInfo      !< serialized inline IceDyn input from a YAML primary file (YAML text lines with provenance) [-]
+    LOGICAL  :: IceDIsInline = .FALSE.      !< IceDyn input was given inline in the YAML primary file [-]
   END TYPE FAST_MiscVarType
 ! =======================
 ! =========  FAST_InitData  =======
@@ -8852,6 +8854,10 @@ subroutine FAST_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
    DstMiscData%FEAMIsInline = SrcMiscData%FEAMIsInline
+   call NWTC_Library_CopyFileInfoType(SrcMiscData%IceDInlineFileInfo, DstMiscData%IceDInlineFileInfo, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstMiscData%IceDIsInline = SrcMiscData%IceDIsInline
 end subroutine
 
 subroutine FAST_DestroyMisc(MiscData, ErrStat, ErrMsg)
@@ -8890,6 +8896,8 @@ subroutine FAST_DestroyMisc(MiscData, ErrStat, ErrMsg)
    call NWTC_Library_DestroyFileInfoType(MiscData%ExtPtfmInlineFileInfo, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    call NWTC_Library_DestroyFileInfoType(MiscData%FEAMInlineFileInfo, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   call NWTC_Library_DestroyFileInfoType(MiscData%IceDInlineFileInfo, ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
@@ -8931,6 +8939,8 @@ subroutine FAST_PackMisc(RF, Indata)
    call RegPack(RF, InData%ExtPtfmIsInline)
    call NWTC_Library_PackFileInfoType(RF, InData%FEAMInlineFileInfo) 
    call RegPack(RF, InData%FEAMIsInline)
+   call NWTC_Library_PackFileInfoType(RF, InData%IceDInlineFileInfo) 
+   call RegPack(RF, InData%IceDIsInline)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -8972,6 +8982,8 @@ subroutine FAST_UnPackMisc(RF, OutData)
    call RegUnpack(RF, OutData%ExtPtfmIsInline); if (RegCheckErr(RF, RoutineName)) return
    call NWTC_Library_UnpackFileInfoType(RF, OutData%FEAMInlineFileInfo) ! FEAMInlineFileInfo 
    call RegUnpack(RF, OutData%FEAMIsInline); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%IceDInlineFileInfo) ! IceDInlineFileInfo 
+   call RegUnpack(RF, OutData%IceDIsInline); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine FAST_CopyInitData(SrcInitDataData, DstInitDataData, CtrlCode, ErrStat, ErrMsg)

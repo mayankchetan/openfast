@@ -800,6 +800,19 @@ yaml_equiv_openfast("5MW_OC4Jckt_ExtPtfm" "perfile"    "${CTEST_OPENFAST_EXECUTA
 yaml_equiv_openfast("5MW_OC4Jckt_ExtPtfm" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 yaml_equiv_openfast("5MW_OC4Jckt_ExtPtfm" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
+# 5MW_OC3Mnpl_DLL_WTurb_WavesIrr_IceDyn: CompIce=2 (IceDyn), CompSub=1 (SubDyn),
+# CompServo=1 with PCMode=VSContrl=5 (Bladed-style DISCON.dll) -- the only CompIce=2
+# glue case in r-test, so the IceFile conversion/inlining (yamlDeckConverter.py's
+# convert_fst -> convert_icedyn) and IceDyn's read-input funnel are exercised
+# end-to-end through the full glue path in all three modes, alongside DISCON DLL
+# staging (executeYamlEquivalenceCase.py), mirroring the 5MW_OC3Spar_DLL_WTurb_WavesIrr
+# headline case above. IceModel=6 in the underlying deck (IceDyn_Input.dat), so
+# ice_model_6's fields are the live branch; ice_model_1..5 round-trip verbatim
+# (unused by IceModel=6 but still read unconditionally by IceD_ReadInput).
+yaml_equiv_openfast("5MW_OC3Mnpl_DLL_WTurb_WavesIrr_IceDyn" "perfile"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC3Mnpl_DLL_WTurb_WavesIrr_IceDyn" "allyaml"    "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+yaml_equiv_openfast("5MW_OC3Mnpl_DLL_WTurb_WavesIrr_IceDyn" "singlefile" "${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
+
 yaml_example_smoke("${CTEST_OPENFAST_EXECUTABLE}" "openfast;yaml")
 
 # SeaState regression tests

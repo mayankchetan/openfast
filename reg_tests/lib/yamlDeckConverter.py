@@ -1092,6 +1092,123 @@ def convert_feamooring(text_path):
     return '\n'.join(out)
 
 
+def convert_icedyn(text_path):
+    """Convert a text-format IceDyn primary input file to its YAML schema
+    (modules/icedyn/src/IceDyn_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners: structure_properties, ice_models,
+    ice_general, ice_model_1 .. ice_model_6.
+
+    NumLegs is NOT emitted -- it derives from len(structure_properties:LegPosX), per
+    IceDyn_Yaml.f90's header. There is no OutList section: IceD_ReadInput never reads
+    an output-channel list, so this converter emits none either."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# IceDyn primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- structure_properties ------------------------------------
+    n_legs = int(d.scalar('NumLegs'))
+    leg_pos_x = d.find('LegPosX')[:n_legs]
+    leg_pos_y = d.find('LegPosY')[:n_legs]
+    str_wd    = d.find('StWidth')[:n_legs]
+    w('structure_properties:')
+    w('  LegPosX: [' + _list_join(leg_pos_x) + ']')
+    w('  LegPosY: [' + _list_join(leg_pos_y) + ']')
+    w('  StWidth: [' + _list_join(str_wd)    + ']')
+    w('')
+
+    #-------------------- ice_models -----------------------------------------------
+    w('ice_models:')
+    w('  IceModel: '    + d.scalar('IceModel'))
+    w('  IceSubModel: ' + d.scalar('IceSubModel'))
+    w('')
+
+    #-------------------- ice_general -----------------------------------------------
+    w('ice_general:')
+    w('  IceVel: '  + d.scalar('IceVel'))
+    w('  IceThks: ' + d.scalar('IceThks'))
+    w('  WtDen: '   + d.scalar('WtDen'))
+    w('  IceDen: '  + d.scalar('IceDen'))
+    w('  InitLoc: ' + d.scalar('InitLoc'))
+    w('  InitTm: '  + d.scalar('InitTm'))
+    w('  Seed1: '   + d.scalar('Seed1'))
+    w('  Seed2: '   + d.scalar('Seed2'))
+    w('')
+
+    #-------------------- ice_model_1 -----------------------------------------------
+    w('ice_model_1:')
+    w('  Ikm: '     + d.scalar('Ikm'))
+    w('  Ag: '      + d.scalar('Ag'))
+    w('  Qg: '      + d.scalar('Qg'))
+    w('  Rg: '      + d.scalar('Rg'))
+    w('  Tice: '    + d.scalar('Tice'))
+    w('  Poisson: ' + d.scalar('Poisson'))
+    w('  WgAngle: ' + d.scalar('WgAngle'))
+    w('  EIce: '    + d.scalar('EIce'))
+    w('  SigNm: '   + d.scalar('SigNm'))
+    w('')
+
+    #-------------------- ice_model_2 -----------------------------------------------
+    w('ice_model_2:')
+    w('  Pitch: '   + d.scalar('Pitch'))
+    w('  IceStr2: ' + d.scalar('IceStr2'))
+    w('  Delmax2: ' + d.scalar('Delmax2'))
+    w('')
+
+    #-------------------- ice_model_3 -----------------------------------------------
+    w('ice_model_3:')
+    w('  ThkMean: ' + d.scalar('ThkMean'))
+    w('  ThkVar: '  + d.scalar('ThkVar'))
+    w('  VelMean: ' + d.scalar('VelMean'))
+    w('  VelVar: '  + d.scalar('VelVar'))
+    w('  TeMean: '  + d.scalar('TeMean'))
+    w('  StrMean: ' + d.scalar('StrMean'))
+    w('  StrVar: '  + d.scalar('StrVar'))
+    w('  DelMean: ' + d.scalar('DelMean'))
+    w('  DelVar: '  + d.scalar('DelVar'))
+    w('  PMean: '   + d.scalar('PMean'))
+    w('  PVar: '    + d.scalar('PVar'))
+    w('')
+
+    #-------------------- ice_model_4 -----------------------------------------------
+    w('ice_model_4:')
+    w('  PrflMean: '  + d.scalar('PrflMean'))
+    w('  PrflSig: '   + d.scalar('PrflSig'))
+    w('  ZoneNo1: '   + d.scalar('ZoneNo1'))
+    w('  ZoneNo2: '   + d.scalar('ZoneNo2'))
+    w('  ZonePitch: ' + d.scalar('ZonePitch'))
+    w('  IceStr: '    + d.scalar('IceStr'))
+    w('  Delmax: '    + d.scalar('Delmax'))
+    w('')
+
+    #-------------------- ice_model_5 -----------------------------------------------
+    w('ice_model_5:')
+    w('  ConeAgl: '  + d.scalar('ConeAgl'))
+    w('  ConeDwl: '  + d.scalar('ConeDwl'))
+    w('  ConeDtp: '  + d.scalar('ConeDtp'))
+    w('  RdupThk: '  + d.scalar('RdupThk'))
+    w('  mu: '       + d.scalar('mu'))
+    w('  FlxStr: '   + d.scalar('FlxStr'))
+    w('  StrLim: '   + d.scalar('StrLim'))
+    w('  StrRtLim: ' + d.scalar('StrRtLim'))
+    w('')
+
+    #-------------------- ice_model_6 -----------------------------------------------
+    w('ice_model_6:')
+    w('  FloeLth: ' + d.scalar('FloeLth'))
+    w('  FloeWth: ' + d.scalar('FloeWth'))
+    w('  CPrAr: '   + d.scalar('CPrAr'))
+    w('  dPrAr: '   + d.scalar('dPrAr'))
+    w('  Fdr: '     + d.scalar('Fdr'))
+    w('  Kic: '     + d.scalar('Kic'))
+    w('  FspN: '    + d.scalar('FspN'))
+
+    return '\n'.join(out)
+
+
 def convert_beamdyn(text_path):
     """Convert a text-format BeamDyn primary input file to its YAML schema.
 
@@ -3191,7 +3308,29 @@ def convert_fst(text_path, mode='per-file'):
     else:
         w('  MooringFile: ' + _as_str(mooring_file))
 
-    w('  IceFile: '     + _as_str(ice_file))
+    # IceFile conversion/inlining is gated on CompIce == 2 (IceDyn) -- it has a YAML
+    # reader now (IceDyn_Yaml.f90, and FAST_Yaml.f90's InlineTarget='IceDyn' gating).
+    # IceFloe (=1) has no YAML schema yet (that's a separate task) and keeps IceFile a
+    # plain (text) path in every mode.
+    convert_ice = (comp_ice == 2) and (mode in ('all-yaml', 'single-file'))
+    ice_rel = _unquote(ice_file)
+    if convert_ice:
+        ice_abs = os.path.join(base_dir, ice_rel)
+        iced_yaml_text = convert_icedyn(ice_abs)
+        if mode == 'single-file':
+            w('  IceFile:')
+            # IceDyn references no further files, so no inline-path rewriting is needed;
+            # drop the two leading '# ...' header comments before inlining, then indent
+            # so the embedded document's top-level keys land under IceFile:
+            iced_lines = iced_yaml_text.split('\n')
+            iced_body = '\n'.join(iced_lines[2:]) if len(iced_lines) > 2 else iced_yaml_text
+            w(_indent_block(iced_body, '    '))
+        else:  # all-yaml
+            iced_yaml_rel = os.path.splitext(ice_rel)[0] + '.yaml'
+            extra_files[iced_yaml_rel] = iced_yaml_text
+            w('  IceFile: ' + _as_str(iced_yaml_rel))
+    else:
+        w('  IceFile: ' + _as_str(ice_file))
     w('  SoilFile: '    + _as_str(soil_file))
 
     if rotors_extra:

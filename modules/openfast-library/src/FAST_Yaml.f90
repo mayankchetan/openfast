@@ -369,7 +369,16 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    else
       call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    end if
-   call GetModFile( 'IceFile',     p%IceFile,      Required=(p%CompIce     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   ! inline IceFile is legal when CompIce selects IceDyn (=2, InlineTarget='IceDyn'); for any
+   ! other CompIce value (esp. IceFloe =1, which has no YAML schema yet) a mapping value hits
+   ! GetModFile's "does not (yet) support inline YAML input" fatal below, since InlineTarget is
+   ! then not passed at all (mirrors the SubFile/CompSub and MooringFile/CompMooring gating
+   ! patterns)
+   if (p%CompIce == Module_IceD) then
+      call GetModFile( 'IceFile',     p%IceFile,      Required=(p%CompIce     /= Module_NONE), InlineTarget='IceDyn' ); if (ErrStat >= AbortErrLev) return
+   else
+      call GetModFile( 'IceFile',     p%IceFile,      Required=(p%CompIce     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
+   end if
    call GetModFile( 'SoilFile',    p%SoilFile,     Required=(p%CompSoil    == Module_SlD) ); if (ErrStat >= AbortErrLev) return
 
    ! additional rotors (multirotor): sequence of mappings with EDFile/BDBldFile/ServoFile
@@ -664,6 +673,15 @@ contains
                ! (FEAMooring's primary input references no further files, so PriPath is
                ! unused by its reader, but is kept for parity with the other inline targets)
                FileVar = trim(PriPath)//'inline_FEAMooring.yaml'
+            case ('IceDyn')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%IceDInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%IceDIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (IceDyn's primary input references no further files, so PriPath is
+               ! unused by its reader, but is kept for parity with the other inline targets)
+               FileVar = trim(PriPath)//'inline_IceDyn.yaml'
             end select
          else
             ErrStat2 = ErrID_Fatal

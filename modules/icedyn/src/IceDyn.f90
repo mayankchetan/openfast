@@ -32,6 +32,8 @@ MODULE IceDyn
 
    USE IceDyn_Types
    USE NWTC_Library
+   USE IceDyn_Yaml
+   USE YamlInput, only: IsYamlExt
 
    IMPLICIT NONE
 
@@ -1194,7 +1196,8 @@ SUBROUTINE IceD_ReadInput( InitInp, InputFileData, ErrStat, ErrMsg )
 
    INTEGER                                          :: UnIn                 ! Unit number for the input file
    CHARACTER(ErrMsgLen)                             :: FileName             ! Name of HydroDyn input file
-   
+   CHARACTER(1024)                                  :: PriPath              ! Path name of the primary file (for relative sub-file resolution)
+
    INTEGER                                          :: UnEc                 ! Unit number for the echo file
    LOGICAL, PARAMETER                               :: Echo = .FALSE.       ! echo file for debugging
 !  LOGICAL, PARAMETER                               :: Echo = .TRUE.        ! echo file for debugging (bjj: would like to add this feature to the input file)
@@ -1208,22 +1211,29 @@ SUBROUTINE IceD_ReadInput( InitInp, InputFileData, ErrStat, ErrMsg )
    UnEc    = -1
    UnIn    = -1
 
+   FileName = TRIM(InitInp%InputFile)
+   CALL GetPath( FileName, PriPath )     ! Input files will be relative to the path where the primary input file is located.
+
+   ! --- Format funnel (mirrors FEAMooring's FEAM_ReadInput / SubDyn's SD_Input): the
+   !     text-reading branch below is what the YAML path replaces. IceDyn's primary-file
+   !     reader has no cross-cutting post-processing step after the read, so nothing needs
+   !     to be hoisted outside the branch.
+   IF ( InitInp%UseInputFile .and. .not. IsYamlExt(FileName) ) THEN   ! text-format input file (.dat and friends)
+
    !-------------------------------------------------------------------------------------------------
    ! Open the file
    !-------------------------------------------------------------------------------------------------
    IF ( Echo ) THEN
-      CALL GetNewUnit( UnEc, ErrStat, ErrMsg )      
+      CALL GetNewUnit( UnEc, ErrStat, ErrMsg )
       CALL OpenFOutFile( UnEc, TRIM(InitInp%RootName)//'.IceD.ech', ErrStat, ErrMsg )
       IF ( ErrStat /= ErrID_None ) THEN
          CALL WrScr( ' Error opening echo file: "'//TRIM(ErrMsg)//'". Simulation will continue with no IceDyn echo file.' )
          CLOSE( UnEc )
          UnEc = -1
       END IF
-   END IF   
-   
-   
-   
-   FileName = TRIM(InitInp%InputFile)
+   END IF
+
+
 
    CALL GetNewUnit( UnIn, ErrStat, ErrMsg )
    CALL OpenFInpFile( UnIn, FileName, ErrStat, ErrMsg )
@@ -2058,14 +2068,28 @@ SUBROUTINE IceD_ReadInput( InitInp, InputFileData, ErrStat, ErrMsg )
    !-------------------------------------------------------------------------------------------------
    CALL Cleanup()
 
+   ELSE IF ( InitInp%UseInputFile ) THEN          ! YAML-format input file (.yaml/.yml)
+
+      CALL IceD_ParseYamlFile( FileName, PriPath, InputFileData, ErrStat, ErrMsg )
+      IF ( ErrStat >= AbortErrLev ) RETURN
+
+   ELSE IF ( InitInp%PassedFileIsYaml ) THEN      ! inline YAML content (e.g. inline module input from a YAML primary file)
+
+      CALL IceD_ParseYamlFileInfo( InitInp%PassedPrimaryInputData, PriPath, InputFileData, ErrStat, ErrMsg )
+      IF ( ErrStat >= AbortErrLev ) RETURN
+
+   ELSE
+      CALL SetErrStat( ErrID_Fatal, 'IceDyn passed (inline) input data must be in YAML format.', ErrStat, ErrMsg, 'IceD_ReadInput' )
+      RETURN
+   END IF
 
    RETURN
 CONTAINS
    SUBROUTINE Cleanup()
-   
+
       CLOSE( UnIn )
       IF (UnEc > 0) CLOSE(UnEc)
-      
+
    END SUBROUTINE
 
 END SUBROUTINE IceD_ReadInput

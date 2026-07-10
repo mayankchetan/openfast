@@ -129,6 +129,9 @@ PROGRAM MAIN
    ! -------------------------------------------------------------------------
 
    IceD_InitInput%InputFile = 'IceDyn_Input.txt'
+   ! Read from an input file (text .dat or YAML .yaml/.yml): IceD_ReadInput's IsYamlExt funnel
+   ! dispatches on the InputFile extension automatically.
+   IceD_InitInput%UseInputFile = .TRUE.
    IceD_InitInput%RootName = 'IceDyn_Test'
    IceD_InitInput%TMax     = t_final
    IceD_InitInput%MSL2SWL  = 0.0_ReKi      

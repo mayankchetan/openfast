@@ -106,6 +106,9 @@ IMPLICIT NONE
     REAL(ReKi)  :: gravity = 0.0_ReKi      !< Gravitational acceleration [m/s^2]
     INTEGER(IntKi)  :: LegNum = 0_IntKi      !< Which number of legs on the turbine this is being initialized for [m]
     REAL(DbKi)  :: TMax = 0.0_R8Ki      !< Total simulation time [s]
+    LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
+    TYPE(FileInfoType)  :: PassedPrimaryInputData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
   END TYPE IceD_InitInputType
 ! =======================
 ! =========  IceD_InitOutputType  =======
@@ -506,6 +509,8 @@ subroutine IceD_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    integer(IntKi),  intent(in   ) :: CtrlCode
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'IceD_CopyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -516,15 +521,24 @@ subroutine IceD_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    DstInitInputData%gravity = SrcInitInputData%gravity
    DstInitInputData%LegNum = SrcInitInputData%LegNum
    DstInitInputData%TMax = SrcInitInputData%TMax
+   DstInitInputData%UseInputFile = SrcInitInputData%UseInputFile
+   call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
 end subroutine
 
 subroutine IceD_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
    type(IceD_InitInputType), intent(inout) :: InitInputData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'IceD_DestroyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
+   call NWTC_Library_DestroyFileInfoType(InitInputData%PassedPrimaryInputData, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
 subroutine IceD_PackInitInput(RF, Indata)
@@ -539,6 +553,9 @@ subroutine IceD_PackInitInput(RF, Indata)
    call RegPack(RF, InData%gravity)
    call RegPack(RF, InData%LegNum)
    call RegPack(RF, InData%TMax)
+   call RegPack(RF, InData%UseInputFile)
+   call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -554,6 +571,9 @@ subroutine IceD_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%gravity); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%LegNum); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TMax); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine IceD_CopyInitOutput(SrcInitOutputData, DstInitOutputData, CtrlCode, ErrStat, ErrMsg)

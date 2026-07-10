@@ -103,6 +103,9 @@ typedef     ^          ^                 ReKi               WtrDens         -   
 typedef     ^          ^                 ReKi               gravity         -    -    -    "Gravitational acceleration" m/s^2
 typedef     ^          ^                 IntKi              LegNum          -    -    -    "Which number of legs on the turbine this is being initialized for" m
 typedef     ^          ^                 DbKi               TMax            -    -    -    "Total simulation time" s
+typedef     ^          ^                 LOGICAL            UseInputFile    -    .TRUE. -  "Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller" -
+typedef     ^          ^                 FileInfoType       PassedPrimaryInputData - - -  "If we don't use the input file, pass everything through this" -
+typedef     ^          ^                 LOGICAL            PassedFileIsYaml - .FALSE. -  "PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.]" -
 
 
 # Define outputs that the initialization routine may need here:
