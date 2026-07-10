@@ -343,8 +343,9 @@ PROGRAM OrcaDriver
 
       ! Some initialization settings
    Orca_InitInp%InputFile = Settings%OrcaIptFileName
-   CALL GetRoot( Orca_InitInp%InputFile, Orca_InitInp%RootName )      
+   CALL GetRoot( Orca_InitInp%InputFile, Orca_InitInp%RootName )
    Orca_InitInp%TMax             =  Settings%TMax
+   Orca_InitInp%UseInputFile     =  .TRUE.   ! the driver always reads from a file (text or YAML) at Orca_InitInp%InputFile
   
 
    IF ( OrcaDriver_Verbose >= 5_IntKi ) CALL WrScr('Calling Orca_Init...')

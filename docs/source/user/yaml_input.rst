@@ -118,11 +118,11 @@ sections. Inline input is available for modules whose YAML schema exists
 them; ElastoDyn or Simplified ElastoDyn when ``CompElast`` selects one of
 them; ServoDyn when ``CompServo`` selects it; SeaState when ``CompSeaSt``
 selects it; HydroDyn when ``CompHydro`` selects it; SubDyn or ExtPtfm when
-``CompSub`` selects one of them; and MoorDyn or FEAMooring when ``CompMooring``
-selects one of them);
+``CompSub`` selects one of them; and MoorDyn, FEAMooring, or OrcaFlex when
+``CompMooring`` selects one of them);
 an inline mapping for any other module -- or for ``MooringFile`` when
 ``CompMooring``
-selects a module without a YAML schema (MAP++, OrcaFlex) -- is a
+selects a module without a YAML schema (MAP++) -- is a
 clear fatal error suggesting a file path instead. Combined with ``!include``
 and anchors, this supports fully single-file models. Second-order files (e.g.
 Structural Control files under ServoDyn, potential-flow data under HydroDyn,
@@ -256,6 +256,14 @@ supported:
   from ``input_files:IceFile`` (when ``CompIce`` selects IceFloe,
   ``CompIce`` = 1). IceFloe has no inline-input glue path, so ``IceFile`` is
   always a file path, never inlined.
+- OrcaFlex Interface primary input file (:ref:`orcaflex-yaml-input`),
+  including inline use under ``input_files:MooringFile`` (when ``CompMooring``
+  selects OrcaFlex, ``CompMooring`` = 4). The OrcaFlex simulation input
+  (``DirRoot``) and the OrcaFlex DLL (``DLL_FileName``) stay referenced by
+  path. **Coverage gap:** this YAML/inline path is implemented but not
+  exercised by any reg-test -- there is no ``CompMooring`` = 4 deck in the
+  test suite, and exercising it requires the proprietary OrcaFlex DLL, which
+  is unavailable in CI.
 
 
 .. _feamooring-yaml-input:
@@ -483,3 +491,57 @@ inline-input glue path, unlike IceDyn.
    refIceThick: 0.5
    refIceStrength: 500.0e3
    staticExponent: -0.5
+
+
+.. _orcaflex-yaml-input:
+
+OrcaFlex Interface YAML input file
+-----------------------------------
+
+The OrcaFlex Interface primary input file may also be written in YAML (name
+it ``*.yaml`` or ``*.yml``); the conventions above apply. (The OrcaFlex
+Interface has no formal module-documentation page of its own -- see the
+OrcaFlex Interface User's Guide linked from :ref:`user_guide` -- so its YAML
+schema is documented here.) The text-format primary file is tiny: it reads
+only the ``Echo`` switch, ``DirRoot`` (the OrcaFlex simulation input file),
+and ``DLL_FileName`` (the OrcaFlex DLL); the ``DT`` and ``OutList`` reads in
+the text-format reader are commented out and are never exercised, so the
+YAML schema does not define them either -- the module always reports its
+fixed 18-channel output list. Top-level keys mirror the text format's single
+section banner: ``simulation_control``. When ``CompMooring`` selects OrcaFlex
+(``CompMooring`` = 4), a glue-code YAML primary file may inline the whole
+``MooringFile`` section as a mapping instead of a path, following the general
+inline-input rule above.
+
+Notable schema points:
+
+- ``simulation_control:Echo`` is optional and, if present, is accepted and
+  discarded: in the text format Echo only controls whether an echo file of
+  the *text* input is written while reading, and never becomes part of
+  ``InputFileData``; there is nothing analogous to echo when parsing an
+  already-in-memory YAML document.
+- ``DirRoot`` (the OrcaFlex simulation input file) and ``DLL_FileName`` (the
+  OrcaFlex DLL) are read as raw path strings, exactly as the text format
+  stores them before its own relative-path resolution; they are never
+  inlined or converted -- both name external files (the OrcaFlex simulation
+  data file and DLL) that the OrcaFlex Interface loads separately at run
+  time.
+- There is no ``OutList``/outputs section: unlike most modules, the OrcaFlex
+  Interface's text-format reader has its ``OutList``/``NumOuts`` reads
+  commented out and always emits the full fixed set of 18 output channels
+  from ``Orca_Init``, so the YAML schema defines none either.
+- There is no ``FileFormat``/legacy-format branch: the primary file is a
+  single fixed-schema file, so the YAML schema is a straight one-to-one of
+  it.
+- **Coverage gap:** OrcaFlex YAML/inline input is implemented but not
+  exercised by any reg-test. There is no ``CompMooring`` = 4 deck in the test
+  suite, and OrcaFlex requires the proprietary OrcaFlex DLL, which is
+  unavailable in CI, so this path cannot be regression-tested there.
+
+.. code-block:: yaml
+
+   # OrcaFlex Interface primary input file (YAML form)
+   simulation_control:
+     Echo: false
+     DirRoot: OrcaFlexModel.dat
+     DLL_FileName: OrcaFlexInterface_x64.dll

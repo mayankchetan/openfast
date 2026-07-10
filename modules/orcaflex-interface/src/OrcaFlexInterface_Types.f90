@@ -38,6 +38,9 @@ IMPLICIT NONE
     CHARACTER(1024)  :: InputFile      !< Name of the input file; remove if there is no file [-]
     CHARACTER(1024)  :: RootName      !< RootName for writing output files (echo file) [-]
     REAL(ReKi)  :: TMax = 0.0_ReKi      !< Maximum Time [seconds]
+    LOGICAL  :: UseInputFile = .TRUE.      !< Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller [-]
+    TYPE(FileInfoType)  :: PassedPrimaryInputData      !< If we don't use the input file, pass everything through this [-]
+    LOGICAL  :: PassedFileIsYaml = .FALSE.      !< PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.] [-]
   END TYPE Orca_InitInputType
 ! =======================
 ! =========  Orca_InitOutputType  =======
@@ -121,21 +124,32 @@ subroutine Orca_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrS
    integer(IntKi),  intent(in   ) :: CtrlCode
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'Orca_CopyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
    DstInitInputData%InputFile = SrcInitInputData%InputFile
    DstInitInputData%RootName = SrcInitInputData%RootName
    DstInitInputData%TMax = SrcInitInputData%TMax
+   DstInitInputData%UseInputFile = SrcInitInputData%UseInputFile
+   call NWTC_Library_CopyFileInfoType(SrcInitInputData%PassedPrimaryInputData, DstInitInputData%PassedPrimaryInputData, CtrlCode, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   DstInitInputData%PassedFileIsYaml = SrcInitInputData%PassedFileIsYaml
 end subroutine
 
 subroutine Orca_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
    type(Orca_InitInputType), intent(inout) :: InitInputData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'Orca_DestroyInitInput'
    ErrStat = ErrID_None
    ErrMsg  = ''
+   call NWTC_Library_DestroyFileInfoType(InitInputData%PassedPrimaryInputData, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
 subroutine Orca_PackInitInput(RF, Indata)
@@ -146,6 +160,9 @@ subroutine Orca_PackInitInput(RF, Indata)
    call RegPack(RF, InData%InputFile)
    call RegPack(RF, InData%RootName)
    call RegPack(RF, InData%TMax)
+   call RegPack(RF, InData%UseInputFile)
+   call NWTC_Library_PackFileInfoType(RF, InData%PassedPrimaryInputData) 
+   call RegPack(RF, InData%PassedFileIsYaml)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -157,6 +174,9 @@ subroutine Orca_UnPackInitInput(RF, OutData)
    call RegUnpack(RF, OutData%InputFile); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%RootName); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TMax); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UseInputFile); if (RegCheckErr(RF, RoutineName)) return
+   call NWTC_Library_UnpackFileInfoType(RF, OutData%PassedPrimaryInputData) ! PassedPrimaryInputData 
+   call RegUnpack(RF, OutData%PassedFileIsYaml); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine Orca_CopyInitOutput(SrcInitOutputData, DstInitOutputData, CtrlCode, ErrStat, ErrMsg)

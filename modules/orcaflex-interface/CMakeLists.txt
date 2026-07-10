@@ -25,6 +25,7 @@ else (WIN_DLL_LOAD)
 endif (WIN_DLL_LOAD)
 
 add_library(orcaflexlib STATIC
+  src/Orca_Yaml.f90
   src/OrcaFlexInterface.f90
   src/OrcaFlexInterface_Types.f90
 )

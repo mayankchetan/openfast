@@ -559,6 +559,8 @@ typedef	^	FAST_MiscVarType	FileInfoType	FEAMInlineFileInfo	-	-	-	"serialized inl
 typedef	^	FAST_MiscVarType	LOGICAL	FEAMIsInline	-	.FALSE.	-	"FEAMooring input was given inline in the YAML primary file"	-
 typedef	^	FAST_MiscVarType	FileInfoType	IceDInlineFileInfo	-	-	-	"serialized inline IceDyn input from a YAML primary file (YAML text lines with provenance)"	-
 typedef	^	FAST_MiscVarType	LOGICAL	IceDIsInline	-	.FALSE.	-	"IceDyn input was given inline in the YAML primary file"	-
+typedef	^	FAST_MiscVarType	FileInfoType	OrcaInlineFileInfo	-	-	-	"serialized inline OrcaFlex input from a YAML primary file (YAML text lines with provenance)"	-
+typedef	^	FAST_MiscVarType	LOGICAL	OrcaIsInline	-	.FALSE.	-	"OrcaFlex input was given inline in the YAML primary file"	-
 
 
 # ..... FAST_InitData data .......................................................................................................

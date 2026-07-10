@@ -17,6 +17,9 @@ include   Registry_NWTC_Library.txt
 typedef  OrcaFlexInterface/Orca  InitInputType  CHARACTER(1024) InputFile       - - - "Name of the input file; remove if there is no file" -
 typedef  ^                       ^              CHARACTER(1024) RootName        - - - "RootName for writing output files (echo file)" -
 typedef  ^                       ^              ReKi            TMax            - - - "Maximum Time"          seconds
+typedef  ^                       ^              LOGICAL         UseInputFile    -  .TRUE. -  "Supplied by Driver:  .TRUE. if using a input file, .FALSE. if all inputs are being passed in by the caller" -
+typedef  ^                       ^              FileInfoType    PassedPrimaryInputData - - -  "If we don't use the input file, pass everything through this" -
+typedef  ^                       ^              LOGICAL         PassedFileIsYaml - .FALSE. -  "PassedPrimaryInputData lines are YAML format (e.g., inline module input from a YAML primary file) [UseInputFile = .FALSE.]" -
 
 # Define outputs from the initialization routine here:
 typedef   ^   InitOutputType ProgDesc   Ver   -   -   -   "This module's name, version, and date"   -

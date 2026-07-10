@@ -357,15 +357,20 @@ subroutine FAST_ParseYamlPrimary( InputFile, p, m_FAST, OverrideAbortErrLev, Err
    else
       call GetModFile( 'SubFile',     p%SubFile,      Required=(p%CompSub     /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    end if
-   ! inline MooringFile is legal when CompMooring selects MoorDyn (=3, InlineTarget='MoorDyn')
-   ! or FEAMooring (=2, InlineTarget='FEAMooring'); for any other CompMooring value (esp.
-   ! MAP++ =1, which has no YAML schema) a mapping value hits GetModFile's "does not (yet)
-   ! support inline YAML input" fatal below, since InlineTarget is then not passed at all
-   ! (mirrors the AeroFile/CompAero, EDFile/CompElast, and SubFile/CompSub gating patterns)
+   ! inline MooringFile is legal when CompMooring selects MoorDyn (=3, InlineTarget='MoorDyn'),
+   ! FEAMooring (=2, InlineTarget='FEAMooring'), or OrcaFlex (=4, InlineTarget='OrcaFlex'); for
+   ! any other CompMooring value (esp. MAP++ =1, which has no YAML schema) a mapping value hits
+   ! GetModFile's "does not (yet) support inline YAML input" fatal below, since InlineTarget is
+   ! then not passed at all (mirrors the AeroFile/CompAero, EDFile/CompElast, and SubFile/CompSub
+   ! gating patterns). NOTE: OrcaFlex YAML/inline support is implemented but not exercised by any
+   ! reg-test (no CompMooring=4 deck; requires the proprietary OrcaFlex DLL) -- see
+   ! docs/source/user/yaml_input.rst for the documented coverage gap.
    if (p%CompMooring == Module_MD) then
       call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE), InlineTarget='MoorDyn' ); if (ErrStat >= AbortErrLev) return
    else if (p%CompMooring == Module_FEAM) then
       call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE), InlineTarget='FEAMooring' ); if (ErrStat >= AbortErrLev) return
+   else if (p%CompMooring == Module_Orca) then
+      call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE), InlineTarget='OrcaFlex' ); if (ErrStat >= AbortErrLev) return
    else
       call GetModFile( 'MooringFile', p%MooringFile,  Required=(p%CompMooring /= Module_NONE) ); if (ErrStat >= AbortErrLev) return
    end if
@@ -673,6 +678,16 @@ contains
                ! (FEAMooring's primary input references no further files, so PriPath is
                ! unused by its reader, but is kept for parity with the other inline targets)
                FileVar = trim(PriPath)//'inline_FEAMooring.yaml'
+            case ('OrcaFlex')
+               call Yaml_MarkUsed( Doc, iVal, .true. )
+               call Yaml_Serialize( Doc, iVal, m_FAST%OrcaInlineFileInfo, ErrStat2, ErrMsg2 )
+               if (Failed()) return
+               m_FAST%OrcaIsInline = .true.
+               ! pseudo path: used only for PriPath derivation and messages downstream
+               ! (DirRoot/DLL_FileName are read RAW by Orca_ParseYamlFileInfo and resolved
+               ! against this PriPath once, in ReadPrimaryFile's hoisted shared post-processing)
+               ! NOTE: not exercised by any reg-test -- see docs/source/user/yaml_input.rst
+               FileVar = trim(PriPath)//'inline_OrcaFlex.yaml'
             case ('IceDyn')
                call Yaml_MarkUsed( Doc, iVal, .true. )
                call Yaml_Serialize( Doc, iVal, m_FAST%IceDInlineFileInfo, ErrStat2, ErrMsg2 )

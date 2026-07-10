@@ -89,6 +89,8 @@ MODULE OrcaFlexInterface
    
    USE OrcaFlexInterface_Parameters
    USE OrcaFlexInterface_Types
+   USE Orca_Yaml
+   USE YamlInput, ONLY: IsYamlExt
 
    USE, INTRINSIC             :: ISO_C_Binding
 
@@ -223,7 +225,8 @@ SUBROUTINE Orca_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitO
    CALL DispNVD( Orca_Ver )
 
    
-   CALL ReadPrimaryFile( InitInp%InputFile, InputFileData, TRIM(InitInp%RootName)//'.Orca', ErrStatTmp, ErrMsgTmp )   
+   CALL ReadPrimaryFile( InitInp%InputFile, InitInp%UseInputFile, InitInp%PassedPrimaryInputData, InitInp%PassedFileIsYaml, &
+                         InputFileData, TRIM(InitInp%RootName)//'.Orca', ErrStatTmp, ErrMsgTmp )
       CALL SetErrStat(ErrStatTmp,ErrMsgTmp,ErrStat,ErrMsg,RoutineName)
 
 
@@ -456,18 +459,27 @@ end subroutine
 
 !----------------------------------------------------------------------------------------------------------------------------------
 !> This routine reads in the primary OrcaFlex Interface input file and places the values it reads in the InputFileData structure.
-!!   It opens an echo file if requested.
-SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrMsg )
+!!   It opens an echo file if requested. It supports text, YAML-file, and passed-in (inline
+!!   YAML) input, mirroring the format funnel used by FEAMooring/SubDyn/IceDyn: the text-reading
+!!   branch below is what the YAML paths replace. Unlike IceDyn (whose primary-file reader has
+!!   no cross-cutting post-processing), OrcaFlex's DirRoot/DLL_FileName relative-path resolution
+!!   is a shared step that both formats need, so it is hoisted out of the format IF/ELSE and
+!!   runs once after the branch, against the same (CWD-absolutized) PriPath used by the text
+!!   path historically.
+SUBROUTINE ReadPrimaryFile( InputFile, UseInputFile, PassedPrimaryInputData, PassedFileIsYaml, InputFileData, OutFileRoot, ErrStat, ErrMsg )
 
    IMPLICIT                        NONE
 
       ! Passed variables
    INTEGER(IntKi),       INTENT(OUT)    :: ErrStat                             !< Error status
-                         
+
    CHARACTER(*),         INTENT(IN)     :: InputFile                           !< Name of the file containing the primary input data
+   LOGICAL,               INTENT(IN)    :: UseInputFile                        !< .TRUE. if using a file (text or YAML) at InputFile; .FALSE. if all inputs are being passed in via PassedPrimaryInputData
+   TYPE(FileInfoType),    INTENT(IN)    :: PassedPrimaryInputData              !< If UseInputFile is .FALSE., the YAML input lines to parse (inline module input from a YAML primary file)
+   LOGICAL,               INTENT(IN)    :: PassedFileIsYaml                    !< PassedPrimaryInputData lines are YAML format [only meaningful when UseInputFile = .FALSE.]
    CHARACTER(*),         INTENT(OUT)    :: ErrMsg                              !< Error message
    CHARACTER(*),         INTENT(IN)     :: OutFileRoot                         !< The rootname of the echo file, possibly opened in this routine
-                         
+
    TYPE(Orca_InputFile), INTENT(INOUT)  :: InputFileData                     !< All the data in the OrcaFlex Interface input file
 
       ! Local variables:
@@ -483,11 +495,14 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrM
    CHARACTER(1024)              :: CWD                                       ! Path name of the current working directory
    CHARACTER(1024)              :: FTitle                                    ! "File Title": the 2nd line of the input file, which contains a description of its contents
    CHARACTER(200)               :: Line                                      ! Temporary storage of a line from the input file (to compare with "default")
-   CHARACTER(*), PARAMETER      :: RoutineName = 'ReadPrimaryFile' 
-   
+   CHARACTER(*), PARAMETER      :: RoutineName = 'ReadPrimaryFile'
+
       ! Initialize some variables:
+   ErrStat = ErrID_None
+   ErrMsg  = ""
    Echo = .FALSE.
    UnEc = -1                             ! Echo file not opened, yet
+   UnIn = -1                             ! Primary file not opened, yet (so Cleanup's CLOSE(UnIn) is safe on the YAML paths)
    CALL GetPath( InputFile, PriPath )    ! Input files will be relative to the path where the primary input file is located.
 
       ! OrcaFlex doesn't like relative path names, so we're going to make it absolute
@@ -496,7 +511,10 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrM
 !       PriPath = TRIM(CWD)//PathSep//TRIM(PriPath)
        PriPath = TRIM(CWD)//TRIM(PriPath(2:))
    END IF
-         
+
+   ! --- Format funnel (mirrors FEAMooring's FEAM_ReadInput / SubDyn's SD_Input / IceDyn's
+   !     IceD_ReadInput): the text-reading branch below is what the YAML paths replace.
+   IF ( UseInputFile .and. .not. IsYamlExt(InputFile) ) THEN   ! text-format input file (.dat and friends)
 
       ! Get an available unit number for the file.
 
@@ -592,8 +610,7 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrM
          CALL Cleanup()
          RETURN
       END IF
-   IF ( PathIsRelative( InputFileData%DirRoot ) ) InputFileData%DirRoot = TRIM(PriPath)//TRIM(InputFileData%DirRoot)
-   
+
       ! InputFileData%DLLPathFileName - Name of the file containing OrcaFlex simulation inputs:
    CALL ReadVar ( UnIn, InputFile, InputFileData%DLL_FileName, 'DLL_FileName', 'Name of the OrcaFlex DLL', ErrStat2, ErrMsg2, UnEc )
       CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
@@ -601,9 +618,8 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrM
          CALL Cleanup()
          RETURN
       END IF
-   IF ( PathIsRelative( InputFileData%DLL_FileName ) ) InputFileData%DLL_FileName = TRIM(PriPath)//TRIM(InputFileData%DLL_FileName)
-   
-         
+
+
    !   ! DT - Requested integration time for OrcaFlex (seconds):
    !CALL ReadVar( UnIn, InputFile, Line, "DT", "Requested integration time for OrcaFlex (seconds)", ErrStat2, ErrMsg2, UnEc)
    !   CALL CheckError( ErrStat2, ErrMsg2 )
@@ -617,8 +633,8 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrM
    !         RETURN
    !      END IF
    !   END IF
-   
-   
+
+
    !!---------------------- OUTLIST  --------------------------------------------
    !CALL ReadCom( UnIn, InputFile, 'Section Header: OutList', ErrStat2, ErrMsg2, UnEc )
    !   CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
@@ -638,15 +654,37 @@ SUBROUTINE ReadPrimaryFile( InputFile, InputFileData, OutFileRoot, ErrStat, ErrM
    !---------------------- END OF FILE -----------------------------------------
 
    CALL Cleanup()
+
+   ELSE IF ( UseInputFile ) THEN          ! YAML-format input file (.yaml/.yml)
+
+      CALL Orca_ParseYamlFile( InputFile, PriPath, InputFileData, ErrStat, ErrMsg )
+      IF ( ErrStat >= AbortErrLev ) RETURN
+
+   ELSE IF ( PassedFileIsYaml ) THEN      ! inline YAML content (e.g. inline module input from a YAML primary file)
+
+      CALL Orca_ParseYamlFileInfo( PassedPrimaryInputData, PriPath, InputFileData, ErrStat, ErrMsg )
+      IF ( ErrStat >= AbortErrLev ) RETURN
+
+   ELSE
+      CALL SetErrStat( ErrID_Fatal, 'OrcaFlex Interface passed (inline) input data must be in YAML format.', ErrStat, ErrMsg, RoutineName )
+      RETURN
+   END IF
+
+      ! Shared post-processing (hoisted so it runs once for both the text and YAML paths):
+      ! OrcaFlex doesn't like relative path names, so resolve DirRoot/DLL_FileName against the
+      ! (CWD-absolutized) PriPath computed above. Both YAML parsers store these two fields RAW.
+   IF ( PathIsRelative( InputFileData%DirRoot ) ) InputFileData%DirRoot = TRIM(PriPath)//TRIM(InputFileData%DirRoot)
+   IF ( PathIsRelative( InputFileData%DLL_FileName ) ) InputFileData%DLL_FileName = TRIM(PriPath)//TRIM(InputFileData%DLL_FileName)
+
    RETURN
 
 CONTAINS
    SUBROUTINE Cleanup()
-   
-      CLOSE(UnIn)
+
+      IF (UnIn > 0) CLOSE(UnIn)
       IF (UnEc > 0) CLOSE(UnEc)
-      
-   END SUBROUTINE Cleanup    
+
+   END SUBROUTINE Cleanup
 END SUBROUTINE ReadPrimaryFile
 !----------------------------------------------------------------------------------------------------------------------------------
 

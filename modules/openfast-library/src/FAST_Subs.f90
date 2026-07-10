@@ -1306,11 +1306,25 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
                         Init%OutData_FEAM%Vars, .false., ErrStat2, ErrMsg2)
       if (Failed()) return
 
-   case (Module_Orca) 
+   case (Module_Orca)
 
       Init%InData_Orca%InputFile = p_FAST%MooringFile
       Init%InData_Orca%RootName  = p_FAST%OutFileRoot
       Init%InData_Orca%TMax      = p_FAST%TMax
+
+      ! inline OrcaFlex input from a YAML primary file (input_files:MooringFile). OrcaFlex is
+      ! initialized once (not per-leg, unlike IceDyn), so this handover mirrors FEAMooring's
+      ! single-shot pattern rather than IceDyn's per-leg CALL loop.
+      ! NOTE: not exercised by any reg-test -- see docs/source/user/yaml_input.rst for the
+      ! documented coverage gap (no CompMooring=4 deck; requires the proprietary OrcaFlex DLL).
+      Init%InData_Orca%UseInputFile = .not. m_FAST%OrcaIsInline
+      IF ( m_FAST%OrcaIsInline ) THEN
+         Init%InData_Orca%PassedFileIsYaml = .TRUE.
+         CALL NWTC_Library_CopyFileInfoType( m_FAST%OrcaInlineFileInfo, Init%InData_Orca%PassedPrimaryInputData, MESH_NEWCOPY, ErrStat2, ErrMsg2 )
+         if (Failed()) return
+      ELSE
+         Init%InData_Orca%PassedFileIsYaml = .FALSE.
+      END IF
 
       ! Call module initialization routine
       dt_module = p_FAST%DT

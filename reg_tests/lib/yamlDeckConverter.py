@@ -1209,6 +1209,36 @@ def convert_icedyn(text_path):
     return '\n'.join(out)
 
 
+def convert_orca(text_path):
+    """Convert a text-format OrcaFlex Interface primary input file to its YAML schema
+    (modules/orcaflex-interface/src/Orca_Yaml.f90 is the source of truth).
+
+    The text primary file is tiny: it reads only Echo, DirRoot (the OrcaFlex simulation
+    input file), and DLL_FileName (the OrcaFlex DLL) -- the DT and OutList reads in
+    ReadPrimaryFile are commented out and never exercised, so this converter emits
+    neither. DirRoot/DLL_FileName are emitted VERBATIM (raw, unresolved paths): the
+    Orca_Yaml.f90 reader stores them as-is and the ReadPrimaryFile funnel resolves
+    relative paths against PriPath once, after either format's read completes.
+
+    No convert_fst wiring: OrcaFlex has no reg-test deck (CompMooring=4 requires the
+    proprietary OrcaFlex DLL, unavailable in CI), so this converter is defined for
+    completeness only and is not invoked by convert_fst's single-file assembly."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# OrcaFlex Interface primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- simulation_control -------------------------------------
+    w('simulation_control:')
+    w('  Echo: '         + _as_bool(d.scalar('Echo')))
+    w('  DirRoot: '      + _as_str(d.scalar('DirRoot')))
+    w('  DLL_FileName: ' + _as_str(d.scalar('DLL_FileName')))
+
+    return '\n'.join(out)
+
+
 def convert_icefloe(text_path):
     """Convert a text-format IceFloe primary input file to its YAML schema
     (modules/icefloe/src/interfaces/FAST/IceFloe_Yaml.f90 is the source of truth).
