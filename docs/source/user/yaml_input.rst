@@ -124,7 +124,16 @@ an inline mapping for any other module -- or for ``MooringFile`` when
 ``CompMooring``
 selects a module without a YAML schema (MAP++) -- is a
 clear fatal error suggesting a file path instead. Combined with ``!include``
-and anchors, this supports fully single-file models. Second-order files (e.g.
+and anchors, this supports fully single-file models.
+
+.. note::
+
+   **MAP++ is text-only.** MAP++ (``CompMooring`` = 1) has no YAML reader --
+   its input file is parsed by the external MAP++ (C++) library, which
+   understands only the legacy text format. Both an inline ``MooringFile``
+   mapping *and* a ``.yaml``/``.yml`` ``MooringFile`` path are rejected with a
+   MAP++-specific fatal error. For a YAML mooring input, use MoorDyn
+   (``CompMooring`` = 3) or FEAMooring (``CompMooring`` = 2). Second-order files (e.g.
 Structural Control files under ServoDyn, potential-flow data under HydroDyn,
 AeroDyn's airfoil/blade/tailfin/AeroAcoustics/OLAF files, ElastoDyn's
 blade/tower/furling files, or MoorDyn's bathymetry/water-kinematics/lookup-

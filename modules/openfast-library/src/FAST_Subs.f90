@@ -1197,7 +1197,22 @@ SUBROUTINE FAST_InitializeAll( t_initial, m_Glue, p_FAST, y_FAST, m_FAST, ED, SE
 
    select case (p_FAST%CompMooring)
 
-   case (Module_MAP) 
+   case (Module_MAP)
+
+      ! MAP++ has no YAML reader: its input file is parsed by the external MAP++ (C++) library,
+      ! which only understands the legacy text format. Reject a YAML MooringFile (or inline YAML
+      ! handed through, whose serialized temp file also has a .yaml extension) with a clear,
+      ! MAP++-specific fatal rather than letting the C++ parser choke on YAML syntax. Inline
+      ! MAP++ (a mapping-valued MooringFile with CompMooring=1) is already refused earlier in
+      ! FAST_ParseYamlPrimary's GetModFile (no InlineTarget for MAP++); this guard also covers
+      ! the per-file case of a .yaml/.yml MooringFile path.
+      IF ( IsYamlExt( p_FAST%MooringFile ) ) THEN
+         CALL SetErrStat( ErrID_Fatal, 'MAP++ (CompMooring=1) does not support YAML input: the MooringFile "'// &
+                          TRIM(p_FAST%MooringFile)//'" must be in the legacy MAP++ text format. '// &
+                          'For a YAML mooring input, use MoorDyn (CompMooring=3) or FEAMooring (CompMooring=2).', &
+                          ErrStat, ErrMsg, RoutineName )
+         RETURN
+      END IF
 
       !bjj: until we modify this, MAP requires HydroDyn to be used. (perhaps we could send air density from AeroDyn or something...)
 
