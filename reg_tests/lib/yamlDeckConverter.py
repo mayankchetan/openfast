@@ -1209,6 +1209,43 @@ def convert_icedyn(text_path):
     return '\n'.join(out)
 
 
+def convert_icefloe(text_path):
+    """Convert a text-format IceFloe primary input file to its YAML schema
+    (modules/icefloe/src/interfaces/FAST/IceFloe_Yaml.f90 is the source of truth).
+
+    Unlike the other converters, IceFloe's text format has no field-by-field schema: it's a
+    flat list of "NAME value" lines (comment lines start with '!', '#', '$', or '%', per
+    modules/icefloe/src/icefloe/iceInput.f90's countIceInputs/readIceInputs). So this
+    converter does not know IceFloe's parameter names either -- it emits one top-level
+    "NAME: value" mapping entry per non-comment line, in file order, preserving the numeric
+    literal verbatim (no reformatting) so IceFloe_ParseYamlInputs's real(ReKi) read sees the
+    same text the text-format reader would have. IceFloe has no standalone reg-test driver
+    entry in convert_fst (IceFile stays a plain text path there -- inline glue is out of
+    scope, see the CompIce==2 comment above), so this function is defined for direct/future
+    use but is not wired into convert_fst's dispatch."""
+    out = []
+    w = out.append
+    w('# IceFloe primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    with open(text_path, 'r') as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped[0] in '!#$%':
+                continue
+            parts = stripped.split(None, 1)
+            if len(parts) < 2:
+                continue
+            name, rest = parts[0], parts[1]
+            # keep only the value token (drop any trailing inline comment/description text)
+            value = rest.split(None, 1)[0]
+            w('{}: {}'.format(name, value))
+
+    return '\n'.join(out)
+
+
 def convert_beamdyn(text_path):
     """Convert a text-format BeamDyn primary input file to its YAML schema.
 

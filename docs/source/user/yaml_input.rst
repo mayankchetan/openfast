@@ -251,8 +251,11 @@ supported:
 - IceDyn primary input file (:ref:`icedyn-yaml-input`), including inline use
   under ``input_files:IceFile`` (when ``CompIce`` selects IceDyn,
   ``CompIce`` = 2). IceDyn's primary input references no further data files,
-  so nothing stays a path -- every field is inlined. (IceFloe, ``CompIce`` = 1,
-  has no YAML schema yet and always keeps ``IceFile`` a plain path.)
+  so nothing stays a path -- every field is inlined.
+- IceFloe primary input file (:ref:`icefloe-yaml-input`), referenced by path
+  from ``input_files:IceFile`` (when ``CompIce`` selects IceFloe,
+  ``CompIce`` = 1). IceFloe has no inline-input glue path, so ``IceFile`` is
+  always a file path, never inlined.
 
 
 .. _feamooring-yaml-input:
@@ -445,3 +448,38 @@ Notable schema points:
      Fdr: 9
      Kic: 140
      FspN: 3.3
+
+.. _icefloe-yaml-input:
+
+IceFloe YAML input file
+-------------------------
+
+The IceFloe primary input file may also be written in YAML (name it ``*.yaml``
+or ``*.yml``); the conventions above apply. IceFloe has no formal
+module-documentation page of its own, and unlike every other module covered
+here it also has no fixed field-by-field schema: the text format is a flat
+list of ``NAME value`` lines (comment lines start with ``!``, ``#``, ``$``, or
+``%``), read into a name/value table that is queried by name wherever the
+code needs a parameter, rather than parsed into named fields up front. The
+YAML form mirrors this directly: every top-level key of the document becomes
+one name/value entry, using the same names the text format's comments
+document (see the Ice Module Manual linked from :ref:`user_guide` for the
+full parameter list). Parameter names are matched case-insensitively (as
+substrings, exactly like the text-format reader), so YAML keys should match
+the text format's names.
+
+When ``CompIce`` selects IceFloe (``CompIce`` = 1), ``input_files:IceFile``
+must still be a path to a ``.yaml``/``.yml`` (or text) file -- IceFloe has no
+inline-input glue path, unlike IceDyn.
+
+.. code-block:: yaml
+
+   # IceFloe primary input file (YAML form)
+   iceType: 4
+   timeStep: 0.25
+   duration: 60.0
+   rampTime: 10.0
+   numLegs: 1
+   refIceThick: 0.5
+   refIceStrength: 500.0e3
+   staticExponent: -0.5

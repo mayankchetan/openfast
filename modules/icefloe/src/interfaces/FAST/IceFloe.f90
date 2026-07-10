@@ -50,6 +50,8 @@ MODULE IceFloe
    use IceCpldCrushing
    use NWTC_IO, only : DispNVD
    use ModVar
+   use YamlInput, only : IsYamlExt
+   use IceFloe_Yaml, only : IceFloe_ParseYamlInputs
 
    IMPLICIT NONE
 
@@ -114,6 +116,8 @@ SUBROUTINE IceFloe_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, In
       INTEGER(IntKi)             :: Err         ! for array allocation error
       INTEGER(IntKi)             :: n, numOuts
       character(1)               :: legNum      ! for labeling leg numbers in output headers
+      INTEGER(IntKi)             :: ErrStat2    ! Error status for the YAML input funnel
+      CHARACTER(ErrMsgLen)       :: ErrMsg2     ! Error message for the YAML input funnel
 
       ErrStat = ErrID_None
       ErrMsg = ''
@@ -162,8 +166,13 @@ SUBROUTINE IceFloe_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, In
       
       
    ! go through the inputs: first count them then read them into a structure
-      call countIceInputs(InitInp%inputFile, iceLog, iceInput)
-      call readIceInputs(iceLog, iceInput)
+      if (IsYamlExt(InitInp%inputFile)) then
+         call IceFloe_ParseYamlInputs(InitInp%inputFile, iceInput, ErrStat2, ErrMsg2)
+         call iceErrorHndlr(iceLog, ErrStat2, ErrMsg2, 1)
+      else
+         call countIceInputs(InitInp%inputFile, iceLog, iceInput)
+         call readIceInputs(iceLog, iceInput)
+      end if
       if (iceLog%ErrID >= AbortErrLev) then   ! Couldn't open the parameter input fle
          ErrStat = iceLog%ErrID
          ErrMsg  = 'Fatal error in routine: IceFloe_Init=> '//trim(iceLog%ErrMsg)

@@ -31,6 +31,7 @@ add_library(icefloelib STATIC
   src/icefloe/intermittentCrushing.F90
   src/icefloe/lockInISO.F90
   src/icefloe/randomCrushing.F90
+  src/interfaces/FAST/IceFloe_Yaml.f90
   src/interfaces/FAST/IceFloe.f90
   src/icefloe/IceFloe_Types.f90
 )
