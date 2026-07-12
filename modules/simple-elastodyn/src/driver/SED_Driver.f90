@@ -27,6 +27,8 @@ PROGRAM SED_Driver
    USE SED_Types
    USE SED_Driver_Subs
    USE SED_Driver_Types
+   USE SED_Driver_Yaml
+   USE YamlInput, ONLY: IsYamlExt
 
    IMPLICIT NONE
 
@@ -145,17 +147,27 @@ PROGRAM SED_Driver
       ! open this.
    IF ( SettingsFlags%DvrIptFile ) THEN
 
-         ! Read the driver input file
-      CALL ProcessComFile( CLSettings%DvrIptFileName, DvrFileInfo, ErrStat, ErrMsg )
-      call CheckErr('')
+      IF ( IsYamlExt( CLSettings%DvrIptFileName ) ) THEN      ! YAML-format driver input file (.yaml/.yml)
 
-      ! For diagnostic purposes, the following can be used to display the contents
-      ! of the DvrFileInfo data structure.
-      ! call Print_FileInfo_Struct( CU, DvrFileInfo ) ! CU is the screen -- different number on different systems.
+            ! Parse the YAML driver input file directly (no FileInfoType passed-file channel for drivers)
+         CALL SEDDvr_ParseYamlFile( CLSettings%DvrIptFileName, SettingsFlags, Settings, ProgInfo, CaseTime, CaseData, ErrStat, ErrMsg )
+         call CheckErr('')
 
-         ! Parse the input file
-      CALL ParseDvrIptFile( CLSettings%DvrIptFileName, DvrFileInfo, SettingsFlags, Settings, ProgInfo, CaseTime, CaseData, ErrStat, ErrMsg )
-      call CheckErr('')
+      ELSE                                                     ! text-format driver input file
+
+            ! Read the driver input file
+         CALL ProcessComFile( CLSettings%DvrIptFileName, DvrFileInfo, ErrStat, ErrMsg )
+         call CheckErr('')
+
+         ! For diagnostic purposes, the following can be used to display the contents
+         ! of the DvrFileInfo data structure.
+         ! call Print_FileInfo_Struct( CU, DvrFileInfo ) ! CU is the screen -- different number on different systems.
+
+            ! Parse the input file
+         CALL ParseDvrIptFile( CLSettings%DvrIptFileName, DvrFileInfo, SettingsFlags, Settings, ProgInfo, CaseTime, CaseData, ErrStat, ErrMsg )
+         call CheckErr('')
+
+      ENDIF
 
          ! VVerbose error reporting
       IF ( SEDDriver_Verbose >= 10_IntKi ) THEN

@@ -17,7 +17,10 @@
                         primary is converted and the still-text driver is repointed
                         at it. Later Wave-4 (module-driver) additions reuse this same
                         "driver" mode convention.
-      simple-elastodyn - standalone Simplified ElastoDyn (SED) driver case.
+      simple-elastodyn - standalone Simplified ElastoDyn (SED) driver case. Optional
+                        mode "driver" additionally converts the .dvr driver file
+                        itself to YAML (convert_sed_driver), same convention as
+                        aerodisk's driver mode above.
       seastate        - standalone SeaState driver case.
       hydrodyn        - standalone HydroDyn driver case.
       aerodyn         - standalone AeroDyn driver case.
@@ -381,6 +384,32 @@ elif module == "simple-elastodyn":
 
     ### compare: bit-identical required
     compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### .dvr itself to YAML (convert_sed_driver) and run a full-yaml case (yaml
+    ### driver -> yaml primary), still checked bit-identical against the same text
+    ### baseline run above. Same convention as aerodisk's driver mode above (Wave 4's
+    ### first instance).
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+
+        yamlDvrPrimary = PRIMARY.replace(".inp", ".yaml")
+        yamlDvrPrimaryText = yamlDeckConverter.convert_sed(os.path.join(yamlDvrDir, PRIMARY))
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimary), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, PRIMARY))
+
+        yamlDriverFile = DRIVER.replace(".dvr", ".yaml")
+        yamlDriverText = yamlDeckConverter.convert_sed_driver(os.path.join(yamlDvrDir, DRIVER))
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(os.path.join(yamlDvrDir, DRIVER))
+
+        returnCode = openfastDrivers.runSimpleElastodynDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))
 
 elif module == "seastate":
     #### seastate (standalone driver) case ###########################################

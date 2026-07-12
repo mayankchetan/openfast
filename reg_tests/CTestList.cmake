@@ -656,6 +656,11 @@ yaml_equiv_driver("aerodisk" "adsk_timeseries_shutdown" "${CTEST_AERODISK_EXECUT
 # (DLL copied by hand), same approach as the AeroDisk case above.
 yaml_equiv("simple-elastodyn" "sed_test_freewheel" "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
 yaml_equiv("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
+# Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above, and its
+# first instance under aerodisk): also converts sed_driver.dvr itself to YAML and runs
+# yaml driver -> yaml primary.
+yaml_equiv_driver("simple-elastodyn" "sed_test_freewheel" "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
+yaml_equiv_driver("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABLE}" "simple-elastodyn;yaml")
 
 # SeaState standalone-driver yaml-equivalence: seastate_1 (WaveMod=3, white noise) and
 # seastate_CNW1 (WaveMod=2 JONSWAP with ConstWaveMod=1 constrained wave) cover distinct

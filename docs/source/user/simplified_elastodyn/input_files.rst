@@ -136,3 +136,60 @@ SED's input file may also be given inline under an OpenFAST primary (.fst)
 file's ``input_files:EDFile`` (only legal when ``CompElast`` selects Simplified
 ElastoDyn; ``EDFile`` also serves ElastoDyn when ``CompElast`` selects that
 module instead -- see :ref:`yaml_input`).
+
+.. _sed-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone SED driver's own input file (normally ``*.dvr``) may also be
+written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the
+format from the file extension, exactly like the primary input file above.
+Parameters keep their documented names, grouped into sections that mirror the
+text driver format's banners: ``general`` (``Echo``), ``primary_file``
+(``SEDIptFile``, ``OutRootName``), ``output`` (``WrVTK``), and
+``case_analysis`` (``TStart``, ``DT``, ``NumTimeSteps``, and the combined case
+time/data table). ``TStart`` is always required and does not accept the
+``default`` keyword; only ``DT`` and ``NumTimeSteps`` do, falling back to the
+values derived from the case data table.
+
+The case-analysis table (time, aerodynamic torque, HSS-brake torque, generator
+torque, blade-pitch command, yaw, and yaw rate versus time) is written under
+``case_analysis:table`` as either:
+
+- ``file``: a path to a plain time-series data file, resolved relative to the
+  YAML driver file's own directory. Every SED r-test driver case sources its
+  time series this way; the referenced file keeps its original text layout (an
+  optional ``#``/``!``/``%``-prefixed comment header, then whitespace-delimited
+  ``Time AerTrq HSSBrTrqC GenTrq BlPitchCom Yaw YawRate`` rows) and is never
+  inlined into the YAML document, mirroring the text driver format's own
+  ``@filename`` inclusion convention for this table.
+- ``rows``: a YAML list of block mappings, one per case timestep, each keyed by
+  column name (``Time``, ``AerTrq``, ``HSSBrTrqC``, ``GenTrq``,
+  ``BlPitchCom``, ``Yaw``, ``YawRate``) -- for a table given as literal inline
+  data rather than an external file.
+
+Exactly one of ``file``/``rows`` must be present. ``HSSBrTrqC`` is forced
+positive (its sign is not meaningful); ``BlPitchCom``, ``Yaw`` (deg), and
+``YawRate`` (deg/s) are converted to radians and radians/s respectively,
+exactly as in the text driver format.
+
+.. code-block:: yaml
+
+   # Simplified ElastoDyn (SED) driver input file (YAML form)
+   general:
+     Echo: true
+
+   primary_file:
+     SEDIptFile: "sed_primary.yaml"
+     OutRootName: "sed_driver"
+
+   output:
+     WrVTK: 0
+
+   case_analysis:
+     TStart: 0.0
+     DT: default
+     NumTimeSteps: 99
+     table:
+       file: "Free.csv"

@@ -30,6 +30,7 @@ target_link_libraries(sedlib nwtclibs)
 add_executable(sed_driver
   src/driver/SED_Driver_Types.f90
   src/driver/SED_Driver_Subs.f90
+  src/driver/SED_Driver_Yaml.f90
   src/driver/SED_Driver.f90
 )
 target_link_libraries(sed_driver sedlib versioninfolib ${CMAKE_DL_LIBS})

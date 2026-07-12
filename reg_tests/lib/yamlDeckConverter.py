@@ -12,6 +12,7 @@
         convert_aerodisk(text_path) -> str      (YAML document)
         convert_aerodisk_driver(text_path) -> str  (YAML document; AeroDisk driver file)
         convert_sed(text_path) -> str           (YAML document)
+        convert_sed_driver(text_path) -> str    (YAML document; SED driver file)
         convert_elastodyn(text_path) -> str     (YAML document)
         convert_seastate(text_path) -> str      (YAML document)
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
@@ -509,6 +510,100 @@ def convert_sed(text_path):
     w('output:')
     channels = d.outlist()
     w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def convert_sed_driver(text_path):
+    """Convert a text-format Simplified ElastoDyn (SED) driver input file (Wave 4,
+    mirroring convert_aerodisk_driver's pattern) to its YAML schema.
+
+    Schema mirrors the driver's text reader (SED_Driver_Subs.f90:372-563,
+    ParseDvrIptFile) key-for-key:
+        general:               Echo
+        primary_file:          SEDIptFile, OutRootName
+        output:                WrVTK
+        case_analysis:         TStart, DT, NumTimeSteps, table
+
+    TStart is a plain ParseVar read (no "default" keyword; verbatim numeric literal).
+    DT and NumTimeSteps do accept "default"/"DEFAULT" (InputChr + Conv2UC + internal-READ
+    in the text reader), so those two use _default_or_num.
+
+    SEDIptFile is repointed at the YAML primary (*.inp -> *.yaml) so a driver-mode
+    yaml-equivalence case (yaml driver -> yaml primary) is fully YAML end to end.
+
+    case_analysis:table carries the combined case time/data series (columns Time,
+    AerTrq, HSSBrTrqC, GenTrq, BlPitchCom, Yaw, YawRate). Every SED r-test driver case
+    sources it via a single "@filename" inclusion line (e.g. Free.csv, HSSBrk.csv) --
+    second-order rule: that file is never inlined, only referenced by path (table:
+    {file: "<name>"}). If the table is instead given as literal inline rows (no "@"
+    line present), each row is emitted as a block-mapping list item under table:
+    {rows: [...]} (SubDyn/MoorDyn primary-table precedent, Wave 3; also
+    convert_aerodisk_driver's precedent within Wave 4). A table mixing literal rows
+    with an "@" inclusion is not supported (no r-test case does this; SED_Driver_Yaml.f90's
+    Fortran reader mirrors this same either/or split).
+    """
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# Simplified ElastoDyn (SED) driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('primary_file:')
+    sed_ipt = _unquote(d.scalar('SEDIptFile'))
+    base, ext = os.path.splitext(sed_ipt)
+    if ext.lower() == '.inp':
+        sed_ipt = base + '.yaml'
+    w('  SEDIptFile: ' + _as_str(sed_ipt))
+    w('  OutRootName: ' + _as_str(d.scalar('OutRootName')))
+    w('')
+
+    w('output:')
+    w('  WrVTK: ' + d.scalar('WrVTK'))
+    w('')
+
+    w('case_analysis:')
+    w('  TStart: ' + d.scalar('TStart'))
+    w('  DT: ' + _default_or_num(d.scalar('DT')))
+    w('  NumTimeSteps: ' + _default_or_num(d.scalar('NumTimeSteps')))
+
+    # Two purely descriptive lines (column names, then units) follow, skipped without
+    # parsing exactly as the text driver does (CurLine += 1 twice); then either a
+    # single "@filename" inclusion line or literal data rows to the end of the file.
+    remaining = [ln for ln in d.lines[d.cursor:] if not _is_comment_or_blank(ln)]
+    if len(remaining) < 3:
+        raise ValueError('convert_sed_driver: {} ends before the case-analysis table '
+                          '(expected 2 header lines plus at least 1 data/include line)'.format(text_path))
+    data_lines = remaining[2:]
+
+    w('  table:')
+    if len(data_lines) == 1 and _strip_inline_comment(data_lines[0]).strip().startswith('@'):
+        inc_line = _strip_inline_comment(data_lines[0]).strip()
+        m = re.match(r'@\s*("[^"]*"|\'[^\']*\'|\S+)', inc_line)
+        if m is None:
+            raise ValueError('convert_sed_driver: malformed "@include" line "{}" in {}'.format(
+                inc_line, text_path))
+        fname = _unquote(m.group(1))
+        w('    file: ' + _as_str(fname))
+    else:
+        KEYS = ('Time', 'AerTrq', 'HSSBrTrqC', 'GenTrq', 'BlPitchCom', 'Yaw', 'YawRate')
+        w('    rows:')
+        for raw in data_lines:
+            stripped = _strip_inline_comment(raw).strip()
+            if stripped.startswith('@'):
+                raise ValueError('convert_sed_driver: mixed inline/@-include case-analysis '
+                                  'tables are not supported ({}).'.format(text_path))
+            toks = [t for t in re.split(r'[,\s]+', stripped) if t]
+            if len(toks) != 7:
+                raise ValueError('convert_sed_driver: case-analysis table row "{}" in {} has '
+                                  '{} value(s); expected 7'.format(raw, text_path, len(toks)))
+            w(_row_map(KEYS, toks))
     w('')
 
     return '\n'.join(out)
