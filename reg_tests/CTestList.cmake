@@ -250,6 +250,29 @@ function(yaml_equiv MODULE CASENAME EXECUTABLE LABEL)
   set_tests_properties(yaml_equiv_${CASENAME} PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
 endfunction(yaml_equiv)
 
+# yaml-equivalence for the FAST.Farm glue-code (.fstf) primary: like yaml_equiv, but
+# the executable/build-directory conventions are glue-codes/fast-farm's own (this
+# module isn't registered under modules/<name> like the others), and the harness
+# (executeYamlEquivalenceCase.py's "fastfarm" branch) additionally stages sibling
+# case/common directories (5MW_Baseline, WAT_MannBoxDB, and -- for the TSinflow_curl
+# equivalence vehicle -- the sibling TSinflow case dir whose 90m_08mps.bts the
+# IW.dat InflowWind file climbs out to) that a plain yaml_equiv(...) case never needs.
+function(yaml_equiv_fastfarm CASENAME EXECUTABLE LABEL)
+  set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeYamlEquivalenceCase.py")
+  set(SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/..")
+  set(BUILD_DIRECTORY "${CTEST_BINARY_DIR}/glue-codes/fast-farm")
+  add_test(
+    yaml_equiv_${CASENAME} ${Python_EXECUTABLE}
+       ${TEST_SCRIPT}
+       "fastfarm"
+       ${CASENAME}
+       ${EXECUTABLE}
+       ${SOURCE_DIRECTORY}
+       ${BUILD_DIRECTORY}
+  )
+  set_tests_properties(yaml_equiv_${CASENAME} PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
+endfunction(yaml_equiv_fastfarm)
+
 # yaml-equivalence for openfast (.fst) glue-code cases: like yaml_equiv, but the
 # primary (.fst) file is converted per MODE (perfile | allyaml | singlefile),
 # selecting how convert_fst() / executeYamlEquivalenceCase.py handles the
@@ -536,6 +559,13 @@ if(BUILD_FASTFARM)
   ff_regression("ModAmb_3"          ""                               "fastfarm")
   ff_regression("TSinflowADskSED"   ""                               "fastfarm;aerodisk;simple-elastodyn")
   ff_regression("MD_Shared"         "-compFile=FAST.Farm.FarmMD.MD"  "fastfarm;moordyn")
+
+  # YAML input equivalence (Wave 5, task 5.1): TSinflow_curl is the plan's equivalence
+  # vehicle -- Mod_AmbWind=2 (InflowWind), 2 turbines, so it exercises the turbines
+  # table's high-resolution-grid columns (X0_High..dZ_High) as well as the paths-only
+  # base columns, plus the curled-wake/WAT branches (see this deck's own header for the
+  # sibling-staging requirement).
+  yaml_equiv_fastfarm("TSinflow_curl" "${CTEST_FASTFARM_EXECUTABLE}" "fastfarm;yaml")
 endif()
 
 # AeroDyn regression tests

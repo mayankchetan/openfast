@@ -20,14 +20,15 @@ if (GENERATE_TYPES)
 endif()
 
 add_executable(FAST.Farm
+  src/FAST_Farm_Types.f90
+  src/FASTWrapper_Types.f90
+  src/FAST_Farm_Yaml.f90
   src/FAST_Farm_IO.f90
   src/FAST_Farm_IO_Params.f90
   src/FAST_Farm_Subs.f90
   src/FASTWrapper.f90
   src/FAST_Farm.f90
-  src/FAST_Farm_Types.f90
-  src/FASTWrapper_Types.f90
-) 
+)
 target_link_libraries(FAST.Farm openfastlib_static wdlib awaelib)
 if (FASTFARM_TIMING_PRINTS)
   target_sources(FAST.Farm PRIVATE src/FAST_Farm_timings.f90)

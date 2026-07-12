@@ -4,6 +4,8 @@ module FAST_Farm_IO
    USE VersionInfo
    USE FAST_Farm_Types
    USE FAST_Farm_IO_Params
+   USE FAST_Farm_Yaml, only: Farm_ParseYamlFile
+   USE YamlInput, only: IsYamlExt
    
    IMPLICIT NONE
    
@@ -594,6 +596,15 @@ SUBROUTINE Farm_ReadPrimaryFile( InputFile, p, WD_InitInp, AWAE_InitInp, OutList
    UnEc = -1
    Echo = .FALSE.                        ! Don't echo until we've read the "Echo" flag
    CALL GetPath( InputFile, PriPath )    ! Input files will be relative to the path where the primary input file is located.
+
+      ! YAML funnel: a .yaml/.yml primary file is parsed straight from disk by
+      ! FAST_Farm_Yaml (mirrors the schema of the sequential text reader below) and
+      ! fills the same p/WD_InitInp/AWAE_InitInp/OutList fields; everything downstream
+      ! (Farm_ValidateInput and beyond) is unchanged and shared between both formats.
+   IF ( IsYamlExt( InputFile ) ) THEN
+      CALL Farm_ParseYamlFile( InputFile, p, WD_InitInp, AWAE_InitInp, OutList, ErrStat, ErrMsg )
+      RETURN
+   END IF
 
       ! Get an available unit number and open input file
    CALL GetNewUnit( UnIn, ErrStat, ErrMsg );  IF ( ErrStat >= AbortErrLev ) RETURN

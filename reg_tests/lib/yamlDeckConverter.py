@@ -28,6 +28,7 @@
         convert_unsteadyaero_driver(text_path) -> str (YAML document; UnsteadyAero
             driver file -- the driver IS the top-level input, no separate primary)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
+        convert_fastfarm(text_path) -> str      (YAML document; FAST.Farm primary/glue-code file)
 """
 
 import os
@@ -4633,3 +4634,246 @@ def convert_fst(text_path, mode='per-file'):
     w('')
 
     return '\n'.join(out), extra_files
+
+
+def convert_fastfarm(text_path):
+    """Convert a text-format FAST.Farm primary input file (.fstf) to its YAML schema
+    (glue-codes/fast-farm/src/FAST_Farm_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners: simulation_control, shared_mooring_system,
+    ambient_wind_vtk, ambient_wind_inflowwind, ambient_wind_amrex (all three ambient-wind
+    blocks are always physically present and read in the text path regardless of which
+    Mod_AmbWind is active, so all three are always converted/emitted here too), turbines,
+    wake_dynamics, curled_wake_parameters, wake_added_turbulence, visualization, output,
+    output_channels. The file's second physical line (free text, no keyword -- FTitle is
+    read via a bare ReadStr, "line 2", not a keyword search) becomes the top-level
+    `description` scalar; the first line (a "------- FAST.Farm for OpenFAST INPUT FILE
+    -------" banner) is discarded exactly like the text path's leading ReadCom.
+
+    turbines is a sequence of block mappings via _row_map (paths-only turbines: WT_X/
+    WT_Y/WT_Z position plus a WT_FASTInFile path; inline turbine definitions are out of
+    scope for this deck) -- the headline anchors/merge showcase, since a wind-farm
+    layout is exactly the "define one turbine, copy it with a change" use case
+    documented in yaml_input.rst. The six high-resolution-grid columns (X0_High,
+    Y0_High, Z0_High, dX_High, dY_High, dZ_High) are emitted only when Mod_AmbWind is 2
+    or 3, mirroring the text path's per-row column-count switch
+    (FAST_Farm_IO.f90:749-754); NumTurbines is never itself emitted (derived from the
+    list length).
+
+    k_vAmb, k_vShr, WAT_k_Def, and WAT_k_Grad are each converted to a 5-entry flow
+    sequence, or passed through as the literal scalar "default" (ReadAryWDefault's
+    "DEFAULT" in the text path; FAST_Farm_Yaml.f90's GetR8AryWDefault helper recognizes
+    it). OutRadii, OutDist, WindVelX/Y/Z, and OutDisWindZ/X/Y are each sliced to their
+    preceding N* count and converted to a flow sequence (never themselves emitted --
+    counts are derived from list length); a count of 0 correctly yields an empty list
+    even though the text format still carries one unused placeholder value on that
+    line (e.g. "0.0 WindVelX ..." when NWindVel=0)."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# FAST.Farm primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    # line 1 is the "------- FAST.Farm for OpenFAST INPUT FILE -------" header banner
+    # (ReadCom, discarded); line 2 is the free-text description (ReadStr, no keyword)
+    title = d.lines[1].strip() if len(d.lines) > 1 else ''
+    w('description: ' + _as_str(title))
+    w('')
+    d.cursor = 2
+
+    #-------------------- simulation_control ------------------------------------------
+    w('simulation_control:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  AbortLevel: ' + _as_str(d.scalar('AbortLevel')))
+    w('  TMax: ' + d.scalar('TMax'))
+    mod_amb_wind_tok = d.scalar('Mod_AmbWind')
+    w('  Mod_AmbWind: ' + mod_amb_wind_tok)
+    w('  Mod_WaveField: ' + d.scalar('Mod_WaveField'))
+    w('  Mod_SharedMooring: ' + d.scalar('Mod_SharedMooring'))
+    w('')
+    mod_amb_wind = int(mod_amb_wind_tok)
+
+    #-------------------- shared_mooring_system ----------------------------------------
+    # NOTE: the text file's own column labels ("SharedMoorFile", "WrMooringVis") differ
+    # from the ReadVar varname arguments Farm_ReadPrimaryFile actually uses for echo/
+    # error text ("MD_FileName", "MooringVis") -- search on the literal label text that
+    # appears in the deck, but keep emitting the YAML keys FAST_Farm_Yaml.f90 expects.
+    w('shared_mooring_system:')
+    w('  MD_FileName: ' + _as_str(d.scalar('SharedMoorFile')))
+    w('  DT_Mooring: ' + d.scalar('DT_Mooring'))
+    w('  MooringVis: ' + _as_bool(d.scalar('WrMooringVis')))
+    w('')
+
+    #-------------------- ambient_wind_vtk ---------------------------------------------
+    w('ambient_wind_vtk:')
+    w('  DT_Low-VTK: ' + d.scalar('DT_Low-VTK'))
+    w('  DT_High-VTK: ' + d.scalar('DT_High-VTK'))
+    w('  WindFilePath: ' + _as_str(d.scalar('WindFilePath')))
+    w('  ChkWndFiles: ' + _as_bool(d.scalar('ChkWndFiles')))
+    w('')
+
+    #-------------------- ambient_wind_inflowwind --------------------------------------
+    w('ambient_wind_inflowwind:')
+    w('  DT_Low: ' + d.scalar('DT_Low'))
+    w('  DT_High: ' + d.scalar('DT_High'))
+    w('  nX_Low: ' + d.scalar('NX_Low'))
+    w('  nY_Low: ' + d.scalar('NY_Low'))
+    w('  nZ_Low: ' + d.scalar('NZ_Low'))
+    w('  X0_Low: ' + d.scalar('X0_Low'))
+    w('  Y0_Low: ' + d.scalar('Y0_Low'))
+    w('  Z0_Low: ' + d.scalar('Z0_Low'))
+    w('  dX_Low: ' + d.scalar('dX_Low'))
+    w('  dY_Low: ' + d.scalar('dY_Low'))
+    w('  dZ_Low: ' + d.scalar('dZ_Low'))
+    w('  nX_High: ' + d.scalar('NX_High'))
+    w('  nY_High: ' + d.scalar('NY_High'))
+    w('  nZ_High: ' + d.scalar('NZ_High'))
+    w('  InflowFile: ' + _as_str(d.scalar('InflowFile')))
+    w('')
+
+    #-------------------- ambient_wind_amrex -------------------------------------------
+    w('ambient_wind_amrex:')
+    w('  WindDirPrefix: ' + _as_str(d.scalar('WindDirPrefix')))
+    w('  DirStartIndex: ' + _as_str(d.scalar('DirStartIndex')))
+    w('  DT_Low-AMReX: ' + d.scalar('DT_Low-AMReX'))
+    w('  DT_High-AMReX: ' + d.scalar('DT_High-AMReX'))
+    w('')
+
+    #-------------------- turbines ------------------------------------------------------
+    n_turbines = int(d.scalar('NumTurbines'))
+    if mod_amb_wind in (2, 3):
+        WT_KEYS = ('WT_X', 'WT_Y', 'WT_Z', 'WT_FASTInFile',
+                   'X0_High', 'Y0_High', 'Z0_High', 'dX_High', 'dY_High', 'dZ_High')
+    else:
+        WT_KEYS = ('WT_X', 'WT_Y', 'WT_Z', 'WT_FASTInFile')
+    wt_rows = d.table_rows(n_turbines, skip=2)
+    w('turbines:')
+    for raw in wt_rows:
+        toks = _row_tokens(raw)
+        if len(toks) != len(WT_KEYS):
+            raise ValueError('convert_fastfarm: turbine row "{}" in {} has {} value(s); expected {}'.format(
+                raw, text_path, len(toks), len(WT_KEYS)))
+        w(_row_map(WT_KEYS, toks))
+    w('')
+
+    #-------------------- wake_dynamics -------------------------------------------------
+    w('wake_dynamics:')
+    w('  Mod_Wake: ' + d.scalar('Mod_Wake'))
+    w('  RotorDiamRef: ' + d.scalar('RotorDiamRef'))
+    w('  dr: ' + d.scalar('dr'))
+    w('  NumRadii: ' + d.scalar('NumRadii'))
+    w('  NumDFull: ' + _default_or_num(d.scalar('NumDFull')))
+    w('  NumDBuff: ' + _default_or_num(d.scalar('NumDBuff')))
+    w('  f_c: ' + _default_or_num(d.scalar('f_c')))
+    w('  C_HWkDfl_O: ' + _default_or_num(d.scalar('C_HWkDfl_O')))
+    w('  C_HWkDfl_OY: ' + _default_or_num(d.scalar('C_HWkDfl_OY')))
+    w('  C_HWkDfl_x: ' + _default_or_num(d.scalar('C_HWkDfl_x')))
+    w('  C_HWkDfl_xY: ' + _default_or_num(d.scalar('C_HWkDfl_xY')))
+    w('  C_NearWake: ' + _default_or_num(d.scalar('C_NearWake')))
+    w('  k_vAmb: ' + _fastfarm_aryd(d.find('k_vAmb')))
+    w('  k_vShr: ' + _fastfarm_aryd(d.find('k_vShr')))
+    w('  Mod_WakeDiam: ' + _default_or_num(d.scalar('Mod_WakeDiam')))
+    w('  C_WakeDiam: ' + _default_or_num(d.scalar('C_WakeDiam')))
+    w('  Mod_Meander: ' + _default_or_num(d.scalar('Mod_Meander')))
+    w('  C_Meander: ' + _default_or_num(d.scalar('C_Meander')))
+    w('')
+
+    #-------------------- curled_wake_parameters ----------------------------------------
+    w('curled_wake_parameters:')
+    w('  Swirl: ' + _default_or_bool(d.scalar('Swirl')))
+    w('  k_VortexDecay: ' + _default_or_num(d.scalar('k_VortexDecay')))
+    w('  NumVortices: ' + _default_or_num(d.scalar('NumVortices')))
+    w('  sigma_D: ' + _default_or_num(d.scalar('sigma_D')))
+    w('  FilterInit: ' + _default_or_num(d.scalar('FilterInit')))
+    w('  k_vCurl: ' + _default_or_num(d.scalar('k_vCurl')))
+    w('  Mod_Projection: ' + _default_or_num(d.scalar('Mod_Projection')))
+    w('')
+
+    #-------------------- wake_added_turbulence -----------------------------------------
+    w('wake_added_turbulence:')
+    w('  WAT: ' + d.scalar('WAT'))
+    w('  WAT_BoxFile: ' + _as_str(d.scalar('WAT_BoxFile')))
+    w('  WAT_NxNyNz: [' + _list_join(d.find('WAT_NxNyNz')) + ']')
+    w('  WAT_DxDyDz: [' + _list_join(d.find('WAT_DxDyDz')) + ']')
+    w('  WAT_ScaleBox: ' + _default_or_bool(d.scalar('WAT_ScaleBox')))
+    w('  WAT_k_Def: ' + _fastfarm_aryd(d.find('WAT_k_Def')))
+    w('  WAT_k_Grad: ' + _fastfarm_aryd(d.find('WAT_k_Grad')))
+    w('')
+
+    #-------------------- visualization --------------------------------------------------
+    w('visualization:')
+    w('  WrDisWind: ' + _as_bool(d.scalar('WrDisWind')))
+    n_xy = int(d.scalar('NOutDisWindXY'))
+    w('  OutDisWindZ: [' + _list_join(d.find('OutDisWindZ')[:n_xy]) + ']')
+    n_yz = int(d.scalar('NOutDisWindYZ'))
+    w('  OutDisWindX: [' + _list_join(d.find('OutDisWindX')[:n_yz]) + ']')
+    n_xz = int(d.scalar('NOutDisWindXZ'))
+    w('  OutDisWindY: [' + _list_join(d.find('OutDisWindY')[:n_xz]) + ']')
+    w('  WrDisDT: ' + _default_or_num(d.scalar('WrDisDT')))
+    w('')
+
+    #-------------------- output ------------------------------------------------------
+    w('output:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  ChkptTime: ' + d.scalar('ChkptTime'))
+    w('  TStart: ' + d.scalar('TStart'))
+    w('  OutFileFmt: ' + d.scalar('OutFileFmt'))
+    w('  TabDelim: ' + _as_bool(d.scalar('TabDelim')))
+    w('  OutFmt: ' + _as_str(d.scalar('OutFmt')))
+    w('  OutAllPlanes: ' + _default_or_bool(d.scalar('OutAllPlanes')))
+
+    n_outradii = int(d.scalar('NOutRadii'))
+    w('  OutRadii: [' + _list_join(d.find('OutRadii')[:n_outradii]) + ']')
+    n_outdist = int(d.scalar('NOutDist'))
+    w('  OutDist: [' + _list_join(d.find('OutDist')[:n_outdist]) + ']')
+    n_windvel = int(d.scalar('NWindVel'))
+    w('  WindVelX: [' + _list_join(d.find('WindVelX')[:n_windvel]) + ']')
+    w('  WindVelY: [' + _list_join(d.find('WindVelY')[:n_windvel]) + ']')
+    w('  WindVelZ: [' + _list_join(d.find('WindVelZ')[:n_windvel]) + ']')
+    w('')
+
+    #-------------------- output_channels -----------------------------------------------
+    w('output_channels:')
+    channels = _fastfarm_outlist(d)
+    w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def _fastfarm_outlist(d, keyword='OutList'):
+    """FAST.Farm's OutList (Farm_ReadPrimaryFile -> NWTC_IO's ReadOutputList ->
+    GetWords) treats every comma, semicolon, space, tab, single-quote, AND
+    double-quote as a pure word delimiter (GetWords is called with its default
+    IgnoreQuotes=True) -- unlike the generic _TextDeck.outlist() helper used by other
+    modules, which only strips a *matched pair* of quotes and otherwise keeps a lone/
+    malformed quote character as part of the token. TSinflow_curl.fstf's OutList has
+    a few entries with exactly that malformed shape (e.g. 'WkAxsXT1D1" ' -- a trailing
+    quote with no matching leading quote); GetWords still correctly resolves that to
+    the channel name "WkAxsXT1D1" (the quote contributes nothing to the word), so this
+    local variant reproduces GetWords' delimiter set exactly rather than reusing
+    outlist()'s pair-matching regex."""
+    d.find(keyword)
+    channels = []
+    for i in range(d.cursor, len(d.lines)):
+        stripped = d.lines[i].strip()
+        if stripped[:3].upper() == 'END':
+            d.cursor = i + 1
+            return channels
+        for tok in re.split(r'[\s,;\'"]+', stripped):
+            if tok:
+                channels.append(tok)
+    d.cursor = len(d.lines)
+    return channels
+
+
+def _fastfarm_aryd(toks):
+    """k_vAmb/k_vShr/WAT_k_Def/WAT_k_Grad: a 5-entry flow sequence, or the literal
+    scalar "default" (ReadAryWDefault's "DEFAULT" in the text path -- a single token
+    rather than 5, so it cannot go through _row_map/_list_join directly).
+    FAST_Farm_Yaml.f90's GetR8AryWDefault helper recognizes the scalar "default" the
+    same way YamlGet's own Default= does for plain scalars."""
+    if len(toks) == 1 and _unquote(toks[0]).strip().lower() == 'default':
+        return 'default'
+    return '[' + _list_join(toks) + ']'

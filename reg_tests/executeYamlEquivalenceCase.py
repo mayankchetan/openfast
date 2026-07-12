@@ -68,6 +68,24 @@
                         transform input_files:InflowFile / input_files:AeroFile /
                         input_files:EDFile / input_files:SeaStFile / input_files:HydroFile /
                         input_files:SubFile.
+      fastfarm        - FAST.Farm glue-code (.fstf) case (class-B/sequential-reader
+                        primary, paths-only turbines table -- Wave 5). Converts the
+                        .fstf primary to YAML (convert_fastfarm) and compares
+                        FAST.Farm.out plus every FAST.Farm.T<n>.outb (equal count both
+                        sides, mirroring compareAerodynOutputs' multi-file precedent).
+                        CRITICAL: the equivalence vehicle TSinflow_curl references
+                        "../TSinflow/90m_08mps.bts" (a 42MB committed input in the
+                        sibling TSinflow case dir) via its IW.dat InflowWind file; this
+                        mode stages that sibling ../TSinflow dir, plus the 5MW_Baseline
+                        and WAT_MannBoxDB common dirs, directly under buildDirectory
+                        (once, shared -- same depth/convention as
+                        executeFASTFarmRegressionCase.py:102-125) so both the text and
+                        yaml run parents (which sit at that same depth) resolve
+                        "../TSinflow/..." identically; without this staging FAST.Farm
+                        aborts "Cannot find TurbSim full-field wind input file" (the
+                        normal ff_regression ctest only works because TSinflow is a
+                        separately-registered case run first -- this harness's own
+                        scratch dirs get no such help).
 
     Usage: `executeYamlEquivalenceCase.py -h`
 """
@@ -108,7 +126,7 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "unsteadyaero", "moordyn", "beamdyn", "subdyn", "openfast"):
+if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "unsteadyaero", "moordyn", "beamdyn", "subdyn", "openfast", "fastfarm"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
 
 
@@ -1239,3 +1257,87 @@ elif module == "moordyn":
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
 
         compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))
+
+elif module == "fastfarm":
+    #### fastfarm (glue-code .fstf) case ##############################################
+    # Class-B/sequential-reader primary, paths-only turbines table (Wave 5). Unlike the
+    # standalone-module drivers above, FAST.Farm cases reference several *sibling*
+    # directories by relative path: 5MW_Baseline (shared AeroDyn/ElastoDyn data),
+    # WAT_MannBoxDB (the predefined wake-added-turbulence box library), and -- for the
+    # TSinflow_curl equivalence vehicle specifically -- the separately-registered
+    # TSinflow case dir itself (its IW.dat's FileName_BTS points at
+    # "../TSinflow/90m_08mps.bts", a 42MB committed TurbSim file). See this module's
+    # docstring above for why the sibling TSinflow staging is required here (the normal
+    # ff_regression ctest gets it for free; this harness's own scratch dirs do not).
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "glue-codes", "fast-farm")
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+
+    PRIMARY = "FAST.Farm.fstf"
+    OUTPUT = "FAST.Farm.out"
+    CASE_EXCLUDE_EXT = ['.ech', '.yaml', '.sum', '.log', '.out', '.outb']
+
+    # shared common dirs (5MW_Baseline, WAT_MannBoxDB) plus the sibling TSinflow case
+    # dir the TSinflow_curl vehicle's IW.dat climbs out to -- staged once, directly
+    # under buildDirectory (the same depth ff_regression/executeFASTFarmRegressionCase.py
+    # itself uses for 5MW_Baseline/WAT_MannBoxDB), so that "../<name>/..." resolves
+    # identically from every "<case>_yamleq_<variant>" dir created below (those variant
+    # dirs sit directly under buildDirectory too -- one "../" up reaches buildDirectory).
+    SIBLING_DIRS = ("5MW_Baseline", "WAT_MannBoxDB", "TSinflow")
+    for name in SIBLING_DIRS:
+        dst = os.path.join(buildDirectory, name)
+        src = os.path.join(moduleDirectory, name)
+        if os.path.isdir(src) and not os.path.isdir(dst):
+            rtl.copyTree(src, dst, excludeExt=CASE_EXCLUDE_EXT)
+
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit directly under buildDirectory -- the SAME depth as the shared
+        SIBLING_DIRS staged above -- so relative paths like "../TSinflow/..." and
+        "../5MW_Baseline/..." resolve."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        rtl.copyTree(inputsDirectory, d, excludeExt=CASE_EXCLUDE_EXT)
+        return d
+
+    def compareFastFarmOutputs(dir1, dir2):
+        """FAST.Farm writes one text FAST.Farm.out (the farm-level/array-effects output)
+        plus one binary FAST.Farm.T<n>.outb per turbine (each turbine's own OpenFAST
+        instance); compare the .out plus every matched .outb, requiring the same
+        per-turbine file count on both sides (mirrors compareAerodynOutputs' multi-file
+        precedent above)."""
+        compareBitIdentical(os.path.join(dir1, OUTPUT), os.path.join(dir2, OUTPUT))
+        files1 = sorted(glob.glob(os.path.join(dir1, "FAST.Farm.T*.outb")))
+        files2 = sorted(glob.glob(os.path.join(dir2, "FAST.Farm.T*.outb")))
+        if not files1 or not files2:
+            rtl.exitWithError("No 'FAST.Farm.T*.outb' output found in '{}' and/or '{}'.".format(dir1, dir2))
+        if len(files1) != len(files2):
+            rtl.exitWithError("Per-turbine output file count differs: {} ({}) vs {} ({}).".format(
+                dir1, len(files1), dir2, len(files2)))
+        for f1, f2 in zip(files1, files2):
+            compareBitIdentical(f1, f2)
+
+    ### text variant (baseline)
+    textDir = stage("text")
+
+    ### yaml variant: convert the primary (.fstf) file to YAML; turbine WT_FASTInFile
+    ### entries stay verbatim text (or already-yaml) paths -- paths-only turbines is
+    ### this task's fixed scope, repointing nothing external
+    yamlDir = stage("yaml")
+    yamlPrimary = "FAST.Farm.yaml"
+    yamlText = yamlDeckConverter.convert_fastfarm(os.path.join(yamlDir, PRIMARY))
+    with open(os.path.join(yamlDir, yamlPrimary), "w") as f:
+        f.write(yamlText)
+    os.remove(os.path.join(yamlDir, PRIMARY))
+
+    ### run both
+    for d, primaryName in ((textDir, PRIMARY), (yamlDir, yamlPrimary)):
+        caseInputFile = os.path.join(d, primaryName)
+        returnCode = openfastDrivers.runOpenfastCase(caseInputFile, executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+
+    ### compare: bit-identical required (FAST.Farm.out AND every FAST.Farm.T<n>.outb)
+    compareFastFarmOutputs(textDir, yamlDir)

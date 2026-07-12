@@ -1246,3 +1246,122 @@ inertial-frame coordinate system.
 .. [2]
    When HAWC format is used (**WindType** = 5), :math:`\_u`,
    :math:`\_v`, :math:`\_w` must be appended to the file names.
+
+.. _FF:Input:YAML:
+
+YAML input file
+----------------
+
+The FAST.Farm primary input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``; the converted form of a ``<base>.fstf`` deck is
+conventionally ``<base>.yaml``); see :ref:`yaml_input` for the conventions
+shared by all OpenFAST YAML input files. Parameters keep their documented
+names, grouped into sections that mirror the text format's banners:
+``simulation_control`` (``Echo``, ``AbortLevel``, ``TMax``, ``Mod_AmbWind``,
+``Mod_WaveField``, ``Mod_SharedMooring``), ``shared_mooring_system``
+(``MD_FileName``, ``DT_Mooring``, ``MooringVis``), ``ambient_wind_vtk``,
+``ambient_wind_inflowwind``, ``ambient_wind_amrex`` (all three ambient-wind
+sections are always required, regardless of which **Mod_AmbWind** is
+selected -- exactly as the text format's fixed section order always
+carries all three), ``turbines`` (see below), ``wake_dynamics``,
+``curled_wake_parameters``, ``wake_added_turbulence``, ``visualization``,
+``output``, and ``output_channels`` (``OutList``). A leading top-level
+``description`` scalar supplies the file's free-text description line
+(optional; defaults to blank).
+
+``NumTurbines`` is not a YAML key: it is the length of the ``turbines``
+sequence. Each entry is a mapping with ``WT_X``, ``WT_Y``, ``WT_Z``, and
+``WT_FASTInFile`` (a path to that turbine's OpenFAST primary input file, in
+text or YAML form -- resolved relative to the FAST.Farm primary file); when
+**Mod_AmbWind** is 2 or 3, each entry additionally requires the six
+high-resolution-grid keys ``X0_High``, ``Y0_High``, ``Z0_High``,
+``dX_High``, ``dY_High``, ``dZ_High``. This is the natural home for YAML
+anchors and merge keys (:ref:`yaml_input`'s "Reuse" section): a wind-farm
+layout is exactly the "define one turbine, copy it with a single change"
+use case, e.g. sharing a common high-resolution-grid spacing across every
+turbine while only the position and ``WT_FASTInFile`` vary::
+
+   turbines:
+     - &grid
+       WT_X: 0.0
+       WT_Y: 0.0
+       WT_Z: 0.0
+       WT_FASTInFile: WT1.fst
+       X0_High: -63.0
+       Y0_High: -63.0
+       Z0_High: 0.0
+       dX_High: 3.0
+       dY_High: 3.0
+       dZ_High: 3.0
+     - <<: *grid                # turbine 2 = turbine 1's high-res grid spacing ...
+       WT_X: 630.0               # ... except its position ...
+       WT_FASTInFile: WT2.fst    # ... and its own OpenFAST primary file
+
+**Inline turbine definitions are out of scope** for this schema:
+``WT_FASTInFile`` is always a path (text ``.fst`` or YAML ``.yaml``, both
+work), never an inline mapping of that turbine's own module inputs.
+
+``k_vAmb``, ``k_vShr``, ``WAT_k_Def``, and ``WAT_k_Grad`` are each a 5-entry
+flow sequence of calibrated parameters (matching the text format's "set of 5
+parameters" rows), or the literal scalar ``default`` in place of the whole
+list (exactly like ``DEFAULT`` in the text format). ``OutRadii``,
+``OutDist``, ``WindVelX``/``WindVelY``/``WindVelZ``, and
+``OutDisWindZ``/``OutDisWindX``/``OutDisWindY`` are plain lists; their
+counted text-format companions (``NOutRadii``, ``NOutDist``, ``NWindVel``,
+``NOutDisWindXY``/``NOutDisWindYZ``/``NOutDisWindXZ``) are not YAML keys --
+each count is the corresponding list's length.
+
+These stay path-valued (second-order rule, never inlined): ``MD_FileName``
+(the farm-level shared-mooring input; a ``.yaml`` MoorDyn file works here
+too), ``WindFilePath``, ``InflowFile``, ``WindDirPrefix``, ``WAT_BoxFile``,
+and each turbine's ``WT_FASTInFile``.
+
+.. code-block:: yaml
+
+   # FAST.Farm primary input file (YAML form)
+   description: "Two turbines, InflowWind ambient wind, curled wake"
+
+   simulation_control:
+     Echo: false
+     AbortLevel: "FATAL"
+     TMax: 120.0
+     Mod_AmbWind: 2
+     Mod_WaveField: 1
+     Mod_SharedMooring: 0
+
+   shared_mooring_system:
+     MD_FileName: ""
+     DT_Mooring: 0.04
+     MooringVis: false
+
+   turbines:
+     - WT_X: 0.0
+       WT_Y: 30.0
+       WT_Z: 0.0
+       WT_FASTInFile: WT1.fst
+       X0_High: -69.49
+       Y0_High: -50.0
+       Z0_High: 5.0
+       dX_High: 10.17
+       dY_High: 10.0
+       dZ_High: 10.0
+
+   wake_dynamics:
+     Mod_Wake: 2
+     RotorDiamRef: 125
+     dr: 5.0
+     NumRadii: 40
+     NumDFull: default
+     NumDBuff: default
+     f_c: 0.02
+     C_HWkDfl_O: default
+     C_HWkDfl_OY: default
+     C_HWkDfl_x: default
+     C_HWkDfl_xY: default
+     C_NearWake: default
+     k_vAmb: default
+     k_vShr: default
+     Mod_WakeDiam: default
+     C_WakeDiam: default
+     Mod_Meander: default
+     C_Meander: default
