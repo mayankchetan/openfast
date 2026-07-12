@@ -10,7 +10,13 @@
 
     Supported modules:
       inflowwind      - standalone InflowWind driver case.
-      aerodisk        - standalone AeroDisk driver case.
+      aerodisk        - standalone AeroDisk driver case. Optional mode "driver"
+                        additionally converts the .dvr driver file itself to YAML
+                        (convert_aerodisk_driver) and runs a full-yaml case (yaml
+                        driver -> yaml primary); omitted (default), only the
+                        primary is converted and the still-text driver is repointed
+                        at it. Later Wave-4 (module-driver) additions reuse this same
+                        "driver" mode convention.
       simple-elastodyn - standalone Simplified ElastoDyn (SED) driver case.
       seastate        - standalone SeaState driver case.
       hydrodyn        - standalone HydroDyn driver case.
@@ -48,7 +54,9 @@ parser.add_argument("executable", metavar="Driver", type=str, nargs=1, help="The
 parser.add_argument("sourceDirectory", metavar="path/to/openfast_repo", type=str, nargs=1, help="The path to the OpenFAST repository.")
 parser.add_argument("buildDirectory", metavar="path/to/openfast_repo/build", type=str, nargs=1, help="The path to the build directory.")
 parser.add_argument("mode", metavar="Mode", type=str, nargs='?', default=None,
-                     help="Required for module 'openfast': per-file | all-yaml | single-file.")
+                     help="Required for module 'openfast': per-file | all-yaml | single-file. "
+                          "Optional for standalone-driver modules (e.g. 'aerodisk'): 'driver' "
+                          "additionally converts the driver file itself to YAML.")
 
 args = parser.parse_args()
 module = args.module[0]
@@ -67,7 +75,13 @@ if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hyd
 
 def compareBitIdentical(textOut, yamlOut):
     """Require bit-identical output between the text and YAML variants; on a mismatch,
-    report the magnitude of the divergence (diagnostic only) before failing."""
+    report the magnitude of the divergence (diagnostic only) before failing.
+
+    Returns (falls through) on success rather than exiting the process -- every
+    module branch below used to call this as its own final statement (where exiting
+    here or falling through and letting the script end were equivalent), but the
+    aerodisk driver-conversion mode runs a second compareBitIdentical after the
+    first, so a hard exit on success would silently skip it."""
     rtl.validateFileOrExit(textOut)
     rtl.validateFileOrExit(yamlOut)
 
@@ -78,7 +92,7 @@ def compareBitIdentical(textOut, yamlOut):
         rtl.exitWithError("Output shapes differ: text {} vs yaml {}.".format(textData.shape, yamlData.shape))
 
     if np.array_equal(textData, yamlData):
-        sys.exit(0)
+        return
 
     # not bit-identical: report the magnitude of the divergence, then fail
     diff = np.abs(textData - yamlData)
@@ -284,6 +298,34 @@ elif module == "aerodisk":
 
     ### compare: bit-identical required
     compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### .dvr itself to YAML (convert_aerodisk_driver) and run a full-yaml case (yaml
+    ### driver -> yaml primary), still checked bit-identical against the same text
+    ### baseline run above. Selection convention every later Wave-4 driver reuses:
+    ### the module's yaml_equiv ctest registration passes "driver" as the (otherwise
+    ### module-'openfast'-only) optional positional `mode` arg; omitting it keeps the
+    ### existing text-driver+yaml-primary behavior above completely unchanged.
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+
+        yamlDvrPrimary = PRIMARY.replace(".inp", ".yaml")
+        yamlDvrPrimaryText = yamlDeckConverter.convert_aerodisk(os.path.join(yamlDvrDir, PRIMARY))
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimary), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, PRIMARY))
+
+        yamlDriverFile = DRIVER.replace(".dvr", ".yaml")
+        yamlDriverText = yamlDeckConverter.convert_aerodisk_driver(os.path.join(yamlDvrDir, DRIVER))
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(os.path.join(yamlDvrDir, DRIVER))
+
+        returnCode = openfastDrivers.runAerodiskDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))
 
 elif module == "simple-elastodyn":
     #### simple-elastodyn (standalone SED driver) case #############################

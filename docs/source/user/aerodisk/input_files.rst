@@ -234,3 +234,64 @@ the ``columns``/``rows`` convention (:ref:`yaml_input`):
 AeroDisk's input file may also be given inline under an OpenFAST primary (.fst)
 file's ``input_files:AeroFile`` (only legal when ``CompAero`` selects AeroDisk;
 see :ref:`yaml_input`).
+
+.. _adsk-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone AeroDisk driver's own input file (normally ``*.dvr``) may also be
+written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the format
+from the file extension, exactly like the primary input file above. Parameters
+keep their documented names, grouped into sections that mirror the text driver
+format's banners: ``general`` (``Echo``), ``primary_file`` (``ADskIptFile``,
+``OutRootName``), ``geometry_environment`` (``AirDens``, ``RotorRad``,
+``RotorHeight``, ``ShftTilt``), and ``case_analysis`` (``TStart``, ``DT``,
+``NumTimeSteps``, and the combined case time/data table). Unlike the AeroDisk
+*primary* file's ``AirDens``/``RotorRad``, the driver's copies of those two
+values (used as fallback defaults when the primary file itself says
+``default``) do not accept the ``default`` keyword; only ``DT`` and
+``NumTimeSteps`` do, falling back to the values derived from the case data
+table.
+
+The case-analysis table (time, wind velocity, rotor speed, pitch, and yaw versus
+time) is written under ``case_analysis:table`` as either:
+
+- ``file``: a path to a plain time-series data file, resolved relative to the
+  YAML driver file's own directory. Every AeroDisk r-test driver case sources
+  its (typically large) time series this way; the referenced file keeps its
+  original text layout (an optional ``#``/``!``/``%``-prefixed comment header,
+  then whitespace-delimited ``Time WndSpeed_X WndSpeed_Y WndSpeed_Z RotSpd
+  Pitch Yaw`` rows) and is never inlined into the YAML document, mirroring the
+  text driver format's own ``@filename`` inclusion convention for this table.
+- ``rows``: a YAML list of block mappings, one per case timestep, each keyed by
+  column name (``Time``, ``WndSpeed_X``, ``WndSpeed_Y``, ``WndSpeed_Z``,
+  ``RotSpd``, ``Pitch``, ``Yaw``) -- for a table given as literal inline data
+  rather than an external file.
+
+Exactly one of ``file``/``rows`` must be present. ``RotSpd`` (rpm), ``Pitch``
+(deg), and ``Yaw`` (deg) are converted to rad/s and radians respectively,
+exactly as in the text driver format.
+
+.. code-block:: yaml
+
+   # AeroDisk driver input file (YAML form)
+   general:
+     Echo: true
+
+   primary_file:
+     ADskIptFile: "adsk_primary.yaml"
+     OutRootName: "adsk_driver"
+
+   geometry_environment:
+     AirDens: 1.225
+     RotorRad: 63.0
+     RotorHeight: 80.0
+     ShftTilt: 0
+
+   case_analysis:
+     TStart: 0.0
+     DT: default
+     NumTimeSteps: 2750
+     table:
+       file: "adsk_TimeseriesInput.csv"

@@ -30,6 +30,7 @@ target_link_libraries(aerodisklib ifwlib nwtclibs)
 add_executable(aerodisk_driver
   src/driver/AeroDisk_Driver_Types.f90
   src/driver/AeroDisk_Driver_Subs.f90
+  src/driver/AeroDisk_Driver_Yaml.f90
   src/driver/AeroDisk_Driver.f90
 )
 target_link_libraries(aerodisk_driver aerodisklib  versioninfolib ${CMAKE_DL_LIBS})

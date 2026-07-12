@@ -281,6 +281,33 @@ function(yaml_equiv_openfast CASENAME MODE EXECUTABLE LABEL)
   set_tests_properties(yaml_equiv_${CASENAME}_${MODE} PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
 endfunction(yaml_equiv_openfast)
 
+# yaml-equivalence, driver-conversion mode: like yaml_equiv, but additionally converts
+# the standalone driver's own input file (.dvr/.inp/...) to YAML and runs a full-yaml
+# case (yaml driver -> yaml primary), bit-identical against the same text baseline.
+# Selection convention (Wave 4, module drivers): reuses executeYamlEquivalenceCase.py's
+# existing (module-'openfast'-only) optional positional MODE arg with the value
+# "driver" -- every later Wave-4 driver's converter (convert_<mod>_driver in
+# yamlDeckConverter.py) and CTestList.cmake registration follows this same
+# yaml_equiv(...) + yaml_equiv_driver(...) pairing (see aerodisk below, the first
+# instance). The test name is suffixed "_driver" so it never collides with the
+# sibling text-driver+yaml-primary case's yaml_equiv_${CASENAME} test.
+function(yaml_equiv_driver MODULE CASENAME EXECUTABLE LABEL)
+  set(TEST_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/executeYamlEquivalenceCase.py")
+  set(SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/..")
+  set(BUILD_DIRECTORY "${CTEST_BINARY_DIR}/modules/${MODULE}")
+  add_test(
+    yaml_equiv_${CASENAME}_driver ${Python_EXECUTABLE}
+       ${TEST_SCRIPT}
+       ${MODULE}
+       ${CASENAME}
+       ${EXECUTABLE}
+       ${SOURCE_DIRECTORY}
+       ${BUILD_DIRECTORY}
+       "driver"
+  )
+  set_tests_properties(yaml_equiv_${CASENAME}_driver PROPERTIES TIMEOUT 5400 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" LABELS "${LABEL}")
+endfunction(yaml_equiv_driver)
+
 # smoke test for the curated hand-written single-file YAML example deck
 # (comments, !include, anchor/alias, inline InflowWind) in reg_tests/yaml-examples/
 function(yaml_example_smoke EXECUTABLE LABEL)
@@ -617,6 +644,9 @@ yaml_equiv("inflowwind" "ifw_nativeBladed" "${CTEST_INFLOWWIND_EXECUTABLE}" "inf
 # require a Bladed DISCON DLL, so neither is a suitable DLL-free target; standalone
 # driver-level coverage (below) is what's available today.
 yaml_equiv("aerodisk" "adsk_timeseries_shutdown" "${CTEST_AERODISK_EXECUTABLE}" "aerodisk;yaml")
+# Wave 4 driver-conversion mode (first instance -- see yaml_equiv_driver's own comment
+# above): also converts adsk_driver.dvr itself to YAML and runs yaml driver -> yaml primary.
+yaml_equiv_driver("aerodisk" "adsk_timeseries_shutdown" "${CTEST_AERODISK_EXECUTABLE}" "aerodisk;yaml")
 
 # NOTE: no yaml_equiv_openfast registration for Simplified ElastoDyn either -- the only
 # two CompElast==3 glue-code cases in r-test (5MW_Land_DLL_WTurb_SED,
