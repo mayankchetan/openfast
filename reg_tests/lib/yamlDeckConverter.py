@@ -15,6 +15,7 @@
         convert_sed_driver(text_path) -> str    (YAML document; SED driver file)
         convert_elastodyn(text_path) -> str     (YAML document)
         convert_seastate(text_path) -> str      (YAML document)
+        convert_seastate_driver(text_path) -> str  (YAML document; SeaState driver file)
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
         convert_stc(text_path) -> str           (YAML document)
         convert_hydrodyn(text_path) -> str      (YAML document)
@@ -1674,6 +1675,68 @@ def convert_seastate(text_path):
     # CHANNELS" section banner, so anchor on the banner text itself
     channels = d.outlist(keyword='OUTPUT CHANNELS')
     w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def convert_seastate_driver(text_path):
+    """Convert a text-format SeaState driver input file (Wave 4, class-B/sequential-
+    reader driver -- unlike aerodisk/sed's class-A FileInfoType/ParseVar drivers, but
+    the YAML schema convention is unaffected: this converter is dependency-free the
+    same way) to its YAML schema.
+
+    Schema mirrors the driver's text reader (SeaState_DriverCode.f90:309-605,
+    ReadDriverInputFile) key-for-key:
+        general:                   Echo
+        environmental_conditions:  Gravity, WtrDens, WtrDpth, MSL2SWL
+        seastate:                  SeaStateInputFile, OutRootName, WrWvKinMod, NSteps, TimeInterval
+        wave_elevation_series:     WaveElevVis
+
+    Every field here is a plain ReadVar read in the text path (no "default" keyword
+    anywhere, unlike the SeaState *primary* file's WtrDens/WtrDpth/MSL2SWL) -- verbatim
+    numeric literals throughout, no _default_or_num. WaveElevVisNx/WaveElevVisNy are
+    declared in the driver's InitInp type but are never read by the text path either
+    (a commented-out FIXME in ReadDriverInputFile) -- not emitted here either.
+
+    SeaStateInputFile is repointed at the YAML primary (any original extension --
+    .dat/.inp/... -- becomes .yaml, matching the executeYamlEquivalenceCase.py seastate
+    block's own unconditional splitext+".yaml" convention for the primary file, since
+    r-test SeaState primary filenames vary per case and are not always ".inp") so a
+    driver-mode yaml-equivalence case (yaml driver -> yaml primary) is fully YAML end
+    to end.
+    """
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# SeaState driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('environmental_conditions:')
+    w('  Gravity: ' + d.scalar('Gravity'))
+    w('  WtrDens: ' + d.scalar('WtrDens'))
+    w('  WtrDpth: ' + d.scalar('WtrDpth'))
+    w('  MSL2SWL: ' + d.scalar('MSL2SWL'))
+    w('')
+
+    w('seastate:')
+    seastate_ipt = _unquote(d.scalar('SeaStateInputFile'))
+    base, ext = os.path.splitext(seastate_ipt)
+    seastate_ipt = base + '.yaml'
+    w('  SeaStateInputFile: ' + _as_str(seastate_ipt))
+    w('  OutRootName: ' + _as_str(d.scalar('OutRootName')))
+    w('  WrWvKinMod: ' + d.scalar('WrWvKinMod'))
+    w('  NSteps: ' + d.scalar('NSteps'))
+    w('  TimeInterval: ' + d.scalar('TimeInterval'))
+    w('')
+
+    w('wave_elevation_series:')
+    w('  WaveElevVis: ' + _as_bool(d.scalar('WaveElevSeriesFlag')))
     w('')
 
     return '\n'.join(out)

@@ -28,7 +28,9 @@ program SeaStateDriver
    use SeaState_Output
    use ModMesh_Types
    use VersionInfo
-   
+   use SeaState_Driver_Yaml
+   use YamlInput, only: IsYamlExt
+
    implicit none
    
    type SeaSt_Drvr_InitInput
@@ -334,10 +336,23 @@ SUBROUTINE ReadDriverInputFile( inputFile, InitInp, ErrStat, ErrMsg )
    
       ! Initialize the echo file unit to -1 which is the default to prevent echoing, we will alter this based on user input
    UnEchoLocal = -1
-   
+
    FileName = TRIM(inputFile)
-   
-   call GetNewUnit( UnIn ) 
+
+      ! YAML-format driver input file (.yaml/.yml): funnel to the dedicated parser and
+      ! return -- there is no passed-file channel for drivers, so the parser reads
+      ! straight from disk and fills the same InitInp fields the text path below does.
+      ! (SeaSt_Drvr_InitInput is a program-local type, so the parser cannot take
+      ! InitInp itself as a dummy argument -- see SeaState_Driver_Yaml.f90's header.)
+   IF ( IsYamlExt( FileName ) ) THEN
+      CALL SeaStDvr_ParseYamlFile( FileName, InitInp%Echo, InitInp%Gravity, InitInp%WtrDens, InitInp%WtrDpth, &
+                                    InitInp%MSL2SWL, InitInp%SeaStateInputFile, InitInp%OutRootName, &
+                                    InitInp%WrWvKinMod, InitInp%NSteps, InitInp%TimeInterval, InitInp%WaveElevVis, &
+                                    ErrStat, ErrMsg )
+      RETURN
+   END IF
+
+   call GetNewUnit( UnIn )
    call OpenFInpFile ( UnIn, FileName, ErrStat, ErrMsg ) 
       if (ErrStat >=AbortErrLev) then
          call WrScr( ErrMsg )

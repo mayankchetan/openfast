@@ -743,3 +743,41 @@ remains a file-path string, resolved relative to the primary input file.
 SeaState's input file may also be given inline under an OpenFAST primary (.fst)
 file's ``input_files:SeaStFile`` (only legal when ``CompSeaSt`` selects SeaState;
 see :ref:`yaml_input`).
+
+.. _seastate-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone SeaState driver's own input file (normally ``*.inp``) may also be
+written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the format from
+the file extension, exactly like the primary input file above. Parameters keep their
+documented names, grouped into sections that mirror the text driver format's banners:
+``general`` (``Echo``), ``environmental_conditions`` (``Gravity``, ``WtrDens``,
+``WtrDpth``, ``MSL2SWL``), ``seastate`` (``SeaStateInputFile``, ``OutRootName``,
+``WrWvKinMod``, ``NSteps``, ``TimeInterval``), and ``wave_elevation_series``
+(``WaveElevVis``). Unlike the SeaState primary file, none of the driver's own fields
+accept the ``default`` keyword -- every value must be given explicitly, exactly as in
+the text driver format.
+
+.. code-block:: yaml
+
+   # SeaState driver input file (YAML form)
+   general:
+     Echo: false
+
+   environmental_conditions:
+     Gravity: 9.80665
+     WtrDens: 1025
+     WtrDpth: 200
+     MSL2SWL: 0
+
+   seastate:
+     SeaStateInputFile: "./NRELOffshrBsline5MW_OC4DeepCwindSemi_SeaState.yaml"
+     OutRootName: "./seastate.SeaSt"
+     WrWvKinMod: 0
+     NSteps: 801
+     TimeInterval: 0.0125
+
+   wave_elevation_series:
+     WaveElevVis: false

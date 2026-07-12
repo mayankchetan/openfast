@@ -21,7 +21,10 @@
                         mode "driver" additionally converts the .dvr driver file
                         itself to YAML (convert_sed_driver), same convention as
                         aerodisk's driver mode above.
-      seastate        - standalone SeaState driver case.
+      seastate        - standalone SeaState driver case (class-B/sequential-reader
+                        driver). Optional mode "driver" additionally converts the
+                        driver file itself to YAML (convert_seastate_driver), same
+                        convention as aerodisk/simple-elastodyn's driver mode above.
       hydrodyn        - standalone HydroDyn driver case.
       aerodyn         - standalone AeroDyn driver case.
       moordyn         - standalone MoorDyn driver case.
@@ -477,6 +480,37 @@ elif module == "seastate":
 
     ### compare: bit-identical required
     compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### driver file itself to YAML (convert_seastate_driver) and run a full-yaml case
+    ### (yaml driver -> yaml primary), still checked bit-identical against the same
+    ### text baseline. Same convention as aerodisk/simple-elastodyn's driver mode
+    ### above; reuses this block's own findPrimaryBaseName helper since SeaState's
+    ### primary filename varies per case (no fixed PRIMARY constant to .replace()).
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+        yamlDvrDriverFile = os.path.join(yamlDvrDir, DRIVER)
+        with open(yamlDvrDriverFile) as f:
+            yamlDvrDriverText = f.read()
+
+        yamlDvrPrimaryBase = findPrimaryBaseName(yamlDvrDriverText, yamlDvrDriverFile)
+        yamlDvrPrimaryYaml = os.path.splitext(yamlDvrPrimaryBase)[0] + ".yaml"
+        yamlDvrPrimaryText = yamlDeckConverter.convert_seastate(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimaryYaml), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+
+        yamlDriverFile = DRIVER.replace(".inp", ".yaml")
+        yamlDriverText = yamlDeckConverter.convert_seastate_driver(yamlDvrDriverFile)
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(yamlDvrDriverFile)
+
+        returnCode = openfastDrivers.runSeaStateDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))
 
 elif module == "hydrodyn":
     #### hydrodyn (standalone driver) case ###########################################

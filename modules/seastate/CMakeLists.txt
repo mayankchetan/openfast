@@ -68,7 +68,8 @@ endif()
 
 
 # Driver
-add_executable(seastate_driver 
+add_executable(seastate_driver
+  src/SeaState_Driver_Yaml.f90
   src/SeaState_DriverCode.f90
 )
 target_link_libraries(seastate_driver seastlib)

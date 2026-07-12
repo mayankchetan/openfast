@@ -667,6 +667,11 @@ yaml_equiv_driver("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABL
 # WaveMod/constrained-wave code paths while staying cheap (short NSteps/TimeInterval).
 yaml_equiv("seastate" "seastate_1"    "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 yaml_equiv("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
+# Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above): also
+# converts seastate_driver.inp itself to YAML (class-B/sequential-reader driver) and
+# runs yaml driver -> yaml primary.
+yaml_equiv_driver("seastate" "seastate_1"    "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
+yaml_equiv_driver("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 
 # AWT_YFix_WSt: CompServo=1 with no DISCON DLL (all ServoDyn control modes 0), so its
 # all-yaml/single-file modes exercise ServoDyn YAML conversion and the inline ServoFile
