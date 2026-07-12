@@ -3458,6 +3458,100 @@ def convert_moordyn(text_path):
     return '\n'.join(out)
 
 
+def convert_moordyn_driver(text_path):
+    """Convert a text-format MoorDyn driver input file (Wave 4, class-B/sequential-
+    reader driver -- follows the seastate/subdyn convention) to its YAML schema
+    (modules/moordyn/src/MoorDyn_Driver_Yaml.f90 is the source of truth).
+
+    Schema mirrors the driver's text reader (MoorDyn_Driver.f90:755-841,
+    ReadDriverInputFile) key-for-key:
+        environmental_conditions:  Gravity, rhoW, WtrDpth
+        moordyn:                   MDInputFile, OutRootName, TMax, dtC
+        inputs:                    InputsMod, InputsFile
+        farm:                      NumTurbines, SeaStateFile (optional, default "" --
+                                    a modern-format concession, no legacy warning),
+                                    initial_positions (list of row mappings keyed by
+                                    the text table's own column labels: ref_X, ref_Y,
+                                    surge_init, sway_init, heave_init, roll_init,
+                                    pitch_init, yaw_init). Its length must be exactly
+                                    MAX(1, NumTurbines) rows, mirroring the text
+                                    path's `do J=1,MAX(1,InitInp%FarmSize)` loop.
+
+    Unlike SeaState/SubDyn's drivers, MoorDyn's driver never reads an Echo flag at all
+    ("echo is no longer used by MD", MoorDyn_Driver.f90:138), so there is no
+    general:Echo key here.
+
+    MDInputFile/OutRootName/InputsFile stay path-valued (second-order rule;
+    MDInputFile is NOT repointed at a .yaml sibling here -- that repointing, when
+    needed, is done by the caller after this converter returns, mirroring the
+    seastate/subdyn driver-mode harness's own convention). SeaStateFile, when present
+    in the text file, is likewise emitted verbatim as a path; when absent the text
+    reader's own '---' sentinel is detected here and the key is omitted (Default=''
+    in MoorDyn_Driver_Yaml.f90 supplies the same empty value on read-back)."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# MoorDyn driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('environmental_conditions:')
+    w('  Gravity: ' + d.scalar('Gravity'))
+    w('  rhoW: ' + d.scalar('rhoW'))
+    w('  WtrDpth: ' + d.scalar('WtrDpth'))
+    w('')
+
+    w('moordyn:')
+    w('  MDInputFile: ' + _as_str(d.scalar('MDInputFile')))
+    w('  OutRootName: ' + _as_str(d.scalar('OutRootName')))
+    w('  TMax: ' + d.scalar('TMax'))
+    w('  dtC: ' + d.scalar('dtC'))
+    w('')
+
+    w('inputs:')
+    w('  InputsMod: ' + d.scalar('InputsMode'))
+    w('  InputsFile: ' + _as_str(d.scalar('InputsFile')))
+    w('')
+
+    n_turbines = int(d.scalar('NumTurbines'))
+
+    # Peek the next significant line (MoorDyn_Driver.f90:802-810): if it is the
+    # "---- Initial Positions ----" banner, no SeaStateFile was given (the text
+    # reader's ReadVar consumes -- and discards -- that banner line as if it were the
+    # SeaStateFile value); otherwise it is the SeaStateFile filename, and one further
+    # (banner) line follows before the initial-positions table's two header lines.
+    peek_idx = d.cursor
+    while peek_idx < len(d.lines) and _is_comment_or_blank(d.lines[peek_idx]):
+        peek_idx += 1
+    peek_text = _strip_inline_comment(d.lines[peek_idx]).strip()
+    if '---' in peek_text:
+        sea_state_file = None
+        d.cursor = peek_idx + 1   # consume the banner line, mirroring the text reader
+        header_skip = 2           # just the table's own 2 header lines remain
+    else:
+        sea_state_file = d.scalar('SeaStateFile')
+        header_skip = 3           # 1 extra banner line + the table's own 2 header lines
+
+    w('farm:')
+    w('  NumTurbines: ' + str(n_turbines))
+    if sea_state_file is not None:
+        w('  SeaStateFile: ' + _as_str(sea_state_file))
+
+    n_rows = max(1, n_turbines)
+    rows = d.table_rows(n_rows, skip=header_skip)
+    POS_KEYS = ('ref_X', 'ref_Y', 'surge_init', 'sway_init', 'heave_init', 'roll_init', 'pitch_init', 'yaw_init')
+    w('  initial_positions:')
+    for raw in rows:
+        toks = _row_tokens(raw)
+        if len(toks) != 8:
+            raise ValueError('convert_moordyn_driver: initial-positions row "{}" in {} has {} value(s); expected 8'.format(
+                raw, text_path, len(toks)))
+        w(_row_map(POS_KEYS, toks))
+    w('')
+
+    return '\n'.join(out)
+
+
 #---------------------- single-file mode: inline relative-path rewrite ----------------
 #
 # Known converter caveat (found in 2.1): a module's own relative paths are always

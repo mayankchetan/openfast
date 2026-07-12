@@ -795,6 +795,14 @@ yaml_equiv("aerodyn" "ad_BAR_OLAF"      "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;y
 yaml_equiv("moordyn" "md_BodiesAndRods" "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 yaml_equiv("moordyn" "md_5MW_OC4Semi"   "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 yaml_equiv("moordyn" "md_lineFail"      "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
+
+# MoorDyn standalone-driver YAML input (Wave 4, task 4.4b): md_5MW_OC4Semi exercises
+# InputsMod=1 (a real prescribed-platform-motion InputsFile, kept as a path) with the
+# single-row (NumTurbines=0) initial-positions table; md_waterkin2 additionally
+# exercises the optional farm:SeaStateFile branch (a SeaState input file referenced
+# from the driver).
+yaml_equiv_driver("moordyn" "md_5MW_OC4Semi" "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
+yaml_equiv_driver("moordyn" "md_waterkin2"   "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 yaml_equiv("moordyn" "md_VIV"           "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;yaml")
 
 # NOTE: no yaml_equiv registration for FEAMooring (CompMooring=2). Its YAML support is

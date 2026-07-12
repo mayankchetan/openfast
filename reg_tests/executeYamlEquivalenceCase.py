@@ -1056,3 +1056,36 @@ elif module == "moordyn":
 
     ### compare: bit-identical required
     compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### driver file itself to YAML (convert_moordyn_driver) and run a full-yaml case
+    ### (yaml driver -> yaml primary), still checked bit-identical against the same
+    ### text baseline. Same convention as seastate/subdyn's driver mode above.
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+        yamlDvrDriverFile = os.path.join(yamlDvrDir, DRIVER)
+        with open(yamlDvrDriverFile) as f:
+            yamlDvrDriverText = f.read()
+
+        yamlDvrPrimaryBase = findPrimaryBaseName(yamlDvrDriverText, yamlDvrDriverFile)
+        yamlDvrPrimaryYaml = os.path.splitext(yamlDvrPrimaryBase)[0] + ".yaml"
+        yamlDvrPrimaryText = yamlDeckConverter.convert_moordyn(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimaryYaml), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+
+        yamlDriverFile = DRIVER.replace(".inp", ".yaml")
+        yamlDriverText = yamlDeckConverter.convert_moordyn_driver(yamlDvrDriverFile)
+        # repoint the converted driver at the converted primary's .yaml sibling
+        if yamlDvrPrimaryBase not in yamlDriverText:
+            rtl.exitWithError("Converted driver {} does not reference {}.".format(yamlDvrDriverFile, yamlDvrPrimaryBase))
+        yamlDriverText = yamlDriverText.replace(yamlDvrPrimaryBase, yamlDvrPrimaryYaml)
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(yamlDvrDriverFile)
+
+        returnCode = openfastDrivers.runMoordynDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))

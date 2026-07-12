@@ -32,7 +32,8 @@ add_library(moordynlib STATIC
 target_link_libraries(moordynlib seastlib nwtclibs)
 
 # Driver
-add_executable(moordyn_driver 
+add_executable(moordyn_driver
+  src/MoorDyn_Driver_Yaml.f90
   src/MoorDyn_Driver.f90
 )
 target_link_libraries(moordyn_driver moordynlib versioninfolib)

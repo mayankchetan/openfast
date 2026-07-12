@@ -24,8 +24,10 @@ PROGRAM MoorDyn_Driver
    USE MoorDyn
    USE SeaState_Types
    USE SeaState
-   USE NWTC_Library 
+   USE NWTC_Library
    USE VersionInfo
+   USE MoorDyn_Driver_Yaml, only: MDDvr_ParseYamlFile
+   USE YamlInput, only: IsYamlExt
 
    IMPLICIT NONE 
 
@@ -767,8 +769,22 @@ CONTAINS
       UnIn  =-1
    
       FileName = TRIM(inputFile)
-   
-      CALL GetNewUnit( UnIn )   
+
+      ! YAML-format driver input file (.yaml/.yml): funnel to the dedicated parser and
+      ! return -- there is no passed-file channel for drivers, so the parser reads
+      ! straight from disk and fills the same InitInp fields the text path below does.
+      ! (MD_Drvr_InitInput is a program-local type, so the parser cannot take InitInp
+      ! itself as a dummy argument -- see MoorDyn_Driver_Yaml.f90's header.)
+      IF ( IsYamlExt( FileName ) ) THEN
+         CALL MDDvr_ParseYamlFile( FileName, InitInp%Gravity, InitInp%rhoW, InitInp%WtrDepth, &
+                                    InitInp%MDInputFile, InitInp%OutRootName, InitInp%TMax, InitInp%dtC, &
+                                    InitInp%InputsMod, InitInp%InputsFile, InitInp%FarmSize, &
+                                    InitInp%SeaStateInputFile, InitInp%FarmPositions, ErrStat2, ErrMsg2 )
+         call AbortIfFailed()
+         RETURN
+      END IF
+
+      CALL GetNewUnit( UnIn )
       CALL OpenFInpFile( UnIn, FileName, ErrStat2, ErrMsg2);
       call AbortIfFailed()
    

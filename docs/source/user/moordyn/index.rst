@@ -114,3 +114,63 @@ MoorDyn's input may also be given inline under an OpenFAST primary (.fst)
 file's ``input_files:MooringFile`` (only legal when ``CompMooring`` selects
 MoorDyn; see :ref:`yaml_input`). Sub-file paths written inside an inline
 section resolve relative to the deck file.
+
+.. _moordyn-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone MoorDyn driver's own input file (normally ``*.inp``) may also
+be written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the
+format from the file extension, exactly like the primary input file above.
+Parameters keep their documented names, grouped into sections that mirror the
+text driver format's banners: ``environmental_conditions`` (``Gravity``,
+``rhoW``, ``WtrDpth``), ``moordyn`` (``MDInputFile``, ``OutRootName``,
+``TMax``, ``dtC``), ``inputs`` (``InputsMod``, ``InputsFile``), and ``farm``
+(``NumTurbines``, ``SeaStateFile``, ``initial_positions``). Unlike the primary
+input file and the other Wave-4 module drivers, the MoorDyn driver never reads
+an ``Echo`` flag at all, so there is no ``general`` section here.
+
+``farm:initial_positions`` is a list of row mappings, one per turbine, giving
+each turbine's ``ref_X``, ``ref_Y``, ``surge_init``, ``sway_init``,
+``heave_init``, ``roll_init``, ``pitch_init``, and ``yaw_init`` -- the same
+eight columns the text format's table carries. Its length must be exactly
+``MAX(1, NumTurbines)``: when ``NumTurbines`` is 0 (normal, single-turbine
+OpenFAST mode, as opposed to FAST.Farm mode) the list still carries exactly
+one row. ``farm:SeaStateFile`` is optional (omit it, or leave it out
+entirely, when MoorDyn's driver should not initialize SeaState) -- the same
+backwards-compatible behavior as the text format's own missing-line
+convention.
+
+``MDInputFile``, ``OutRootName``, ``InputsFile``, and ``SeaStateFile`` all
+remain file-path strings, resolved relative to the driver input file.
+
+.. code-block:: yaml
+
+   # MoorDyn driver input file (YAML form)
+   environmental_conditions:
+     Gravity: 9.80665
+     rhoW: 1025.0
+     WtrDpth: 200.0
+
+   moordyn:
+     MDInputFile: "moordyn.yaml"
+     OutRootName: "driver"
+     TMax: 60
+     dtC: 0.0125
+
+   inputs:
+     InputsMod: 1
+     InputsFile: "ptfm_motion.dat"
+
+   farm:
+     NumTurbines: 0
+     initial_positions:
+       - ref_X: 0
+         ref_Y: 0
+         surge_init: 5
+         sway_init: 0
+         heave_init: 0
+         roll_init: 0
+         pitch_init: 1.9
+         yaw_init: 0
