@@ -787,3 +787,82 @@ Motion file input (``SimMod=3``, ``MotionMod=2``) (note in this dummy exmaple ve
     1.0        , 2     , 2     , 2        , 0        , 0        , 0           , 0           , 0           , 0
     5.0        , 2     , 2     , 2        , 0        , 0        , 0           , 0           , 0           , 0
     10.0       , 1     , 1     , 1        , 0        , 0        , 0           , 0           , 0           , 0
+
+
+.. _ua-driver-yaml-input:
+
+YAML driver input file
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The standalone UnsteadyAero driver's own input file (normally ``*.dvr``) may
+also be written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects
+the format from the file extension. Unlike most other OpenFAST module
+drivers, this driver file *is* the top-level input -- there is no separate
+primary file it points at.
+
+Parameters keep their documented names above, grouped into sections that
+mirror the text driver format's banners: ``general`` (``Echo``),
+``environmental_conditions`` (``FldDens``, ``KinVisc``, ``SpdSound``),
+``unsteady_aero`` (``UAMod``, ``Flookup``), ``airfoil_properties``
+(``AirFoil``, ``Chord``, ``Vec_AQ``, ``Vec_AT``, ``UseCm``),
+``simulation_control`` (``SimMod``), and ``output_control`` (``SumPrint``,
+``WrAFITables``).
+
+``simulation_control:SimMod`` selects which additional section is present;
+only that section's keys should be given -- the other simulation model's keys
+are not read and should be omitted:
+
+- ``SimMod: 1`` (reduced-frequency / periodic-motion model) -- a
+  ``reduced_frequency`` section with ``InflowVel``, ``NCycles``,
+  ``StepsPerCycle``, ``Frequency``, ``Amplitude``, ``Mean``, ``Phase``.
+- ``SimMod: 3`` (aeroelastic model) -- an ``aeroelastic`` section with
+  ``TMax``, ``DT``, ``ActiveDOF`` (list of 3 booleans), ``InitPos``,
+  ``InitVel`` (lists of 3), ``GFScaling``, ``MassMatrix``, ``DampMatrix``,
+  ``StifMatrix`` (each a 3x3 matrix, one flow-sequence row per line),
+  ``Twist``, ``InflowMod`` (plus ``Inflow`` when constant, or
+  ``InflowTSFile`` when time-series), and ``MotionMod`` (plus
+  ``MotionTSFile`` only when prescribed, i.e. ``MotionMod: 2`` -- the
+  dynamic case, ``MotionMod: 1``, needs no extra key).
+- ``SimMod: 2`` (prescribed-aero time series) does not yet have a YAML
+  schema; use the text (``.dvr``) driver format for that simulation model.
+
+``AeroTSFile``, ``InflowTSFile``, and ``MotionTSFile`` stay path-valued --
+they are never inlined into the YAML document.
+
+.. code-block:: yaml
+
+   # UnsteadyAero driver input file (YAML form)
+   general:
+     Echo: false
+
+   environmental_conditions:
+     FldDens: 1.225
+     KinVisc: 1.464e-05
+     SpdSound: 340.29
+
+   unsteady_aero:
+     UAMod: 2
+     Flookup: true
+
+   airfoil_properties:
+     AirFoil: "DU21_A17.dat"
+     Chord: 3.5
+     Vec_AQ: [0, -0.25]
+     Vec_AT: [0, 0.25]
+     UseCm: true
+
+   simulation_control:
+     SimMod: 1
+
+   reduced_frequency:
+     InflowVel: 40.0
+     NCycles: 1
+     StepsPerCycle: 60
+     Frequency: 1
+     Amplitude: 2
+     Mean: 7.5
+     Phase: 0
+
+   output_control:
+     SumPrint: true
+     WrAFITables: true

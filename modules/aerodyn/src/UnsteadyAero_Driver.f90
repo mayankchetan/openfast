@@ -27,6 +27,8 @@ program UnsteadyAero_Driver
    use UnsteadyAero_Types
    use UnsteadyAero
    use UA_Dvr_Subs
+   use UA_Driver_Yaml, only: UADvr_ParseYamlFile
+   use YamlInput, only: IsYamlExt
    use VersionInfo
 
    use LinDyn
@@ -69,7 +71,11 @@ program UnsteadyAero_Driver
       call NormStop()
    endif
    call get_command_argument(1, dvrFilename)
-   call ReadDriverInputFile( dvrFilename, dvr%p, errStat, errMsg ); call checkError()
+   if ( IsYamlExt( dvrFilename ) ) then      ! YAML-format driver input file (.yaml/.yml)
+      call UADvr_ParseYamlFile( dvrFilename, dvr%p, errStat, errMsg ); call checkError()
+   else                                       ! legacy text-format driver input file (.dvr)
+      call ReadDriverInputFile( dvrFilename, dvr%p, errStat, errMsg ); call checkError()
+   end if
 
    ! --- Driver Parameters
    call Dvr_SetParameters(dvr%p, errStat, errMsg); call checkError()

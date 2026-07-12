@@ -40,6 +40,16 @@
                         (convert_aerodyn_driver) and runs a full-yaml case (yaml driver
                         -> yaml primary), same convention as the other Wave-4 drivers'
                         driver mode above.
+      unsteadyaero    - standalone UnsteadyAero (UA) driver case (class-A/FileInfoType-
+                        ParseVar driver, from-scratch: the UA driver file IS the
+                        top-level input, no separate primary). Requires mode "driver"
+                        (the only mode this module supports -- there is no
+                        convert_unsteadyaero() primary to fall back to): converts the
+                        driver file itself to YAML (convert_unsteadyaero_driver) and
+                        runs a full-yaml case, bit-identical against the text baseline.
+                        r-test driver filenames do not follow "<case>.dvr" (ua_redfreq
+                        uses UA2.dvr/UA3.dvr; ua_elast uses UA4.dvr), so the actual
+                        filename is resolved from an explicit case->file table.
       moordyn         - standalone MoorDyn driver case.
       beamdyn         - standalone BeamDyn driver case (class-B/sequential-reader
                         driver, with a multi-point-loads table). Optional mode
@@ -98,7 +108,7 @@ mode = args.mode
 rtl.validateExeOrExit(executable)
 rtl.validateDirOrExit(sourceDirectory)
 
-if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "moordyn", "beamdyn", "subdyn", "openfast"):
+if module not in ("inflowwind", "aerodisk", "simple-elastodyn", "seastate", "hydrodyn", "aerodyn", "unsteadyaero", "moordyn", "beamdyn", "subdyn", "openfast"):
     rtl.exitWithError("executeYamlEquivalenceCase.py: unsupported module '{}'".format(module))
 
 
@@ -1053,6 +1063,83 @@ elif module == "aerodyn":
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
 
         compareAerodynOutputs(textDir, yamlDvrDir)
+
+elif module == "unsteadyaero":
+    #### unsteadyaero (standalone UA driver) case ####################################
+    # Unlike every other Wave-4 module driver, the UA driver file IS the top-level
+    # input (UA has no separate "primary" file the driver points at) -- so there is no
+    # convert_unsteadyaero() to call and no text-driver+yaml-primary default mode; this
+    # block always converts the driver file itself, i.e. it behaves as if mode=="driver"
+    # were the only supported mode (CTestList.cmake's yaml_equiv_driver(...) is the only
+    # registration used for this module).
+    moduleDirectory = os.path.join(sourceDirectory, "reg_tests", "r-test", "modules", module)
+    inputsDirectory = os.path.join(moduleDirectory, caseName)
+    if not os.path.isdir(inputsDirectory):
+        rtl.exitWithError("The test data inputs directory, {}, does not exist.".format(inputsDirectory))
+
+    if mode != "driver":
+        rtl.exitWithError("executeYamlEquivalenceCase.py: module 'unsteadyaero' requires mode 'driver' "
+                           "(the UA driver file is the top-level input here; there is no separate "
+                           "primary to convert without it).")
+
+    # UA r-test driver files do NOT follow the "<case>.dvr" convention (unlike every other
+    # Wave-4 module): ua_redfreq's directory holds two driver files (UA2.dvr, UA3.dvr --
+    # both SimMod=1/"periodic-motion", differing only in UAMod), and ua_elast's holds one
+    # (UA4.dvr, SimMod=3/"aeroelastic"). executeUnsteadyAeroRegressionCase.py (the text-mode
+    # harness) runs every "*.dvr" file in the directory; this bit-identical comparison only
+    # needs one driver file per case to exercise that case's schema branch, so the actual
+    # filename is resolved from this explicit case->file table rather than assumed or
+    # globbed (globbing ua_redfreq's directory would return two files).
+    UA_DRIVER_BY_CASE = {
+        "ua_redfreq": "UA2.dvr",   # SimMod=1: "periodic-motion" (reduced-frequency) branch
+        "ua_elast":   "UA4.dvr",   # SimMod=3: "aeroelastic" branch
+    }
+    if caseName not in UA_DRIVER_BY_CASE:
+        rtl.exitWithError("executeYamlEquivalenceCase.py: module 'unsteadyaero' has no known driver "
+                           "filename for case '{}' (known cases: {}).".format(
+                               caseName, ", ".join(sorted(UA_DRIVER_BY_CASE))))
+    DRIVER = UA_DRIVER_BY_CASE[caseName]
+    OUTPUT = os.path.splitext(DRIVER)[0] + ".outb"
+
+    # *.dat covers the airfoil polar table (DU21_A17.dat) every r-test UA case uses,
+    # staged as-is (second-order rule: never converted). The driver file itself is staged
+    # explicitly below (not globbed with "*.dvr", to avoid also pulling in ua_redfreq's
+    # sibling driver file).
+    INPUT_GLOBS = ("*.dat",)
+
+    def stage(variant):
+        """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
+        Variant dirs sit at the same depth as a normally-staged case so that relative
+        paths in the inputs resolve identically."""
+        d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+        for pattern in INPUT_GLOBS:
+            for f in glob.glob(os.path.join(inputsDirectory, pattern)):
+                shutil.copy(f, os.path.join(d, os.path.basename(f)))
+        shutil.copy(os.path.join(inputsDirectory, DRIVER), os.path.join(d, DRIVER))
+        return d
+
+    ### text variant (baseline)
+    textDir = stage("text")
+
+    ### yaml variant: convert the driver file itself directly (it IS the top-level input)
+    yamlDir = stage("yaml")
+    yamlDriverFile = os.path.splitext(DRIVER)[0] + ".yaml"
+    yamlDriverText = yamlDeckConverter.convert_unsteadyaero_driver(os.path.join(yamlDir, DRIVER))
+    with open(os.path.join(yamlDir, yamlDriverFile), "w") as f:
+        f.write(yamlDriverText)
+    os.remove(os.path.join(yamlDir, DRIVER))
+
+    ### run both
+    for d, driverFileName in ((textDir, DRIVER), (yamlDir, yamlDriverFile)):
+        returnCode = openfastDrivers.runUnsteadyAeroDriverCase(os.path.join(d, driverFileName), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
+
+    ### compare: bit-identical required
+    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
 
 elif module == "moordyn":
     #### moordyn (standalone driver) case ############################################

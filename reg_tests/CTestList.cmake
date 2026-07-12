@@ -789,6 +789,17 @@ yaml_equiv("aerodyn" "ad_BAR_OLAF"      "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;y
 yaml_equiv_driver("aerodyn" "ad_BAR_CombinedCases" "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
 yaml_equiv_driver("aerodyn" "ad_BAR_RNAMotion"     "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
 
+# UnsteadyAero standalone-driver YAML input (Wave 4, task 4.6, from-scratch: the UA
+# driver file IS the top-level input, no separate primary -- so only the "driver" mode
+# is registered, there is no bare yaml_equiv_unsteadyaero counterpart). The two cases
+# together cover both schema branches simulation_control:SimMod selects: ua_redfreq
+# (UA2.dvr, SimMod=1) exercises "periodic-motion" (reduced-frequency/oscillating-AoA);
+# ua_elast (UA4.dvr, SimMod=3) exercises "aeroelastic" (LinDyn-coupled, constant-inflow/
+# dynamic-motion sub-case). CTEST_UADRIVER_EXECUTABLE is the UA driver's own cache
+# variable (reg_tests/CMakeLists.txt) -- NOT "CTEST_UA_EXECUTABLE".
+yaml_equiv_driver("unsteadyaero" "ua_redfreq" "${CTEST_UADRIVER_EXECUTABLE}" "unsteadyaero;yaml")
+yaml_equiv_driver("unsteadyaero" "ua_elast"   "${CTEST_UADRIVER_EXECUTABLE}" "unsteadyaero;yaml")
+
 # MoorDyn standalone-driver yaml-equivalence: the four cases together span the
 # free-form schema: md_BodiesAndRods (BODIES + RODS incl. Body1/Body1Pinned
 # attachments, option-keyword aliases kb/cb/WtrDpth, an unrecognized option keyword,

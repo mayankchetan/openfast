@@ -104,9 +104,10 @@ add_executable(aeroacoustics_driver
 target_link_libraries(aeroacoustics_driver aeroacousticslib versioninfolib)
 
 # UnsteadyAero Driver
-add_executable(unsteadyaero_driver 
-  src/UnsteadyAero_Driver.f90
+add_executable(unsteadyaero_driver
   src/UA_Dvr_Subs.f90
+  src/UA_Driver_Yaml.f90
+  src/UnsteadyAero_Driver.f90
 )
 target_link_libraries(unsteadyaero_driver basicaerolib lindynlib versioninfolib)
 

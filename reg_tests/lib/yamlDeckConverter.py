@@ -24,6 +24,9 @@
         convert_hydrodyn(text_path) -> str      (YAML document)
         convert_hydrodyn_driver(text_path) -> str  (YAML document; HydroDyn driver file)
         convert_aerodyn(text_path, n_rotors) -> str  (YAML document)
+        convert_aerodyn_driver(text_path) -> str (YAML document; AeroDyn driver file)
+        convert_unsteadyaero_driver(text_path) -> str (YAML document; UnsteadyAero
+            driver file -- the driver IS the top-level input, no separate primary)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
 
@@ -3427,6 +3430,154 @@ def convert_aerodyn_driver(text_path):
     w('  VTKHubRad: ' + d.scalar('VTKHubRad'))
     vtk_nac_dim = _flatten_csv(d.find('VTKNacDim'))[:6]
     w('  VTKNacDim: [' + _list_join(vtk_nac_dim) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def convert_unsteadyaero_driver(text_path):
+    """Convert a text-format standalone UnsteadyAero driver input file to its YAML
+    schema (modules/aerodyn/src/UA_Driver_Yaml.f90 is the source of truth).
+
+    Wave 4's first from-scratch UA case: the UA driver IS the top-level input (no
+    separate primary file to repoint), and there is no convert_unsteadyaero() to call
+    -- unlike every other Wave-4 module-driver converter.
+
+    Schema mirrors the driver's text reader (ReadDriverInputFile, UA_Dvr_Subs.f90:
+    182-330) key-for-key:
+        general:                   Echo
+        environmental_conditions:  FldDens, KinVisc, SpdSound
+        unsteady_aero:             UAMod, Flookup
+        airfoil_properties:        AirFoil, Chord, Vec_AQ, Vec_AT, UseCm
+        simulation_control:        SimMod -- the schema-branch selector
+        output_control:            SumPrint, WrAFITables
+
+    TWO schema branches, guarded on simulation_control:SimMod exactly as
+    UA_Driver_Yaml.f90 does (which itself mirrors how the driver program and
+    Dvr_SetParameters branch on SimMod, UnsteadyAero_Driver.f90:78,124,153 and
+    UA_Dvr_Subs.f90:352-381): only the fields the selected branch's schema uses are
+    emitted -- the other branch's keys never appear.
+        SimMod=1 -> reduced_frequency: InflowVel, NCycles, StepsPerCycle, Frequency,
+                    Amplitude, Mean, Phase ("periodic-motion": the reduced-frequency/
+                    oscillating-AoA model). Exercised by r-test case ua_redfreq
+                    (UA2.dvr, UA3.dvr).
+        SimMod=3 -> aeroelastic: TMax, DT, ActiveDOF, InitPos, InitVel, GFScaling
+                    (3x3), MassMatrix (3x3), DampMatrix (3x3), StifMatrix (3x3),
+                    Twist, InflowMod (+ Inflow when constant / InflowTSFile when
+                    file), MotionMod (+ MotionTSFile when prescribed -- the literal
+                    "prescribed-time-series" sub-case of this branch's
+                    MotionMod={1:dynamic,2:prescribed} selector). Exercised by
+                    r-test case ua_elast (UA4.dvr, InflowMod=1/MotionMod=1 --
+                    constant/dynamic sub-case).
+    SimMod=2 (prescribed-aero time series: TMax_PA, DT_PA, AeroTSFile) has no r-test
+    driver case and is not supported by this converter or UA_Driver_Yaml.f90; raises
+    ValueError rather than silently emitting an unparseable schema.
+
+    AeroTSFile/InflowTSFile/MotionTSFile stay path-valued (second-order rule, never
+    inlined). AirFoil (the airfoil polar table, AirfoilInfo format, not an OpenFAST
+    YAML deck) also stays path-valued -- it is never converted."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# UnsteadyAero driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('environmental_conditions:')
+    w('  FldDens: ' + d.scalar('FldDens'))
+    w('  KinVisc: ' + d.scalar('KinVisc'))
+    w('  SpdSound: ' + d.scalar('SpdSound'))
+    w('')
+
+    w('unsteady_aero:')
+    w('  UAMod: ' + d.scalar('UAMod'))
+    w('  Flookup: ' + _as_bool(d.scalar('Flookup')))
+    w('')
+
+    # consume the "------ AIRFOIL PROPERTIES ------" banner line explicitly: it contains
+    # a case-insensitive "AirFoil" substring that _tokens_before_keyword would otherwise
+    # match before the real AirFoil data line (ParseCom-style banners are skipped
+    # unconditionally by the text reader regardless of content, UA_Dvr_Subs.f90:232).
+    d.cursor += 1
+    w('airfoil_properties:')
+    w('  AirFoil: ' + _as_str(d.scalar('AirFoil')))
+    w('  Chord: ' + d.scalar('Chord'))
+    w('  Vec_AQ: [' + _list_join(d.find('Vec_AQ')) + ']')
+    w('  Vec_AT: [' + _list_join(d.find('Vec_AT')) + ']')
+    w('  UseCm: ' + _as_bool(d.scalar('UseCm')))
+    w('')
+
+    sim_mod = int(d.scalar('SimMod'))
+    w('simulation_control:')
+    w('  SimMod: ' + str(sim_mod))
+    w('')
+
+    if sim_mod == 1:
+        w('reduced_frequency:')
+        w('  InflowVel: ' + d.scalar('InflowVel'))
+        w('  NCycles: ' + d.scalar('NCycles'))
+        w('  StepsPerCycle: ' + d.scalar('StepsPerCycle'))
+        w('  Frequency: ' + d.scalar('Frequency'))
+        w('  Amplitude: ' + d.scalar('Amplitude'))
+        w('  Mean: ' + d.scalar('Mean'))
+        w('  Phase: ' + d.scalar('Phase'))
+        w('')
+    elif sim_mod == 3:
+        w('aeroelastic:')
+        w('  TMax: ' + d.scalar('TMax'))
+        w('  DT: ' + d.scalar('DT'))
+        active_dof = d.find('ActiveDOF')
+        w('  ActiveDOF: [' + ', '.join(_as_bool(t.rstrip(',')) for t in active_dof) + ']')
+        w('  InitPos: [' + _list_join(d.find('InitPos')) + ']')
+        w('  InitVel: [' + _list_join(d.find('InitVel')) + ']')
+
+        w('  GFScaling:')
+        w('    - [' + _list_join(d.find('GFScalingL1')) + ']')
+        w('    - [' + _list_join(d.find('GFScalingL2')) + ']')
+        w('    - [' + _list_join(d.find('GFScalingL3')) + ']')
+
+        w('  MassMatrix:')
+        w('    - [' + _list_join(d.find('MassMatrixL1')) + ']')
+        w('    - [' + _list_join(d.find('MassMatrixL2')) + ']')
+        w('    - [' + _list_join(d.find('MassMatrixL3')) + ']')
+
+        w('  DampMatrix:')
+        w('    - [' + _list_join(d.find('DampMatrixL1')) + ']')
+        w('    - [' + _list_join(d.find('DampMatrixL2')) + ']')
+        w('    - [' + _list_join(d.find('DampMatrixL3')) + ']')
+
+        w('  StifMatrix:')
+        w('    - [' + _list_join(d.find('StifMatrixL1')) + ']')
+        w('    - [' + _list_join(d.find('StifMatrixL2')) + ']')
+        w('    - [' + _list_join(d.find('StifMatrixL3')) + ']')
+
+        w('  Twist: ' + d.scalar('Twist'))
+
+        inflow_mod = int(d.scalar('InflowMod'))
+        w('  InflowMod: ' + str(inflow_mod))
+        if inflow_mod == 2:
+            w('  InflowTSFile: ' + _as_str(d.scalar('InflowTSFile')))
+        else:
+            w('  Inflow: [' + _list_join(d.find('Inflow')) + ']')
+
+        motion_mod = int(d.scalar('MotionMod'))
+        w('  MotionMod: ' + str(motion_mod))
+        if motion_mod == 2:
+            w('  MotionTSFile: ' + _as_str(d.scalar('MotionTSFile')))
+        w('')
+    else:
+        raise ValueError('convert_unsteadyaero_driver: SimMod={} in {} is not supported '
+                          '(supported: 1=reduced-frequency/periodic-motion, 3=aeroelastic; '
+                          'SimMod=2/prescribed-aero-time-series has no r-test case and no '
+                          'YAML schema yet).'.format(sim_mod, text_path))
+
+    w('output_control:')
+    w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
+    w('  WrAFITables: ' + _as_bool(d.scalar('WrAFITables')))
     w('')
 
     return '\n'.join(out)
