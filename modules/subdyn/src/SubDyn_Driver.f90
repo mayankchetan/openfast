@@ -27,6 +27,8 @@ PROGRAM SubDyn_Driver
    USE SubDyn_Output
    USE FEM, only: FINDLOCI
    USE VersionInfo
+   USE SubDyn_Driver_Yaml, only: SDDvr_ParseYamlFile
+   USE YamlInput, only: IsYamlExt
 
    IMPLICIT NONE
 
@@ -373,14 +375,46 @@ CONTAINS
       CHARACTER(1024)                                  :: FileName             ! Name of SubDyn input file
       CHARACTER(1024)                                  :: PriPath              ! Path Name of SubDyn input file
 
+      ! Locals only used to receive the YAML parser's applied-loads table (parallel
+      ! plain arrays -- ALoadType is program-local, see SubDyn_Driver_Yaml's header)
+      INTEGER(IntKi)                                    :: nAppliedLoadsYaml
+      INTEGER(IntKi), ALLOCATABLE                        :: ALJointIDYaml(:)
+      REAL(ReKi), ALLOCATABLE                             :: ALSteadyLoadYaml(:,:)
+      CHARACTER(1024), ALLOCATABLE                        :: ALUnsteadyFileYaml(:)
+
       UnEcho=-1
       UnIn  =-1
-   
+
       FileName = TRIM(inputFile)
       ! Primary path, relative files will be based on it
       CALL GetPath( FileName, PriPath )
-   
-      CALL GetNewUnit( UnIn )   
+
+      ! YAML-format driver input file (.yaml/.yml): funnel to the dedicated parser and
+      ! return -- there is no passed-file channel for drivers, so the parser reads
+      ! straight from disk and fills the same InitInp fields the text path below does.
+      ! (SD_dvr_InitInput is a program-local type, so the parser cannot take InitInp
+      ! itself as a dummy argument -- see SubDyn_Driver_Yaml.f90's header.)
+      IF ( IsYamlExt( FileName ) ) THEN
+         CALL SDDvr_ParseYamlFile( FileName, InitInp%Echo, InitInp%Gravity, InitInp%WtrDpth, &
+                                    InitInp%SDInputFile, InitInp%OutRootName, InitInp%NSteps, &
+                                    InitInp%TimeInterval, InitInp%nTP, InitInp%TP_RefPoint, InitInp%SubRotateZ, &
+                                    InitInp%InputsMod, InitInp%InputsFile, InitInp%SDin, &
+                                    InitInp%uTPInSteady, InitInp%uDotTPInSteady, InitInp%uDotDotTPInSteady, &
+                                    nAppliedLoadsYaml, ALJointIDYaml, ALSteadyLoadYaml, ALUnsteadyFileYaml, &
+                                    ErrStat2, ErrMsg2 ); call AbortIfFailed()
+         ALLOCATE( InitInp%AppliedLoads(nAppliedLoadsYaml), stat=ErrStat2 ); ErrMsg2='Allocating Forces'; call AbortIfFailed()
+         DO I = 1, nAppliedLoadsYaml
+            InitInp%AppliedLoads(I)%NodeID     = ALJointIDYaml(I)
+            InitInp%AppliedLoads(I)%SteadyLoad = ALSteadyLoadYaml(:,I)
+            IF ( LEN_TRIM(ALUnsteadyFileYaml(I)) > 0 ) THEN
+               CALL ReadDelimFile(ALUnsteadyFileYaml(I), 7, InitInp%AppliedLoads(I)%UnsteadyLoad, ErrStat2, ErrMsg2, 1, PriPath)
+               call AbortIfFailed()
+            END IF
+         END DO
+         RETURN
+      END IF
+
+      CALL GetNewUnit( UnIn )
       CALL OpenFInpFile( UnIn, FileName, ErrStat2, ErrMsg2);
       call AbortIfFailed()
    

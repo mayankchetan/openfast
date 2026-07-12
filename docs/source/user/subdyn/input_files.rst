@@ -1023,3 +1023,66 @@ Notable schema points:
      OutList:
        - "ReactFXss"
        - "ReactFYss"
+
+.. _subdyn-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone SubDyn driver's own input file (normally ``*.dvr``) may also be
+written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the format
+from the file extension, exactly like the primary input file above. Parameters
+keep their documented names, grouped into sections that mirror the text driver
+format's banners: ``general`` (``Echo``), ``environmental_conditions``
+(``Gravity``, ``WtrDpth``), ``subdyn`` (``SDInputFile``, ``OutRootName``,
+``NSteps``, ``TimeInterval``, ``tp_ref_points``, ``SubRotateZ``), ``inputs``
+(``InputsMod``, ``InputsFile``), ``steady_state_inputs``
+(``uTPInSteady``, ``uDotTPInSteady``, ``uDotDotTPInSteady``), and ``loads``
+(``applied_loads``).
+
+Unlike the text format, **nTP** (the number of transition pieces) is never given
+explicitly -- it derives from the length of the ``subdyn:tp_ref_points`` list, one
+row per transition piece giving that TP's ``x``/``y``/``z`` reference-point
+coordinates. ``steady_state_inputs`` is required (and read) only when
+``inputs:InputsMod`` is 1; for any other ``InputsMod`` the section is omitted and
+the three motion vectors are taken as all-zero, exactly like the text format's
+``ELSE`` branch. ``loads:applied_loads`` is an optional list of row mappings, one
+per applied load, giving ``JointID``, ``Fx``, ``Fy``, ``Fz``, ``Mx``, ``My``,
+``Mz``, and an optional ``UnsteadyFile`` path (resolved relative to the driver
+input file, exactly like the text format); an absent or empty ``loads`` section
+means no applied loads, with no legacy "missing nAppliedLoads line" warning.
+
+``SDInputFile``, ``OutRootName``, and ``InputsFile`` (and each applied load's
+``UnsteadyFile``) all remain file-path strings, resolved relative to the driver
+input file.
+
+.. code-block:: yaml
+
+   # SubDyn driver input file (YAML form)
+   general:
+     Echo: false
+
+   environmental_conditions:
+     Gravity: 9.81
+     WtrDpth: 0
+
+   subdyn:
+     SDInputFile: "SD_MultiTP.yaml"
+     OutRootName: "SD_MultiTP"
+     NSteps: 4000
+     TimeInterval: 0.0005
+     tp_ref_points:
+       - x: 0
+         y: 10
+         z: 20
+       - x: 0
+         y: -10
+         z: 20
+     SubRotateZ: 0
+
+   inputs:
+     InputsMod: 2
+     InputsFile: "TPMotion.dat"
+
+   loads:
+     applied_loads: []

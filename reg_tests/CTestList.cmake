@@ -831,6 +831,12 @@ yaml_equiv_openfast("5MW_Land_BD_Init" "singlefile" "${CTEST_OPENFAST_EXECUTABLE
 # property table's optional CtrlChannel field.
 yaml_equiv("subdyn" "SD_Cable_5Joints" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
 yaml_equiv("subdyn" "SD_MultiTP"       "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
+# Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above): also
+# convert the standalone driver's own input file to YAML. SD_MultiTP is the preferred
+# table exerciser (nTP=2, so tp_ref_points/TPIdx both list more than one entry);
+# SD_Cable_5Joints (nTP=1, nAppliedLoads=0) covers the single-TP/no-loads path.
+yaml_equiv_driver("subdyn" "SD_MultiTP"       "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
+yaml_equiv_driver("subdyn" "SD_Cable_5Joints" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
 
 # 5MW_OC3Mnpl_Linear: CompSub=1 (SubDyn), CompHydro=0, CompServo=0 (no DISCON DLL) --
 # the cheapest CompSub=1 glue case in r-test (TMax=DT=0.005s), so the SubFile

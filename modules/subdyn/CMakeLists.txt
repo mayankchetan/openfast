@@ -31,7 +31,8 @@ add_library(subdynlib STATIC
 )
 target_link_libraries(subdynlib nwtclibs)
 
-add_executable(subdyn_driver 
+add_executable(subdyn_driver
+  src/SubDyn_Driver_Yaml.f90
   src/SubDyn_Driver.f90
 )
 target_link_libraries(subdyn_driver subdynlib versioninfolib)

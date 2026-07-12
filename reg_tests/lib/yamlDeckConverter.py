@@ -1239,6 +1239,107 @@ def convert_subdyn(text_path):
     return '\n'.join(out)
 
 
+def convert_subdyn_driver(text_path):
+    """Convert a text-format SubDyn driver input file (Wave 4, class-B/sequential-
+    reader driver -- follows the seastate/inflowwind convention) to its YAML schema
+    (modules/subdyn/src/SubDyn_Driver_Yaml.f90 is the source of truth).
+
+    Schema mirrors the driver's text reader (SubDyn_Driver.f90:359-479,
+    ReadDriverInputFile) key-for-key:
+        general:                   Echo
+        environmental_conditions:  Gravity, WtrDpth
+        subdyn:                    SDInputFile, OutRootName, NSteps, TimeInterval,
+                                    tp_ref_points (list of {x,y,z}; its length is NTPs
+                                    -- counts derive from list lengths, never a
+                                    separate key), SubRotateZ
+        inputs:                    InputsMod, InputsFile
+        steady_state_inputs:       uTPInSteady, uDotTPInSteady, uDotDotTPInSteady --
+                                    emitted ONLY when InputsMod == 1, mirroring the
+                                    text path's IF (InputsMod == 1) branch (the ELSE
+                                    branch's three all-zero lines carry no information
+                                    worth preserving)
+        loads:                     applied_loads (list of row mappings, empty list
+                                    when nAppliedLoads == 0)
+
+    SDInputFile/OutRootName/InputsFile stay path-valued (second-order rule; SDInputFile
+    is NOT repointed at a .yaml sibling here -- that repointing, when needed, is done
+    by the caller after this converter returns, mirroring the seastate driver-mode
+    harness's own convention). Each applied-load row's optional trailing UnsteadyFile
+    column is emitted only when present (8-token rows); its 7-token siblings omit the
+    key entirely, matching SD_ParseAppliedLoads' Default=''."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# SubDyn driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('environmental_conditions:')
+    w('  Gravity: ' + d.scalar('Gravity'))
+    w('  WtrDpth: ' + d.scalar('WtrDpth'))
+    w('')
+
+    w('subdyn:')
+    w('  SDInputFile: ' + _as_str(d.scalar('SDInputFile')))
+    w('  OutRootName: ' + _as_str(d.scalar('OutRootName')))
+    w('  NSteps: ' + d.scalar('NSteps'))
+    w('  TimeInterval: ' + d.scalar('TimeInterval'))
+    n_tp = int(d.scalar('NTPs'))
+    tp_x = _flatten_csv(d.find('TP_RefPoint_X'))[:n_tp]
+    tp_y = _flatten_csv(d.find('TP_RefPoint_Y'))[:n_tp]
+    tp_z = _flatten_csv(d.find('TP_RefPoint_Z'))[:n_tp]
+    w('  tp_ref_points:')
+    TP_KEYS = ('x', 'y', 'z')
+    for i in range(n_tp):
+        w(_row_map(TP_KEYS, (tp_x[i], tp_y[i], tp_z[i])))
+    w('  SubRotateZ: ' + d.scalar('SubRotateZ'))
+    w('')
+
+    w('inputs:')
+    inputs_mod = int(d.scalar('InputsMod'))
+    w('  InputsMod: ' + str(inputs_mod))
+    w('  InputsFile: ' + _as_str(d.scalar('InputsFile')))
+    w('')
+
+    # STEADY INPUTS header + the 3 fixed uTPInSteady/uDotTPInSteady/uDotDotTPInSteady
+    # data lines are always physically present in the text file (read as either real
+    # ReadAry data or ReadCom placeholder comments depending on InputsMod), so the 3
+    # rows must always be consumed here to keep the cursor synchronized for the LOADS
+    # section that follows -- emitted into the YAML only when InputsMod == 1.
+    steady_rows = _matrix_rows(d, 3, 6, skip=1)
+    if inputs_mod == 1:
+        w('steady_state_inputs:')
+        w('  uTPInSteady: [' + ', '.join(steady_rows[0]) + ']')
+        w('  uDotTPInSteady: [' + ', '.join(steady_rows[1]) + ']')
+        w('  uDotDotTPInSteady: [' + ', '.join(steady_rows[2]) + ']')
+        w('')
+
+    LOAD_KEYS = ('JointID', 'Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz', 'UnsteadyFile')
+    n_loads_toks = d.find('nAppliedLoads')
+    n_loads = int(n_loads_toks[0])
+    load_rows = d.table_rows(n_loads, skip=2)
+    w('loads:')
+    if n_loads > 0:
+        w('  applied_loads:')
+        for raw in load_rows:
+            toks = _row_tokens(raw)
+            if len(toks) == 8:
+                toks = toks[:7] + [_as_str(toks[7])]
+            elif len(toks) != 7:
+                raise ValueError('convert_subdyn_driver: applied-load row "{}" in {} has {} value(s); expected 7 or 8'.format(
+                    raw, text_path, len(toks)))
+            w(_row_map(LOAD_KEYS, toks))
+    else:
+        w('  applied_loads: []')
+    w('')
+
+    return '\n'.join(out)
+
+
 def convert_extptfm(text_path):
     """Convert a text-format ExtPtfm_MCKF primary input file to its YAML schema
     (modules/extptfm/src/ExtPtfm_Yaml.f90 is the source of truth).

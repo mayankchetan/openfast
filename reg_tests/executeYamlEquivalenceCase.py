@@ -32,7 +32,12 @@
       aerodyn         - standalone AeroDyn driver case.
       moordyn         - standalone MoorDyn driver case.
       beamdyn         - standalone BeamDyn driver case.
-      subdyn          - standalone SubDyn driver case.
+      subdyn          - standalone SubDyn driver case (class-B/sequential-reader
+                        driver, with tables). Optional mode "driver" additionally
+                        converts the driver file itself to YAML
+                        (convert_subdyn_driver) and runs a full-yaml case (yaml
+                        driver -> yaml primary), same convention as seastate's
+                        driver mode above.
       openfast        - full glue-code (.fst) case; requires a mode (per-file |
                         all-yaml | single-file) selecting how convert_fst() should
                         transform input_files:InflowFile / input_files:AeroFile /
@@ -768,6 +773,45 @@ elif module == "subdyn":
 
     ### compare: bit-identical required
     compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### driver file itself to YAML (convert_subdyn_driver) and run a full-yaml case
+    ### (yaml driver -> yaml primary), still checked bit-identical against the same
+    ### text baseline. Same convention as seastate's driver mode above; reuses this
+    ### block's own findPrimaryBaseName/DRIVER/OUTPUT since SubDyn's driver and
+    ### primary filenames both vary per case (no fixed constants to .replace()).
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+        yamlDvrDriverFile = os.path.join(yamlDvrDir, DRIVER)
+        with open(yamlDvrDriverFile) as f:
+            yamlDvrDriverText = f.read()
+
+        yamlDvrPrimaryBase = findPrimaryBaseName(yamlDvrDriverText, yamlDvrDriverFile)
+        yamlDvrPrimaryYaml = os.path.splitext(yamlDvrPrimaryBase)[0] + ".yaml"
+        yamlDvrPrimaryText = yamlDeckConverter.convert_subdyn(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimaryYaml), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+
+        # SubDyn r-test cases name the driver and primary with the same base ("<Case>.dvr"
+        # / "<Case>.dat"), so a naive splitext-swap-to-".yaml" collides the two filenames;
+        # append ".yaml" onto the driver's own name instead (IsYamlExt only looks at the
+        # final extension, so "<Case>.dvr.yaml" is still recognized as YAML).
+        yamlDriverFile = DRIVER + ".yaml"
+        yamlDriverText = yamlDeckConverter.convert_subdyn_driver(yamlDvrDriverFile)
+        # repoint the converted driver at the converted primary's .yaml sibling
+        if yamlDvrPrimaryBase not in yamlDriverText:
+            rtl.exitWithError("Converted driver {} does not reference {}.".format(yamlDvrDriverFile, yamlDvrPrimaryBase))
+        yamlDriverText = yamlDriverText.replace(yamlDvrPrimaryBase, yamlDvrPrimaryYaml)
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(yamlDvrDriverFile)
+
+        returnCode = openfastDrivers.runSubdynDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))
 
 elif module == "aerodyn":
     #### aerodyn (standalone driver) case #############################################
