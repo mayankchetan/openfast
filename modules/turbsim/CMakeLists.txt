@@ -21,6 +21,7 @@ add_executable(turbsim
   src/RandNum.f90
   src/Root_Searching.f90
   src/TS_FileIO.f90
+  src/TS_Yaml.f90
   src/TSsubs.f90
   src/TurbSim.f90
   src/TurbSim_Types.f90

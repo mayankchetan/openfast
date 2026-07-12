@@ -29,6 +29,7 @@
             driver file -- the driver IS the top-level input, no separate primary)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
         convert_fastfarm(text_path) -> str      (YAML document; FAST.Farm primary/glue-code file)
+        convert_turbsim(text_path) -> str       (YAML document; TurbSim primary input file)
 """
 
 import os
@@ -938,6 +939,21 @@ def _default_or_bool(tok):
     if unquoted.strip().lower() == 'default':
         return 'default'
     return _as_bool(tok)
+
+
+def _default_or_str(tok):
+    """TurbSim's WindProfileType/SCMod1-3/InCDec1-3 accept the scalar "default"
+    (TS_FileIO.f90's ReadCVarDefault/ReadRAryDefault, TRIM+Conv2UC exact match) in
+    place of a string (or, for InCDec, a quoted two-number string, e.g.
+    "12.0  0.00035273"). Emit the bare literal `default` when the source token is
+    that keyword (any case); otherwise re-quote the original text verbatim so
+    TS_Yaml.f90's YS_GetCVarDefault/YS_GetRAryDefault -- which fetch the whole YAML
+    scalar's raw text, exactly mirroring the text reader -- see the identical
+    string."""
+    unquoted = _unquote(tok)
+    if unquoted.strip().lower() == 'default':
+        return 'default'
+    return _as_str(tok)
 
 
 #-------------------- SubDyn column-count constants (SD_FEM.f90) ---------------------
@@ -4877,3 +4893,123 @@ def _fastfarm_aryd(toks):
     if len(toks) == 1 and _unquote(toks[0]).strip().lower() == 'default':
         return 'default'
     return '[' + _list_join(toks) + ']'
+
+
+def convert_turbsim(text_path):
+    """Convert a text-format TurbSim primary input file (.inp) to its YAML schema
+    (modules/turbsim/src/TS_Yaml.f90 is the source of truth).
+
+    Sections mirror the text file's banners: runtime_options, turbine_model,
+    meteorological_boundary_conditions, non_iec_meteorological_boundary_conditions,
+    spatial_coherence_parameters, coherent_turbulence_scaling_parameters. The last
+    section is always emitted (its keyword lines are always physically present in a
+    valid text deck) even though TS_FileIO.f90's reader -- and therefore TS_Yaml.f90's
+    parser -- only actually consumes it for non-IEC spectral models; for IEC models
+    (IECKAI/IECVKM/MODVKM/API) those lines are dead text in both formats.
+
+    The "default" token (TS_FileIO.f90's ReadCVarDefault/ReadRVarDefault/
+    ReadRAryDefault, TRIM+Conv2UC exact match) is preserved VERBATIM wherever the text
+    deck uses it -- via _default_or_num (numeric scalars: ETMc, URef, ZJetMax, PLExp,
+    Z0, Latitude, UStar, ZI, PC_UW/PC_UV/PC_VW, CohExp) or _default_or_str (string
+    scalars: WindProfileType, SCMod1-3, and the quoted two-number InCDec1-3 pairs,
+    which TS_Yaml.f90 fetches as raw scalar text and parses itself, exactly like the
+    text reader). Never pre-resolved here: doing so would desynchronize the RNG-draw
+    order from the text path and silently change the .bts (see TS_Yaml.f90's header
+    comment for the full explanation).
+
+    Path-valued fields (second-order rule, never inlined): UserFile, ProfileFile,
+    CTEventPath. RandSeed2 and UsableTime are variant fields (an integer, or an
+    RNG-name/"ALL" string respectively) and are copied through verbatim, unquoted,
+    exactly like the text format -- TS_Yaml.f90 fetches both as raw scalar text and
+    replicates the text reader's own try-numeric-else-string logic."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# TurbSim primary input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    #-------------------- runtime_options ------------------------------------------------
+    w('runtime_options:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  RandSeed1: ' + d.scalar('RandSeed1'))
+    w('  RandSeed2: ' + d.scalar('RandSeed2'))
+    w('  WrBHHTP: ' + _as_bool(d.scalar('WrBHHTP')))
+    w('  WrFHHTP: ' + _as_bool(d.scalar('WrFHHTP')))
+    w('  WrADHH: ' + _as_bool(d.scalar('WrADHH')))
+    w('  WrADFF: ' + _as_bool(d.scalar('WrADFF')))
+    w('  WrBLFF: ' + _as_bool(d.scalar('WrBLFF')))
+    w('  WrADTWR: ' + _as_bool(d.scalar('WrADTWR')))
+    w('  WrHAWCFF: ' + _as_bool(d.scalar('WrHAWCFF')))
+    w('  WrFMTFF: ' + _as_bool(d.scalar('WrFMTFF')))
+    w('  WrACT: ' + _as_bool(d.scalar('WrACT')))
+    w('  ScaleIEC: ' + d.scalar('ScaleIEC'))
+    w('')
+
+    #-------------------- turbine_model ---------------------------------------------------
+    w('turbine_model:')
+    w('  NumGrid_Z: ' + d.scalar('NumGrid_Z'))
+    w('  NumGrid_Y: ' + d.scalar('NumGrid_Y'))
+    w('  TimeStep: ' + d.scalar('TimeStep'))
+    w('  AnalysisTime: ' + d.scalar('AnalysisTime'))
+    w('  UsableTime: ' + _unquote(d.scalar('UsableTime')))
+    w('  HubHt: ' + d.scalar('HubHt'))
+    w('  GridHeight: ' + d.scalar('GridHeight'))
+    w('  GridWidth: ' + d.scalar('GridWidth'))
+    w('  VFlowAng: ' + d.scalar('VFlowAng'))
+    w('  HFlowAng: ' + d.scalar('HFlowAng'))
+    w('')
+
+    #-------------------- meteorological_boundary_conditions ------------------------------
+    w('meteorological_boundary_conditions:')
+    w('  TurbModel: ' + _as_str(d.scalar('TurbModel')))
+    w('  UserFile: ' + _as_str(d.scalar('UserFile')))
+    w('  IECstandard: ' + _as_str(d.scalar('IECstandard')))
+    w('  IECturbc: ' + _as_str(d.scalar('IECturbc')))
+    w('  IEC_WindType: ' + _as_str(d.scalar('IEC_WindType')))
+    w('  ETMc: ' + _default_or_num(d.scalar('ETMc')))
+    w('  WindProfileType: ' + _default_or_str(d.scalar('WindProfileType')))
+    w('  ProfileFile: ' + _as_str(d.scalar('ProfileFile')))
+    w('  RefHt: ' + d.scalar('RefHt'))
+    w('  URef: ' + _default_or_num(d.scalar('URef')))
+    w('  ZJetMax: ' + _default_or_num(d.scalar('ZJetMax')))
+    w('  PLExp: ' + _default_or_num(d.scalar('PLExp')))
+    w('  Z0: ' + _default_or_num(d.scalar('Z0')))
+    w('')
+
+    #-------------------- non_iec_meteorological_boundary_conditions ----------------------
+    w('non_iec_meteorological_boundary_conditions:')
+    w('  Latitude: ' + _default_or_num(d.scalar('Latitude')))
+    w('  RICH_NO: ' + d.scalar('RICH_NO'))
+    w('  UStar: ' + _default_or_num(d.scalar('UStar')))
+    w('  ZI: ' + _default_or_num(d.scalar('ZI')))
+    w('  PC_UW: ' + _default_or_num(d.scalar('PC_UW')))
+    w('  PC_UV: ' + _default_or_num(d.scalar('PC_UV')))
+    w('  PC_VW: ' + _default_or_num(d.scalar('PC_VW')))
+    w('')
+
+    #-------------------- spatial_coherence_parameters -------------------------------------
+    w('spatial_coherence_parameters:')
+    w('  SCMod1: ' + _default_or_str(d.scalar('SCMod1')))
+    w('  SCMod2: ' + _default_or_str(d.scalar('SCMod2')))
+    w('  SCMod3: ' + _default_or_str(d.scalar('SCMod3')))
+    w('  InCDec1: ' + _default_or_str(d.scalar('InCDec1')))
+    w('  InCDec2: ' + _default_or_str(d.scalar('InCDec2')))
+    w('  InCDec3: ' + _default_or_str(d.scalar('InCDec3')))
+    w('  CohExp: ' + _default_or_num(d.scalar('CohExp')))
+    w('')
+
+    #-------------------- coherent_turbulence_scaling_parameters ---------------------------
+    # always physically present in a valid text deck; TS_Yaml.f90 only actually reads it
+    # for non-IEC spectral models (mirrors the text reader exactly -- see docstring above)
+    w('coherent_turbulence_scaling_parameters:')
+    w('  CTEventPath: ' + _as_str(d.scalar('CTEventPath')))
+    w('  CTEventFile: ' + _as_str(d.scalar('CTEventFile')))
+    w('  Randomize: ' + _as_bool(d.scalar('Randomize')))
+    w('  DistScl: ' + d.scalar('DistScl'))
+    w('  CTLy: ' + d.scalar('CTLy'))
+    w('  CTLz: ' + d.scalar('CTLz'))
+    w('  CTStartTime: ' + d.scalar('CTStartTime'))
+    w('')
+
+    return '\n'.join(out)

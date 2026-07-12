@@ -19,13 +19,30 @@
 !**********************************************************************************************************************************
 MODULE TS_FileIO
 
-   USE                     NWTC_Library   
+   USE                     NWTC_Library
 
    use TS_Profiles
    use TSSubs
    use TS_RandNum
-   
+   use YamlInput, only: IsYamlExt
+
    IMPLICIT                NONE
+
+   !> Implemented in the TS_Yaml_SubMod submodule (TS_Yaml.f90). A submodule (rather than
+   !! a plain module TS_FileIO could `use`) is required here because the YAML parser calls
+   !! back into this module's own derivation subroutines (DefaultMetBndryCndtns,
+   !! ProcessLine_IECstandard, GetDefaultRS, CalcIECScalingParams, DefaultUstar,
+   !! getJetCoeffs, ...) to keep the RNG-draw order identical between the text and YAML
+   !! paths -- a genuine mutual dependency that only a submodule resolves in Fortran.
+   INTERFACE
+      MODULE SUBROUTINE TS_ParseYamlFile(InFile, p, OtherSt_RandNum, ErrStat, ErrMsg)
+         CHARACTER(*),                 INTENT(IN)    :: InFile
+         TYPE(TurbSim_ParameterType),  INTENT(INOUT) :: p
+         TYPE(RandNum_OtherStateType), INTENT(INOUT) :: OtherSt_RandNum
+         INTEGER(IntKi),                INTENT(OUT)   :: ErrStat
+         CHARACTER(*),                   INTENT(OUT)   :: ErrMsg
+      END SUBROUTINE TS_ParseYamlFile
+   END INTERFACE
 
 CONTAINS
 
@@ -91,8 +108,17 @@ SUBROUTINE ReadInputFile(InFile, p, OtherSt_RandNum, ErrStat, ErrMsg)
    ErrMsg  = ""
       
    p%met%NumUSRz = 0  ! initialize the number of points in a user-defined wind profile
-   
-   
+
+      ! YAML funnel: a .yaml/.yml primary file is parsed straight from disk by
+      ! TS_ParseYamlFile (TS_Yaml.f90), which mirrors this routine's control flow
+      ! statement-for-statement (including calling the same DefaultXxx/ProcessLine_Xxx/
+      ! RNG-drawing subroutines below in the same order) so that a YAML deck produces a
+      ! bit-identical .bts to its text equivalent.
+   IF ( IsYamlExt( InFile ) ) THEN
+      CALL TS_ParseYamlFile( InFile, p, OtherSt_RandNum, ErrStat, ErrMsg )
+      RETURN
+   END IF
+
    UnEc = -1
    Echo = .FALSE.   
    CALL GetPath( InFile, PriPath )     ! Input files will be relative to the path where the primary input file is located.

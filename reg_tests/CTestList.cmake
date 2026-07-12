@@ -568,6 +568,16 @@ if(BUILD_FASTFARM)
   yaml_equiv_fastfarm("TSinflow_curl" "${CTEST_FASTFARM_EXECUTABLE}" "fastfarm;yaml")
 endif()
 
+# TurbSim YAML input equivalence (Wave 5, task 5.2): the FIRST TurbSim yaml-equivalence
+# case. TurbSim has no r-test dir of its own, so this reuses the small AOC 15/50
+# wind-input fixture (6x6 grid, staged with its spectral model switched to the
+# non-IEC NWTCUP) already shipped for the openfast/AOC glue-code case -- see
+# executeYamlEquivalenceCase.py's "turbsim" branch for the deck-provenance rationale
+# (including why the spectral-model switch is required, not cosmetic). Bit-compares
+# the deterministic .bts full-field binary wind file (not .sum, which embeds CPU
+# time and an absolute path).
+yaml_equiv("turbsim" "ts_AOC_25m_12mps" "${CTEST_TURBSIM_EXECUTABLE}" "turbsim;yaml")
+
 # AeroDyn regression tests
 ad_regression("ad_timeseries_shutdown"      "aerodyn;bem")
 ad_regression("ad_EllipticalWingInf_OLAF"   "aerodyn;bem")
