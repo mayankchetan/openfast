@@ -22,6 +22,8 @@ PROGRAM BeamDyn_Driver_Program
 
    USE BeamDyn_driver_subs  ! all other modules inherited through this one
    USE VersionInfo
+   USE BeamDyn_Driver_Yaml, only: BDDvr_ParseYamlFile
+   USE YamlInput, only: IsYamlExt
 
    IMPLICIT NONE
 
@@ -94,7 +96,14 @@ PROGRAM BeamDyn_Driver_Program
    
    CALL GET_COMMAND_ARGUMENT(1,DvrInputFile)
    CALL GetRoot(DvrInputFile,RootName)
-   CALL BD_ReadDvrFile(DvrInputFile,dt_global,BD_InitInput,DvrData,ErrStat,ErrMsg)
+   ! YAML-format driver input file (.yaml/.yml): funnel to the dedicated parser, which
+   ! fills the same BD_InitInput/DvrData/dt_global outputs BD_ReadDvrFile does for the
+   ! text format; the sequential text path below is otherwise unchanged.
+   IF ( IsYamlExt( DvrInputFile ) ) THEN
+      CALL BDDvr_ParseYamlFile(DvrInputFile,dt_global,BD_InitInput,DvrData,ErrStat,ErrMsg)
+   ELSE
+      CALL BD_ReadDvrFile(DvrInputFile,dt_global,BD_InitInput,DvrData,ErrStat,ErrMsg)
+   END IF
       CALL CheckError()
       
       ! initialize the BD_InitInput values not in the driver input file

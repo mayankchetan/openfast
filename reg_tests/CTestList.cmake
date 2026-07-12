@@ -807,6 +807,13 @@ yaml_equiv("moordyn" "md_VIV"           "${CTEST_MOORDYN_EXECUTABLE}" "moordyn;y
 # static case gives refine/quadrature explicit values), and both NNodeOuts sizes.
 yaml_equiv("beamdyn" "bd_5MW_dynamic"             "${CTEST_BEAMDYN_EXECUTABLE}" "beamdyn;yaml")
 yaml_equiv("beamdyn" "bd_static_cantilever_beam"  "${CTEST_BEAMDYN_EXECUTABLE}" "beamdyn;yaml")
+# Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above): also
+# convert the standalone driver's own input file to YAML. No r-test BeamDyn driver
+# case actually sets NumPointLoads > 0, so these only exercise the multi_point_loads
+# table's empty-list (NumPointLoads==0 -> 1 all-zero row) path; the table's row-mapping
+# emission/parsing was verified out-of-harness with a hand-built NumPointLoads>0 deck.
+yaml_equiv_driver("beamdyn" "bd_5MW_dynamic"             "${CTEST_BEAMDYN_EXECUTABLE}" "beamdyn;yaml")
+yaml_equiv_driver("beamdyn" "bd_static_cantilever_beam"  "${CTEST_BEAMDYN_EXECUTABLE}" "beamdyn;yaml")
 
 # 5MW_Land_BD_Init: CompElast=2 (ElastoDyn + BeamDyn for blades), CompAero=0,
 # CompServo=0 (no DISCON DLL) -- the cheapest CompElast=2 glue case in r-test, so the

@@ -739,3 +739,87 @@ YAML), never an inlined mapping.
      BldNd_BlOutNd: "All"
      OutList:
        - "N1Fxl,N2Fxl,N3Fxl"
+
+.. _beamdyn-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone BeamDyn driver's own input file (normally ``*.dvr`` or
+``*_driver.inp``) may also be written in YAML (name it ``*.yaml`` or
+``*.yml``); the driver detects the format from the file extension, exactly
+like the primary input file above. Parameters keep their documented names,
+grouped into sections that mirror the text driver format's banners:
+``simulation_control`` (``DynamicSolve``, ``t_initial``, ``t_final``,
+``dt``), ``gravity_parameter`` (``gravity``), ``frame_parameter``
+(``GlbPos``, ``RootOri``, ``GlbRotBladeT0``), ``root_velocity_parameter``
+(``RootVel``), ``applied_force`` (``DistrLoad``, ``TipLoad``),
+``multi_point_loads`` (``point_loads``), ``primary_input_file``
+(``InputFile``), and ``outputs`` (``WrVTK``, ``VTK_fps``). The driver file
+has no ``Echo`` option in either format.
+
+``gravity_parameter:gravity`` is a 3-entry ``[Gx, Gy, Gz]`` list (m/s^2).
+``frame_parameter:GlbPos`` is a 3-entry ``[x, y, z]`` list (m), and
+``RootOri`` is the 3x3 direction-cosine matrix relating the global frame to
+the initial blade root frame, given as three flow-sequence rows.
+``root_velocity_parameter:RootVel`` is a 3-entry ``[X, Y, Z]`` list (rad/s)
+giving the beam root's initial angular velocity; the corresponding
+translational velocity is derived (a cross product with ``GlbPos``), never
+read from either format. ``applied_force:DistrLoad``/``TipLoad`` are
+6-entry ``[Fx, Fy, Fz, Mx, My, Mz]`` lists (distributed load per unit
+length, and a concentrated tip load, respectively).
+
+Unlike the text format, **NumPointLoads** is never given explicitly -- it
+derives from the length of the ``multi_point_loads:point_loads`` list, one
+row mapping per point load giving ``Eta`` (non-dimensional blade-span
+location, 0-1), ``Fx``, ``Fy``, ``Fz``, ``Mx``, ``My``, ``Mz``. An absent or
+empty ``point_loads`` list means no applied point loads (a single
+all-zero row internally, matching the text format's ``NumPointLoads = 0``
+case).
+
+``primary_input_file:InputFile`` remains a file-path string, resolved
+relative to the driver input file.
+
+.. code-block:: yaml
+
+   # BeamDyn driver input file (YAML form)
+   simulation_control:
+     DynamicSolve: true
+     t_initial: 0
+     t_final: 30
+     dt: 0.002
+
+   gravity_parameter:
+     gravity: [0, -9.8, 0]
+
+   frame_parameter:
+     GlbPos: [0, 0, 1]
+     RootOri:
+       - [1.0, 0.0, 0.0]
+       - [0.0, 1.0, 0.0]
+       - [0.0, 0.0, 1.0]
+     GlbRotBladeT0: true
+
+   root_velocity_parameter:
+     RootVel: [1.0006, 0, 0]
+
+   applied_force:
+     DistrLoad: [0, 0, 0, 0, 0, 0]
+     TipLoad: [0, 0, 0, 0, 0, 0]
+
+   multi_point_loads:
+     point_loads:
+       - Eta: 0.5
+         Fx: 1000.0
+         Fy: 2000.0
+         Fz: 3000.0
+         Mx: 4000.0
+         My: 5000.0
+         Mz: 6000.0
+
+   primary_input_file:
+     InputFile: "bd_primary.yaml"
+
+   outputs:
+     WrVTK: 0
+     VTK_fps: 15

@@ -28,9 +28,10 @@ add_library(beamdynlib STATIC
 )
 target_link_libraries(beamdynlib nwtclibs)
 
-add_executable(beamdyn_driver 
-  src/Driver_Beam.f90
+add_executable(beamdyn_driver
   src/Driver_Beam_Subs.f90
+  src/BeamDyn_Driver_Yaml.f90
+  src/Driver_Beam.f90
 )
 target_link_libraries(beamdyn_driver beamdynlib versioninfolib)
 

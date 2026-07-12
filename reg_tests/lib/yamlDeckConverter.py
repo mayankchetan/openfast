@@ -15,6 +15,8 @@
         convert_sed(text_path) -> str           (YAML document)
         convert_sed_driver(text_path) -> str    (YAML document; SED driver file)
         convert_elastodyn(text_path) -> str     (YAML document)
+        convert_beamdyn(text_path) -> str       (YAML document)
+        convert_beamdyn_driver(text_path) -> str   (YAML document; BeamDyn driver file)
         convert_seastate(text_path) -> str      (YAML document)
         convert_seastate_driver(text_path) -> str  (YAML document; SeaState driver file)
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
@@ -1779,6 +1781,105 @@ def convert_beamdyn(text_path):
         nd_channels = d.outlist()
         w('  OutList: [' + ', '.join('"' + c + '"' for c in nd_channels) + ']')
         w('')
+
+    return '\n'.join(out)
+
+
+def convert_beamdyn_driver(text_path):
+    """Convert a text-format BeamDyn driver input file (Wave 4, class-B/sequential-
+    reader driver, with a multi-point-loads table -- follows the subdyn convention) to
+    its YAML schema (modules/beamdyn/src/BeamDyn_Driver_Yaml.f90 is the source of
+    truth).
+
+    Schema mirrors the driver's text reader (BD_ReadDvrFile, Driver_Beam_Subs.f90:72-233)
+    key-for-key:
+        simulation_control:      DynamicSolve, t_initial, t_final, dt
+        gravity_parameter:       gravity (list of 3: Gx, Gy, Gz)
+        frame_parameter:         GlbPos (list of 3), RootOri (3x3 direction-cosine
+                                  matrix, one flow-sequence row per line),
+                                  GlbRotBladeT0
+        root_velocity_parameter: RootVel (list of 3: RootVel(4)/(5)/(6), the angular
+                                  velocity components -- RootVel(1:3) is a derived
+                                  cross-product, never read from the file in either
+                                  format)
+        applied_force:           DistrLoad (list of 6), TipLoad (list of 6)
+        multi_point_loads:       point_loads (list of row mappings, empty list when
+                                  NumPointLoads == 0; NumPointLoads itself derives from
+                                  the list length)
+        primary_input_file:      InputFile
+        outputs:                 WrVTK, VTK_fps
+
+    The driver's text reader has no Echo option (unlike BeamDyn's own primary input
+    file reader), so this schema has no general:Echo section either -- a true
+    key-for-key match, not an omission. InputFile stays path-valued (second-order
+    rule; not repointed at a .yaml sibling here -- that repointing, when needed, is
+    done by the caller after this converter returns, mirroring subdyn's driver-mode
+    harness convention)."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# BeamDyn driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('simulation_control:')
+    w('  DynamicSolve: ' + _as_bool(d.scalar('DynamicSolve')))
+    w('  t_initial: ' + d.scalar('t_initial'))
+    w('  t_final: ' + d.scalar('t_final'))
+    w('  dt: ' + d.scalar('dt'))
+    w('')
+
+    w('gravity_parameter:')
+    gravity = [d.scalar('Gx'), d.scalar('Gy'), d.scalar('Gz')]
+    w('  gravity: [' + ', '.join(gravity) + ']')
+    w('')
+
+    w('frame_parameter:')
+    glb_pos = [d.scalar('GlbPos(1)'), d.scalar('GlbPos(2)'), d.scalar('GlbPos(3)')]
+    w('  GlbPos: [' + ', '.join(glb_pos) + ']')
+    # the direction cosine matrix: two banner lines (not comments -- no !#% prefix),
+    # then 3 rows of 3 numbers each
+    root_ori_rows = _matrix_rows(d, 3, 3, skip=2)
+    w('  RootOri:')
+    for row in root_ori_rows:
+        w('    - [' + ', '.join(row) + ']')
+    w('  GlbRotBladeT0: ' + _as_bool(d.scalar('GlbRotBladeT0')))
+    w('')
+
+    w('root_velocity_parameter:')
+    root_vel = [d.scalar('RootVel(4)'), d.scalar('RootVel(5)'), d.scalar('RootVel(6)')]
+    w('  RootVel: [' + ', '.join(root_vel) + ']')
+    w('')
+
+    w('applied_force:')
+    distr_load = [d.scalar('DistrLoad({})'.format(k)) for k in range(1, 7)]
+    w('  DistrLoad: [' + ', '.join(distr_load) + ']')
+    tip_load = [d.scalar('TipLoad({})'.format(k)) for k in range(1, 7)]
+    w('  TipLoad: [' + ', '.join(tip_load) + ']')
+    w('')
+
+    # multi-point loads: NumPointLoads header, 2 descriptive header lines (not
+    # comments), then NumPointLoads rows of 7 values (Eta, Fx, Fy, Fz, Mx, My, Mz)
+    n_loads = int(d.scalar('NumPointLoads'))
+    load_rows = _matrix_rows(d, n_loads, 7, skip=2)
+    POINT_LOAD_KEYS = ('Eta', 'Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz')
+    w('multi_point_loads:')
+    if n_loads > 0:
+        w('  point_loads:')
+        for row in load_rows:
+            w(_row_map(POINT_LOAD_KEYS, row))
+    else:
+        w('  point_loads: []')
+    w('')
+
+    w('primary_input_file:')
+    w('  InputFile: ' + _as_str(d.scalar('InputFile')))
+    w('')
+
+    w('outputs:')
+    w('  WrVTK: ' + d.scalar('WrVTK'))
+    w('  VTK_fps: ' + d.scalar('VTK_fps'))
+    w('')
 
     return '\n'.join(out)
 
