@@ -13,11 +13,15 @@ OpenFAST v5.0.x to OpenFAST  v5.1.0
 -----------------------------------
 
 YAML input files are now accepted alongside the traditional text format, selected
-purely by file extension (``.yaml``/``.yml``). The OpenFAST primary file and the
-InflowWind primary input file may each be written in YAML, the two formats may be
-mixed within one model, and a YAML primary file may carry the InflowWind input
-inline for a single-file model. Existing text input files are unaffected. See
-:ref:`yaml_input` for the conventions and schemas.
+purely by file extension (``.yaml``/``.yml``). YAML input is accepted for the
+OpenFAST primary file, every supported module's primary input file, every
+module's standalone driver input file, the FAST.Farm primary input file, and
+the TurbSim primary input file; the two formats may be mixed freely within one
+model (any file may be text or YAML independently of its neighbors), and a
+YAML primary file may carry select module inputs inline for a single-file
+model. Existing text input files are unaffected, and results are identical
+regardless of which format is used. See :ref:`yaml_input` for the conventions
+and schemas.
 
 Under-relaxation is introduced for the tight-coupling iterative solver to improve numerical stability, requiring two new inputs in the main OpenFAST input file.
 

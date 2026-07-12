@@ -78,6 +78,27 @@ Merge keys follow the standard YAML rules: keys written explicitly in the host
 mapping always win, and when several aliases are merged (``<<: [*a, *b]``) the
 earlier one takes precedence.
 
+A FAST.Farm primary deck's ``turbines`` sequence (:ref:`FF:Input:YAML`) is
+the same pattern at farm scale -- anchor the shared fields on turbine 1 and
+merge-with-override on every other turbine, so a common high-resolution-grid
+spacing is written once::
+
+   turbines:
+     - &T1
+       WT_X: 0.0
+       WT_Y: 0.0
+       WT_Z: 0.0
+       WT_FASTInFile: WT1.fst
+       X0_High: -63.0
+       Y0_High: -63.0
+       Z0_High: 0.0
+       dX_High: 3.0
+       dY_High: 3.0
+       dZ_High: 3.0
+     - <<: *T1                    # turbine 2 = turbine 1's high-res grid ...
+       WT_X: 630.0                # ... except its position ...
+       WT_FASTInFile: WT2.fst     # ... and its own OpenFAST primary file
+
 Inline module input: the uniform value rule
 --------------------------------------------
 
@@ -273,6 +294,39 @@ supported:
   exercised by any reg-test -- there is no ``CompMooring`` = 4 deck in the
   test suite, and exercising it requires the proprietary OrcaFlex DLL, which
   is unavailable in CI.
+- **Module driver input files** — the standalone ``*_driver`` executables now
+  read their own driver input file (normally ``<base>.dvr``) in YAML
+  (``<base>.yaml``) as well as text, independently of the module primary file
+  each driver points at: AeroDisk (:ref:`adsk-driver-yaml-input`), Simplified
+  ElastoDyn / SED (:ref:`sed-driver-yaml-input`), SeaState
+  (:ref:`seastate-driver-yaml-input`), InflowWind
+  (:ref:`ifw-driver-yaml-input`), SubDyn (:ref:`subdyn-driver-yaml-input`),
+  BeamDyn (:ref:`beamdyn-driver-yaml-input`), HydroDyn
+  (:ref:`hydrodyn-driver-yaml-input`), MoorDyn
+  (:ref:`moordyn-driver-yaml-input`), AeroDyn
+  (:ref:`aerodyn-driver-yaml-input`), and UnsteadyAero
+  (:ref:`ua-driver-yaml-input`). Each driver's second-order files stay
+  path-valued (the module primary file itself, plus that module's own
+  airfoil/blade files, ``PRPInputsFile``, prescribed-motion ``InputsFile``,
+  and time-series files as applicable). A driver's own input file and the
+  module-primary file it points at are each independently text-or-YAML: a
+  YAML driver deck may point at a text module primary and vice versa.
+- FAST.Farm primary input file (:ref:`FF:Input:YAML`) — ``.fstf`` becomes
+  ``.yaml``/``.yml``; ``turbines`` is a sequence of block mappings
+  (``WT_X``/``WT_Y``/``WT_Z`` position, ``WT_FASTInFile`` path, plus the
+  high-resolution-grid columns when ``Mod_AmbWind`` is 2 or 3) and is the
+  natural home for YAML anchors and merge keys -- see "Reuse: includes,
+  anchors, and merge keys" above.
+  Each turbine's ``.fst``, ``MD_FileName``, ``WindFilePath``, ``InflowFile``,
+  ``WindDirPrefix``, and ``WAT_BoxFile`` stay path-valued. Current scope is
+  paths-only turbines (``WT_FASTInFile`` is always a path, never an inline
+  mapping of that turbine's own module inputs); fully-inline turbine
+  definitions are a documented follow-up.
+- TurbSim primary input file (:ref:`TurbSim_yaml_input`) — ``.inp`` becomes
+  ``.yaml``/``.yml``; the literal ``default`` token is preserved exactly as
+  in the text format (TurbSim's default-aware readers consume it the same
+  way); user-defined profile, spectra, and time-series files stay
+  path-valued.
 
 
 .. _feamooring-yaml-input:
