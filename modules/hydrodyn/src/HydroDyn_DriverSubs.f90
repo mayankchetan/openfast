@@ -31,7 +31,9 @@ MODULE HydroDynDriverSubs
    USE ModMesh_Types
    USE VersionInfo
    USE YawOffset
-   
+   USE HydroDyn_Driver_Yaml, ONLY: HDDvr_ParseYamlFile
+   USE YamlInput, ONLY: IsYamlExt
+
    IMPLICIT NONE
    
    TYPE HD_Drvr_MappingData
@@ -130,9 +132,27 @@ SUBROUTINE ReadDriverInputFile( FileName, drvrData, ErrStat, ErrMsg )
    UnEchoLocal = -1
    ErrStat = ErrID_None
    ErrMsg = ""
-      
-   CALL GetNewUnit( UnIn ) 
-   CALL OpenFInpFile ( UnIn, FileName, ErrStat2, ErrMsg2 ) 
+
+      ! YAML-format driver input file (.yaml/.yml): funnel to the dedicated parser and
+      ! return -- there is no passed-file channel for drivers, so the parser reads
+      ! straight from disk and fills the same drvrData fields the text path below
+      ! does. (HD_Drvr_Data is declared inside this module rather than a dedicated
+      ! *_Driver_Types module, so the parser cannot take it as a dummy argument --
+      ! see HydroDyn_Driver_Yaml.f90's header.)
+   IF ( IsYamlExt( FileName ) ) THEN
+      CALL HDDvr_ParseYamlFile( FileName, drvrData%Echo, drvrData%FTitle, drvrData%Gravity, drvrData%WtrDens, &
+                                 drvrData%WtrDpth, drvrData%MSL2SWL, drvrData%HDInputFile, drvrData%SeaStateInputFile, &
+                                 drvrData%OutRootName, drvrData%Linearize, drvrData%NSteps, drvrData%TimeInterval, &
+                                 drvrData%PRPInputsMod, drvrData%NAddDOF, drvrData%PtfmRefzt, drvrData%PRPInputsFile, &
+                                 drvrData%uPRPInSteady, drvrData%uDotPRPInSteady, drvrData%uDotDotPRPInSteady, &
+                                 ErrStat, ErrMsg )
+      drvrData%WrTxtOutFile = .true.
+      drvrData%WrBinOutFile = .false.
+      RETURN
+   END IF
+
+   CALL GetNewUnit( UnIn )
+   CALL OpenFInpFile ( UnIn, FileName, ErrStat2, ErrMsg2 )
    if (Failed()) return
 
 

@@ -22,6 +22,7 @@
         convert_servodyn(text_path, stc_to_yaml) -> (str, dict)  (YAML document, extra StC files)
         convert_stc(text_path) -> str           (YAML document)
         convert_hydrodyn(text_path) -> str      (YAML document)
+        convert_hydrodyn_driver(text_path) -> str  (YAML document; HydroDyn driver file)
         convert_aerodyn(text_path, n_rotors) -> str  (YAML document)
         convert_fst(text_path, mode) -> (str, dict)   (YAML document, extra sibling files)
 """
@@ -2871,6 +2872,81 @@ def convert_hydrodyn(text_path):
     # names start immediately after the "OUTPUT CHANNELS" section banner
     channels = d.outlist(keyword='OUTPUT CHANNELS')
     w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def convert_hydrodyn_driver(text_path):
+    """Convert a text-format HydroDyn driver input file (Wave 4, class-B/sequential-
+    reader driver -- follows the seastate/subdyn convention) to its YAML schema
+    (modules/hydrodyn/src/HydroDyn_Driver_Yaml.f90 is the source of truth).
+
+    Schema mirrors the driver's text reader (HydroDyn_DriverSubs.f90:110-317,
+    ReadDriverInputFile) key-for-key:
+        general:                   Echo, FTitle (line 2's free-text description, read
+                                    via ReadStr with no keyword -- like convert_fst's
+                                    "description", grabbed by line index)
+        environmental_conditions:  Gravity, WtrDens, WtrDpth, MSL2SWL
+        hydrodyn:                  HDInputFile, SeaStateInputFile, OutRootName,
+                                    Linearize, NSteps, TimeInterval
+        prp_inputs:                PRPInputsMod, NAddDOF, PtfmRefzt, PRPInputsFile
+        prp_steady_state_inputs:   uPRPInSteady, uDotPRPInSteady, uDotDotPRPInSteady
+                                    -- always present (the text path's three ReadAry
+                                    calls are unconditional; PRPInputsMod only gates
+                                    whether the *parser* zeroes them afterward, not
+                                    whether they are read)
+
+    HDInputFile/SeaStateInputFile/OutRootName/PRPInputsFile stay path-valued
+    (second-order rule). HDInputFile is NOT repointed at a .yaml sibling here -- that
+    repointing, when needed, is done by the caller after this converter returns,
+    mirroring subdyn's driver-mode harness convention (SeaStateInputFile conversion is
+    out of scope, same as the primary-only executeYamlEquivalenceCase.py hydrodyn
+    block)."""
+    d = _TextDeck(text_path)
+
+    # line 1 is a pure banner comment (ReadCom); line 2 is the free-text description,
+    # read verbatim via ReadStr (no keyword, not a keyword-value line)
+    ftitle = d.lines[1] if len(d.lines) > 1 else ''
+    d.cursor = 2
+
+    out = []
+    w = out.append
+    w('# HydroDyn driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('  FTitle: ' + _quote_line(ftitle))
+    w('')
+
+    w('environmental_conditions:')
+    w('  Gravity: ' + d.scalar('Gravity'))
+    w('  WtrDens: ' + d.scalar('WtrDens'))
+    w('  WtrDpth: ' + d.scalar('WtrDpth'))
+    w('  MSL2SWL: ' + d.scalar('MSL2SWL'))
+    w('')
+
+    w('hydrodyn:')
+    w('  HDInputFile: ' + _as_str(d.scalar('HDInputFile')))
+    w('  SeaStateInputFile: ' + _as_str(d.scalar('SeaStateInputFile')))
+    w('  OutRootName: ' + _as_str(d.scalar('OutRootName')))
+    w('  Linearize: ' + _as_bool(d.scalar('Linearize')))
+    w('  NSteps: ' + d.scalar('NSteps'))
+    w('  TimeInterval: ' + d.scalar('TimeInterval'))
+    w('')
+
+    w('prp_inputs:')
+    w('  PRPInputsMod: ' + d.scalar('PRPInputsMod'))
+    w('  NAddDOF: ' + d.scalar('NAddDOF'))
+    w('  PtfmRefzt: ' + d.scalar('PtfmRefzt'))
+    w('  PRPInputsFile: ' + _as_str(d.scalar('PRPInputsFile')))
+    w('')
+
+    w('prp_steady_state_inputs:')
+    w('  uPRPInSteady: [' + _list_join(d.find('uPRPInSteady')) + ']')
+    w('  uDotPRPInSteady: [' + _list_join(d.find('uDotPRPInSteady')) + ']')
+    w('  uDotDotPRPInSteady: [' + _list_join(d.find('uDotDotPRPInSteady')) + ']')
     w('')
 
     return '\n'.join(out)

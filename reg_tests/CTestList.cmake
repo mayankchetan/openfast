@@ -730,6 +730,15 @@ yaml_equiv("hydrodyn" "hd_MHstLMod2_RectMmbr"      "${CTEST_HYDRODYN_EXECUTABLE}
 # hydrodyn INPUT_GLOBS in executeYamlEquivalenceCase.py.
 yaml_equiv("hydrodyn" "hd_NBodyMod2"               "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
 
+# Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above): also
+# converts hd_driver.inp itself to YAML (class-B/sequential-reader driver) and runs
+# yaml driver -> yaml primary. hd_NBodyMod2 exercises PRPInputsMod=1 (the
+# prp_steady_state_inputs section); hd_5MW_OC4Semi_WSt_WavesWN exercises PRPInputsMod=2
+# (PRPInputsFile, an externally-referenced time-series file resolved relative to the
+# driver, left unconverted per the second-order rule).
+yaml_equiv_driver("hydrodyn" "hd_NBodyMod2"               "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
+yaml_equiv_driver("hydrodyn" "hd_5MW_OC4Semi_WSt_WavesWN" "${CTEST_HYDRODYN_EXECUTABLE}" "hydrodyn;yaml")
+
 # MHK_RM1_Floating: CompHydro=1 (self-contained WAMIT PotFile, RdtnDT="default") with no
 # DISCON DLL (CompServo=0), so the inline HydroFile glue path (all-yaml/single-file) can
 # be exercised directly via ctest. (MHK_RM1_Fixed above has CompHydro=0 -- HydroFile is

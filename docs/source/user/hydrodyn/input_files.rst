@@ -1279,3 +1279,61 @@ HydroDyn's input file may also be given inline under an OpenFAST primary (.fst)
 file's ``input_files:HydroFile`` (only legal when ``CompHydro`` selects
 HydroDyn; see :ref:`yaml_input`). Potential-flow data files (``PotFile``
 rootnames, ``GeoFile`` geometry files) always stay referenced by path.
+
+.. _hydrodyn-driver-yaml-input:
+
+YAML driver input file
+-----------------------
+
+The standalone HydroDyn driver's own input file (normally ``*.inp``) may also be
+written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the format
+from the file extension, exactly like the primary input file above. Parameters
+keep their documented names, grouped into sections that mirror the text driver
+format's banners: ``general`` (``Echo``, ``FTitle`` — the free-text description
+that is the text format's unlabeled second line), ``environmental_conditions``
+(``Gravity``, ``WtrDens``, ``WtrDpth``, ``MSL2SWL``), ``hydrodyn``
+(``HDInputFile``, ``SeaStateInputFile``, ``OutRootName``, ``Linearize``,
+``NSteps``, ``TimeInterval``), ``prp_inputs`` (``PRPInputsMod``, ``NAddDOF``,
+``PtfmRefzt``, ``PRPInputsFile``), and ``prp_steady_state_inputs``
+(``uPRPInSteady``, ``uDotPRPInSteady``, ``uDotDotPRPInSteady``).
+
+``prp_steady_state_inputs`` is always required: the text format always contains
+these three 6-value vectors, and they are only used when ``prp_inputs:PRPInputsMod``
+is 1 (steady-state) — for any other ``PRPInputsMod`` they are read and then zeroed
+out, exactly like the text format.
+
+``HDInputFile``, ``SeaStateInputFile``, ``OutRootName``, and ``PRPInputsFile`` all
+remain file-path strings, resolved relative to the driver input file. ``PRPInputsFile``
+(read only when ``PRPInputsMod`` is 2 or negative) is never inlined.
+
+.. code-block:: yaml
+
+   # HydroDyn driver input file (YAML form)
+   general:
+     Echo: false
+     FTitle: "Sample HydroDyn driver input file"
+
+   environmental_conditions:
+     Gravity: 9.80665
+     WtrDens: 1025
+     WtrDpth: 200
+     MSL2SWL: 0
+
+   hydrodyn:
+     HDInputFile: "NBodyMod2.yaml"
+     SeaStateInputFile: "SeaState.dat"
+     OutRootName: "driver"
+     Linearize: false
+     NSteps: 4000
+     TimeInterval: 0.0125
+
+   prp_inputs:
+     PRPInputsMod: 1
+     NAddDOF: 0
+     PtfmRefzt: 0
+     PRPInputsFile: ""
+
+   prp_steady_state_inputs:
+     uPRPInSteady: [0, 0, 0, 0, 0, 0]
+     uDotPRPInSteady: [0, 0, 0, 0, 0, 0]
+     uDotDotPRPInSteady: [0, 0, 0, 0, 0, 0]

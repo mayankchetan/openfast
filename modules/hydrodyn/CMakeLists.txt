@@ -53,6 +53,7 @@ target_link_libraries(hydrodynlib seastlib nwtclibs)
 
 # HydroDyn Driver Subs Library
 add_library(hydrodyn_driver_subs STATIC
+  src/HydroDyn_Driver_Yaml.f90
   src/HydroDyn_DriverSubs.f90
 )
 target_link_libraries(hydrodyn_driver_subs hydrodynlib)
