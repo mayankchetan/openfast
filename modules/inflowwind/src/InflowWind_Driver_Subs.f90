@@ -29,6 +29,8 @@ MODULE InflowWind_Driver_Subs
    USE InflowWind_Driver_Types
    USE InflowWind_IO
    USE IfW_FlowField
+   USE InflowWind_Driver_Yaml
+   USE YamlInput, ONLY: IsYamlExt
    IMPLICIT NONE
 
 
@@ -737,6 +739,15 @@ SUBROUTINE ReadDvrIptFile( DvrFileName, DvrFlags, DvrSettings, ProgInfo, ErrStat
    FileName = TRIM(DvrFileName)
    ErrStat  = ErrID_None
    ErrMsg   = ""
+
+      ! YAML-format driver input file (.yaml/.yml): funnel to the dedicated parser and
+      ! return -- it fills the same DvrFlags/DvrSettings fields the sequential text
+      ! body below does (both are proper types, so the parser takes them as ordinary
+      ! dummy arguments; see InflowWind_Driver_Yaml.f90).
+   IF ( IsYamlExt( FileName ) ) THEN
+      CALL IfWDvr_ParseYamlFile( FileName, DvrFlags, DvrSettings, ProgInfo, ErrStat, ErrMsg )
+      RETURN
+   END IF
 
    CALL GetNewUnit( UnIn )
    CALL OpenFInpFile( UnIn, FileName, ErrStatTmp, ErrMsgTmp ); if (Failed())  return

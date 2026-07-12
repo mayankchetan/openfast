@@ -638,6 +638,11 @@ yaml_equiv("inflowwind" "ifw_turbsimff"    "${CTEST_INFLOWWIND_EXECUTABLE}" "inf
 yaml_equiv("inflowwind" "ifw_uniform"      "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 yaml_equiv("inflowwind" "ifw_HAWC"         "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 yaml_equiv("inflowwind" "ifw_nativeBladed" "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
+# Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above, and its
+# first instance under aerodisk): also converts ifw_driver.inp itself to YAML and runs
+# yaml driver -> yaml primary.
+yaml_equiv_driver("inflowwind" "ifw_uniform"    "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
+yaml_equiv_driver("inflowwind" "ifw_turbsimff"  "${CTEST_INFLOWWIND_EXECUTABLE}" "inflowwind;yaml")
 
 # NOTE: no yaml_equiv_openfast registration for AeroDisk -- the only two CompAero==1
 # glue-code cases in r-test (5MW_Land_DLL_WTurb_ADsk, 5MW_Land_DLL_WTurb_ADsk_SED) both

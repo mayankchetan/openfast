@@ -9,7 +9,10 @@
     used to characterize a failure, never to excuse one.
 
     Supported modules:
-      inflowwind      - standalone InflowWind driver case.
+      inflowwind      - standalone InflowWind driver case. Optional mode "driver"
+                        additionally converts the driver file itself to YAML
+                        (convert_inflowwind_driver), same convention as
+                        aerodisk/simple-elastodyn/seastate's driver mode below.
       aerodisk        - standalone AeroDisk driver case. Optional mode "driver"
                         additionally converts the .dvr driver file itself to YAML
                         (convert_aerodisk_driver) and runs a full-yaml case (yaml
@@ -249,6 +252,34 @@ elif module == "inflowwind":
 
     ### compare: bit-identical required
     compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### driver file itself to YAML (convert_inflowwind_driver) and run a full-yaml case
+    ### (yaml driver -> yaml primary), still checked bit-identical against the same
+    ### text baseline run above. Same convention as aerodisk/simple-elastodyn/seastate's
+    ### driver mode.
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+
+        yamlDvrPrimary = PRIMARY.replace(".inp", ".yaml")
+        yamlDvrPrimaryText = yamlDeckConverter.convert_inflowwind(os.path.join(yamlDvrDir, PRIMARY))
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimary), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, PRIMARY))
+
+        yamlDriverFile = DRIVER.replace(".inp", ".yaml")
+        yamlDriverText = yamlDeckConverter.convert_inflowwind_driver(os.path.join(yamlDvrDir, DRIVER))
+        # repoint the driver's IfWFileName reference at the yaml primary sibling
+        yamlDriverText = yamlDriverText.replace('"' + PRIMARY + '"', '"' + yamlDvrPrimary + '"')
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(os.path.join(yamlDvrDir, DRIVER))
+
+        returnCode = openfastDrivers.runInflowwindDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDvrDir, OUTPUT))
 
 elif module == "aerodisk":
     #### aerodisk (standalone driver) case ###########################################

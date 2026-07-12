@@ -42,6 +42,57 @@ Command-line syntax for InflowWind driver:
 The `InflowWind Manual <https://wind.nrel.gov/nwtc/docs/InflowWind_Manual.pdf>`__
 contains a description of file formats that it can read.
 
+.. _ifw-driver-yaml-input:
+
+YAML input file
+----------------
+
+The InflowWind driver input file may also be written in YAML (name it
+``*.yaml`` or ``*.yml``); see :ref:`yaml_input` for the conventions shared
+by all modules. Parameters keep their documented names, grouped into
+sections mirroring the text file's banners. ``NumTimeSteps`` and ``DT``
+accept the literal scalar ``default`` in place of a number, exactly like
+the text format's ``DEFAULT`` keyword. ``driver_setup:IfWIptFileName`` and
+``points_file:PointsFileName`` reference external files and are always
+paths (they may themselves point at a ``.yaml`` InflowWind primary input
+file). ``gridded_data_output``'s ``GridCtrCoord``/``GridDelta``/``GridN``
+are only needed when ``WindGrid`` is true; ``vtk_output``'s ``OutWindZ``
+is only needed when ``NOutWindXY`` is greater than 0.
+
+.. code-block:: yaml
+
+   # InflowWind driver input file (YAML form)
+   general:
+     Echo: false
+
+   driver_setup:
+     IfWIptFileName: "ifw_primary.yaml"
+
+   file_conversion:
+     WrHAWC: false
+     WrBladed: false
+     WrVTK: false
+     WrUniform: false
+
+   interpolation_test:
+     NumTimeSteps: default   # or an integer count
+     TStart: 30.0
+     DT: default             # or a timestep in seconds
+     Summary: false
+     SummaryFile: false
+     BoxExceedAllow: false
+
+   points_file:
+     PointsFile: true
+     PointsFileName: "Points.inp"
+     CalcAccel: false
+
+   gridded_data_output:
+     WindGrid: false          # GridCtrCoord/GridDelta/GridN only needed when true
+
+   vtk_output:
+     NOutWindXY: 0             # OutWindZ only needed when > 0
+
 Specifying the InflowWind Input File
 ------------------------------------
 

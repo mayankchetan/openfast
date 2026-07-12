@@ -47,8 +47,9 @@ if(APPLE OR UNIX)
 endif()
 
 # InflowWind Driver executable
-add_executable(inflowwind_driver 
-  src/InflowWind_Driver_Types.f90 
+add_executable(inflowwind_driver
+  src/InflowWind_Driver_Types.f90
+  src/InflowWind_Driver_Yaml.f90
   src/InflowWind_Driver_Subs.f90
   src/InflowWind_Driver.f90
 )

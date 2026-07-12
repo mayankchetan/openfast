@@ -9,6 +9,7 @@
 
     Converters:
         convert_inflowwind(text_path) -> str   (YAML document)
+        convert_inflowwind_driver(text_path) -> str  (YAML document; InflowWind driver file)
         convert_aerodisk(text_path) -> str      (YAML document)
         convert_aerodisk_driver(text_path) -> str  (YAML document; AeroDisk driver file)
         convert_sed(text_path) -> str           (YAML document)
@@ -273,6 +274,127 @@ def convert_inflowwind(text_path):
     w('  SumPrint: ' + _as_bool(d.scalar('SumPrint')))
     channels = d.outlist()
     w('  OutList: [' + ', '.join('"' + c + '"' for c in channels) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
+def _flatten_csv(toks):
+    """Flatten a list of value tokens where a comma-separated triple like "0,0,150" may
+    tokenize as ONE whitespace-delimited token (the driver text format accepts either
+    comma- or space-separated ReadAry lists); split every token on commas and drop any
+    empty pieces (trailing commas), same convention as _list_join for double-punctuated
+    input."""
+    out = []
+    for t in toks:
+        for part in t.split(','):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return out
+
+
+def convert_inflowwind_driver(text_path):
+    """Convert a text-format InflowWind driver input file to its YAML schema.
+
+    Schema mirrors the driver's text reader (InflowWind_Driver_Subs.f90:700-1088,
+    ReadDvrIptFile) key-for-key:
+        general:              Echo
+        driver_setup:         IfWIptFileName
+        file_conversion:      WrHAWC, WrBladed, WrVTK, WrUniform
+        interpolation_test:   NumTimeSteps, TStart, DT, Summary, SummaryFile, BoxExceedAllow
+        points_file:          PointsFile, PointsFileName, CalcAccel
+        gridded_data_output:  WindGrid, GridCtrCoord, GridDelta, GridN
+        vtk_output:           NOutWindXY, OutWindZ
+
+    NumTimeSteps and DT accept the literal "default"/"DEFAULT" token in the text format
+    (_default_or_num passes it through bare, matching YamlGet's own "default" keyword
+    handling). IfWIptFileName (driver_setup) and PointsFileName (points_file) are
+    externally-referenced files and stay path-valued (second-order rule) -- never
+    inlined here, matching the text path's own relative-to-PriPath resolution done in
+    the Fortran reader, not here.
+
+    The r-test driver files' column-2 labels don't always match the Fortran variable
+    names one-for-one (e.g. the primary-file reference is labelled "IfWFileName" in the
+    .inp text, "NumTSteps" for the timestep count, "PointsFileName" for BOTH the
+    read-points-file? flag and the points filename -- read in that order, so two
+    sequential .scalar('PointsFileName') calls resolve unambiguously via the cursor);
+    the keywords used below match the physical label text, not ReadDvrIptFile's
+    internal variable names.
+
+    OutWindZ/GridCtrCoord/GridDelta/GridN are only present in the source line(s) when
+    WindGrid/NOutWindXY require them (mirroring the text path's own conditional
+    ReadAry), so they are still emitted unconditionally here (with whatever default
+    values the driver file carries on those lines even when unused, since the text
+    reader's ELSE branch just skips them as comments -- there is no discarded value to
+    preserve either way in that branch).
+    """
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# InflowWind driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('echo')))
+    w('')
+
+    w('driver_setup:')
+    w('  IfWIptFileName: ' + _as_str(d.scalar('IfWFileName')))
+    w('')
+
+    w('file_conversion:')
+    w('  WrHAWC: ' + _as_bool(d.scalar('WrHAWC')))
+    w('  WrBladed: ' + _as_bool(d.scalar('WrBladed')))
+    w('  WrVTK: ' + _as_bool(d.scalar('WrVTK')))
+    w('  WrUniform: ' + _as_bool(d.scalar('WrUniform')))
+    w('')
+
+    w('interpolation_test:')
+    w('  NumTimeSteps: ' + _default_or_num(d.scalar('NumTSteps')))
+    w('  TStart: ' + d.scalar('TStart'))
+    w('  DT: ' + _default_or_num(d.scalar('DT')))
+    w('  Summary: ' + _as_bool(d.scalar('Summary')))
+    w('  SummaryFile: ' + _as_bool(d.scalar('SummaryFile')))
+    w('  BoxExceedAllow: ' + _as_bool(d.scalar('BoxExceedAllow')))
+    w('')
+
+    w('points_file:')
+    # the section-header comment line itself contains "PointsFileName" as a substring
+    # (e.g. "...output given as PointsFileName.Velocity.dat)..."); advance past it
+    # first with a keyword unique to the comment so the two PointsFileName value reads
+    # below land on the actual value lines, in the same order ReadDvrIptFile reads them
+    # (flag, then filename).
+    d.find('Points file input')
+    w('  PointsFile: ' + _as_bool(d.scalar('PointsFileName')))
+    w('  PointsFileName: ' + _as_str(d.scalar('PointsFileName')))
+    w('  CalcAccel: ' + _as_bool(d.scalar('CalcAccel')))
+    w('')
+
+    w('gridded_data_output:')
+    wind_grid = _as_bool(d.scalar('WindGrid'))
+    w('  WindGrid: ' + wind_grid)
+    # GridCtrCoord/GridDelta/GridN are only read by the YAML parser when WindGrid is
+    # true (mirroring ReadDvrIptFile's IF (DvrFlags%WindGrid) branch); the text file
+    # always carries these three lines regardless, but they are only emitted here when
+    # WindGrid is true so an unused-but-present key never trips Yaml_WarnUnused.
+    grid_ctr_toks = _flatten_csv(d.find('GridCtrCoord'))
+    grid_delta_toks = _flatten_csv(d.find('GridDX'))
+    grid_n_toks = _flatten_csv(d.find('GridNX'))
+    if wind_grid == 'true':
+        w('  GridCtrCoord: [' + _list_join(grid_ctr_toks) + ']')
+        w('  GridDelta: [' + _list_join(grid_delta_toks) + ']')
+        w('  GridN: [' + _list_join(grid_n_toks) + ']')
+    w('')
+
+    w('vtk_output:')
+    n_out_wind_xy = int(d.scalar('NOutWindXY'))
+    w('  NOutWindXY: ' + str(n_out_wind_xy))
+    # OutWindZ is only read by the YAML parser when NOutWindXY > 0 (mirroring
+    # ReadDvrIptFile:1038-1043); omitted here otherwise for the same unused-key reason.
+    if n_out_wind_xy > 0:
+        w('  OutWindZ: [' + _list_join(_flatten_csv(d.find('OutWindZ'))[:n_out_wind_xy]) + ']')
     w('')
 
     return '\n'.join(out)
