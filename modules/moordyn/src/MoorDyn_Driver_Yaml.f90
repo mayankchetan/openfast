@@ -53,12 +53,14 @@
 !!                              in that case), so it stays a required scalar key rather
 !!                              than being inferred purely from the list length.
 !!
-!! MDInputFile/OutRootName/InputsFile/SeaStateFile are externally-referenced files
-!! (second-order rule: stay path-valued) and are each resolved relative to the driver
-!! YAML file's own directory here, exactly as the text path resolves them relative to
-!! FilePath (MoorDyn_Driver.f90:827-839). SeaStateFile is optional (default ""), same
-!! backwards-compatible convention as the text path's own '---' sentinel check
-!! (MoorDyn_Driver.f90:802-810): an empty/absent SeaStateFile means SeaState is not
+!! MDInputFile/OutRootName/InputsFile are externally-referenced files (second-order
+!! rule: stay path-valued) and are each resolved relative to the driver YAML file's
+!! own directory here, exactly as the text reader resolves them relative to FilePath
+!! (MoorDyn_Driver.f90:845-855). SeaStateFile is NOT resolved -- the text reader
+!! stores it verbatim (MoorDyn_Driver.f90:824) and its resolution block omits it, so
+!! this parser must not resolve it either. SeaStateFile is optional (default ""),
+!! same backwards-compatible convention as the text path's own '---' sentinel check
+!! (MoorDyn_Driver.f90:820-825): an empty/absent SeaStateFile means SeaState is not
 !! initialized.
 module MoorDyn_Driver_Yaml
 
@@ -153,9 +155,13 @@ subroutine MDDvr_ParseYamlFile(DvrFileName, Gravity, rhoW, WtrDpth, MDInputFile,
 
    call YamlGet(Doc, 'farm:SeaStateFile', SeaStateFile, TmpErrStat, TmpErrMsg, Default='')
    if (Failed()) return
-   if ( len_trim(SeaStateFile) > 0 ) then
-      if ( PathIsRelative( SeaStateFile ) ) SeaStateFile = trim(PriPath)//trim(SeaStateFile)
-   end if
+   ! Stored VERBATIM (no relative-path resolution). The text reader assigns
+   ! SeaStateInputFile = tmpString (MoorDyn_Driver.f90:824) and its end-of-routine
+   ! resolution block (:845-855) deliberately omits SeaStateInputFile -- it resolves
+   ! only MDInputFile/OutRootName/InputsFile. Prepending PriPath here would make the
+   ! two formats parse a relative SeaStateFile into different data (YAML==text
+   ! invariant). No registered case exercises a relative SeaStateFile, so the
+   ! bit-identical gate cannot catch this -- keep it faithful to the reader.
 
    call ParseInitialPositions(Doc, NumTurbines, FarmPositions, TmpErrStat, TmpErrMsg)
    if (Failed()) return
