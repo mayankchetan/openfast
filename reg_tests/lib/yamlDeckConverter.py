@@ -3188,6 +3188,250 @@ def convert_aerodyn(text_path, n_rotors=1, num_blades_total=None):
     return '\n'.join(out)
 
 
+def _ad_driver_turbine_lines(d, iwt):
+    """Build the YAML lines for one `turbines` list entry (turbine index `iwt`, 1-based),
+    mirroring the text reader's per-turbine loop body (Dvr_ReadInputFile:1064-1271,
+    AeroDyn_Driver_Subs.f90) key-for-key. Returns a list of already-indented lines (the
+    first starting with the list-item dash); the caller appends them under `turbines:`.
+
+    Basic format (BasicHAWTFormat(iwt)==True): baseOriginInit + 7 scalars; blade
+    orientation is derived from `precone`, never read, so no per-blade list at all.
+
+    Advanced format: geometry (baseOrientationInit, hasTower, HAWTprojection,
+    twrOrigin_t, nacOrigin_t, hubOrigin_n, hubOrientation_n, numBlades) followed by three
+    separate per-blade passes in the text file (BldOrigin_h, then BldOrientation_h, then
+    BldHubRad_bl, each looped over all blades) -- collected here and merged with the
+    later motion-section's per-blade values (BldPitch or BldMotionFileName, depending on
+    BldMotionType) into ONE combined `blades:` list, one block-mapping row per blade,
+    rather than mirroring the text file's split geometry-loop/motion-loop structure.
+
+    Base motion (baseMotionType/degreeOfFreedom/amplitude/frequency/baseMotionFileName)
+    and, for advanced format, the whole RNA-motion section (down to BldMotionFileName)
+    are physically present in the text file -- and so always emitted here -- regardless
+    of AnalysisType; AeroDyn_Driver_Yaml.f90 reads/uses them exactly as conditionally as
+    the text path does (only their *use* is analysisType-gated, not their presence)."""
+    sWT = '({})'.format(iwt)
+    lines = []
+    tw = lines.append
+
+    basic_tok = d.scalar('BasicHAWTFormat' + sWT)
+    basic = _unquote(basic_tok).strip().lower() in ('true', 't', '.true.')
+    tw('  - basicHAWTFormat: ' + _as_bool(basic_tok))
+
+    base_origin = _flatten_csv(d.find('BaseOriginInit' + sWT))[:3]
+    tw('    baseOriginInit: [' + _list_join(base_origin) + ']')
+
+    num_blades = 0
+    bld_origin_h, bld_orient_h, bld_hubrad = [], [], []
+
+    if basic:
+        num_blades_tok = d.scalar('NumBlades' + sWT)
+        num_blades = int(_unquote(num_blades_tok))
+        tw('    numBlades: ' + num_blades_tok)
+        tw('    hubRad: ' + d.scalar('HubRad' + sWT))
+        tw('    hubHt: ' + d.scalar('HubHt' + sWT))
+        tw('    overhang: ' + d.scalar('Overhang' + sWT))
+        tw('    shftTilt: ' + d.scalar('ShftTilt' + sWT))
+        tw('    precone: ' + d.scalar('Precone' + sWT))
+        tw('    twr2Shft: ' + d.scalar('Twr2Shft' + sWT))
+    else:
+        base_orient = _flatten_csv(d.find('BaseOrientationInit' + sWT))[:3]
+        tw('    baseOrientationInit: [' + _list_join(base_orient) + ']')
+        tw('    hasTower: ' + _as_bool(d.scalar('HasTower' + sWT)))
+        tw('    HAWTprojection: ' + _as_bool(d.scalar('HAWTprojection' + sWT)))
+        twr_origin = _flatten_csv(d.find('TwrOrigin_t' + sWT))[:3]
+        tw('    twrOrigin_t: [' + _list_join(twr_origin) + ']')
+        nac_origin = _flatten_csv(d.find('NacOrigin_t' + sWT))[:3]
+        tw('    nacOrigin_t: [' + _list_join(nac_origin) + ']')
+        hub_origin = _flatten_csv(d.find('HubOrigin_n' + sWT))[:3]
+        tw('    hubOrigin_n: [' + _list_join(hub_origin) + ']')
+        hub_orient = _flatten_csv(d.find('HubOrientation_n' + sWT))[:3]
+        tw('    hubOrientation_n: [' + _list_join(hub_orient) + ']')
+
+        num_blades_tok = d.scalar('NumBlades' + sWT)
+        num_blades = int(_unquote(num_blades_tok))
+        tw('    numBlades: ' + num_blades_tok)
+
+        for ib in range(1, num_blades + 1):
+            sBld = '({}_{})'.format(iwt, ib)
+            bld_origin_h.append(_flatten_csv(d.find('BldOrigin_h' + sBld))[:3])
+        for ib in range(1, num_blades + 1):
+            sBld = '({}_{})'.format(iwt, ib)
+            bld_orient_h.append(_flatten_csv(d.find('BldOrientation_h' + sBld))[:3])
+        for ib in range(1, num_blades + 1):
+            sBld = '({}_{})'.format(iwt, ib)
+            bld_hubrad.append(d.scalar('BldHubRad_bl' + sBld))
+
+    #------------------------------ base motion (common) -------------------------------
+    tw('    baseMotionType: ' + d.scalar('BaseMotionType' + sWT))
+    tw('    degreeOfFreedom: ' + d.scalar('DegreeOfFreedom' + sWT))
+    tw('    amplitude: ' + d.scalar('Amplitude' + sWT))
+    tw('    frequency: ' + d.scalar('Frequency' + sWT))
+    tw('    baseMotionFileName: ' + _as_str(d.scalar('BaseMotionFileName' + sWT)))
+
+    #------------------------------ RNA motion ------------------------------------------
+    if basic:
+        tw('    nacYaw: ' + d.scalar('NacYaw' + sWT))
+        tw('    rotSpeed: ' + d.scalar('RotSpeed' + sWT))
+        tw('    bldPitch: ' + d.scalar('BldPitch' + sWT))
+    elif num_blades > 0:
+        tw('    nacMotionType: ' + d.scalar('NacMotionType' + sWT))
+        tw('    nacYaw: ' + d.scalar('NacYaw' + sWT))
+        tw('    nacMotionFileName: ' + _as_str(d.scalar('NacMotionFileName' + sWT)))
+        tw('    rotMotionType: ' + d.scalar('RotMotionType' + sWT))
+        tw('    rotSpeed: ' + d.scalar('RotSpeed' + sWT))
+        tw('    rotMotionFileName: ' + _as_str(d.scalar('RotMotionFileName' + sWT)))
+        bld_motion_type_tok = d.scalar('BldMotionType' + sWT)
+        bld_motion_type = int(_unquote(bld_motion_type_tok))
+        tw('    bldMotionType: ' + bld_motion_type_tok)
+
+        bld_pitch = [None] * num_blades
+        bld_motion_file = [None] * num_blades
+        if bld_motion_type == 0:
+            for ib in range(1, num_blades + 1):
+                sBld = '({}_{})'.format(iwt, ib)
+                bld_pitch[ib-1] = d.scalar('BldPitch' + sBld)
+        else:
+            for ib in range(1, num_blades + 1):
+                sBld = '({}_{})'.format(iwt, ib)
+                bld_motion_file[ib-1] = d.scalar('BldMotionFileName' + sBld)
+
+        # merged geometry + motion, one combined block-mapping row per blade
+        tw('    blades:')
+        for ib in range(num_blades):
+            tw('      - origin_h: [' + _list_join(bld_origin_h[ib]) + ']')
+            tw('        orientation_h: [' + _list_join(bld_orient_h[ib]) + ']')
+            tw('        hubRad_bl: ' + bld_hubrad[ib])
+            if bld_motion_type == 0:
+                tw('        bldPitch: ' + bld_pitch[ib])
+            else:
+                tw('        bldMotionFileName: ' + _as_str(bld_motion_file[ib]))
+
+    return lines
+
+
+def convert_aerodyn_driver(text_path):
+    """Convert a text-format AeroDyn driver input file (Wave 4, class-A/FileInfoType-
+    ParseVar reader, the largest driver schema) to its YAML schema
+    (modules/aerodyn/src/AeroDyn_Driver_Yaml.f90 is the source of truth).
+
+    Schema mirrors the driver's text reader (Dvr_ReadInputFile,
+    AeroDyn_Driver_Subs.f90:963-1361) key-for-key:
+        general:                  Echo
+        configuration:             MHK, analysisType, tMax, dt, AeroFile
+        environmental_conditions: FldDens, KinVisc, SpdSound, Patm, Pvap, WtrDpth
+        inflow:                   compInflow, InflowFile, HWindSpeed, RefHt, PLExp --
+                                   the last three are always physically present in the
+                                   text file (and so always emitted here) regardless of
+                                   compInflow
+        seastate:                 CompSeaSt, SeaStFile
+        turbines:                 a list of block mappings, one per turbine (length =
+                                   NumTurbines -- counts derive from list length, never
+                                   a separate key); see _ad_driver_turbine_lines for the
+                                   per-turbine schema (basic vs. advanced geometry, the
+                                   merged `blades:` list, base/RNA motion)
+        time_dependent_analysis:  TimeAnalysisFileName -- always physically present in
+                                   the text file (a data or comment-skip line depending
+                                   on AnalysisType), so always emitted here too;
+                                   AeroDyn_Driver_Yaml.f90 only reads it when
+                                   analysisType == 2
+        combined_case_analysis:   cases -- a list of block-mapping rows (10 columns:
+                                   HWindSpeed, PLExp, rotSpeed, bldPitch, nacYaw, dT,
+                                   tMax, DOF, amplitude, frequency) via the _row_map
+                                   helper (SubDyn 4.3a lesson: YamlInput's block-sequence
+                                   reader rejects flow mappings). NumCases + its two
+                                   header/units lines are always physically present
+                                   (possibly followed by zero data rows), so always
+                                   parsed and emitted here (as an empty list when
+                                   NumCases==0); AeroDyn_Driver_Yaml.f90 only reads it
+                                   when analysisType == 3
+        outputs:                  outFmt, outFileFmt, WrVTK, WrVTK_Type, VTKHubRad,
+                                   VTKNacDim[6]
+
+    AeroFile is repointed at its converted *.yaml sibling (second-order rule for the
+    AeroDyn primary file: the driver-mode harness runs a fully-YAML case, so the
+    driver's own reference must follow), same convention as convert_aerodisk_driver.
+    InflowFile/SeaStFile/baseMotionFileName/nacMotionFileName/rotMotionFileName/
+    bldMotionFileName/TimeAnalysisFileName all stay path-valued (second-order rule)."""
+    d = _TextDeck(text_path)
+
+    out = []
+    w = out.append
+    w('# AeroDyn driver input file (YAML form)')
+    w('# converted from {} by yamlDeckConverter.py'.format(os.path.basename(text_path)))
+
+    w('general:')
+    w('  Echo: ' + _as_bool(d.scalar('Echo')))
+    w('')
+
+    w('configuration:')
+    w('  MHK: ' + d.scalar('MHK'))
+    w('  analysisType: ' + d.scalar('AnalysisType'))
+    w('  tMax: ' + d.scalar('TMax'))
+    w('  dt: ' + d.scalar('DT'))
+    aero_file = _unquote(d.scalar('AeroFile'))
+    aero_file = os.path.splitext(aero_file)[0] + '.yaml'
+    w('  AeroFile: ' + _as_str(aero_file))
+    w('')
+
+    w('environmental_conditions:')
+    w('  FldDens: ' + d.scalar('FldDens'))
+    w('  KinVisc: ' + d.scalar('KinVisc'))
+    w('  SpdSound: ' + d.scalar('SpdSound'))
+    w('  Patm: ' + d.scalar('Patm'))
+    w('  Pvap: ' + d.scalar('Pvap'))
+    w('  WtrDpth: ' + d.scalar('WtrDpth'))
+    w('')
+
+    w('inflow:')
+    w('  compInflow: ' + d.scalar('CompInflow'))
+    w('  InflowFile: ' + _as_str(d.scalar('InflowFile')))
+    w('  HWindSpeed: ' + d.scalar('HWindSpeed'))
+    w('  RefHt: ' + d.scalar('RefHt'))
+    w('  PLExp: ' + d.scalar('PLExp'))
+    w('')
+
+    w('seastate:')
+    w('  CompSeaSt: ' + d.scalar('CompSeaSt'))
+    w('  SeaStFile: ' + _as_str(d.scalar('SeaStFile')))
+    w('')
+
+    n_turbines = int(d.scalar('NumTurbines'))
+    w('turbines:')
+    for iwt in range(1, n_turbines + 1):
+        for line in _ad_driver_turbine_lines(d, iwt):
+            w(line)
+    w('')
+
+    w('time_dependent_analysis:')
+    w('  TimeAnalysisFileName: ' + _as_str(d.scalar('TimeAnalysisFileName')))
+    w('')
+
+    n_cases = int(d.scalar('NumCases'))
+    CASE_KEYS = ('HWindSpeed', 'PLExp', 'rotSpeed', 'bldPitch', 'nacYaw', 'dT', 'tMax', 'DOF', 'amplitude', 'frequency')
+    case_rows = _matrix_rows(d, n_cases, 10, skip=2)
+    w('combined_case_analysis:')
+    if n_cases > 0:
+        w('  cases:')
+        for row in case_rows:
+            w(_row_map(CASE_KEYS, row))
+    else:
+        w('  cases: []')
+    w('')
+
+    w('outputs:')
+    w('  outFmt: ' + _as_str(d.scalar('OutFmt')))
+    w('  outFileFmt: ' + d.scalar('OutFileFmt'))
+    w('  WrVTK: ' + d.scalar('WrVTK'))
+    w('  WrVTK_Type: ' + d.scalar('WrVTK_Type'))
+    w('  VTKHubRad: ' + d.scalar('VTKHubRad'))
+    vtk_nac_dim = _flatten_csv(d.find('VTKNacDim'))[:6]
+    w('  VTKNacDim: [' + _list_join(vtk_nac_dim) + ']')
+    w('')
+
+    return '\n'.join(out)
+
+
 #-------------------------------- MoorDyn ---------------------------------------------
 
 # The word-separator set of NWTC_IO's CountWords/GetWords (space, tab, comma, semicolon,

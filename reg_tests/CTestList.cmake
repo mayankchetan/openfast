@@ -780,6 +780,15 @@ yaml_equiv_openfast("5MW_OC3Spar_DLL_WTurb_WavesIrr" "singlefile" "${CTEST_OPENF
 yaml_equiv("aerodyn" "ad_BAR_RNAMotion" "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
 yaml_equiv("aerodyn" "ad_BAR_OLAF"      "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
 
+# AeroDyn standalone-driver YAML input (Wave 4, task 4.5, the largest driver schema):
+# ad_BAR_CombinedCases exercises the basic-HAWT-format single-turbine geometry plus the
+# 10-column combined-case table (AnalysisType=3); ad_BAR_RNAMotion exercises the
+# advanced-format single-turbine geometry (merged per-blade `blades:` list) with
+# time-varying nacelle-yaw/rotor-speed/blade-pitch motion prescribed via CSV files
+# (AnalysisType=1, NacMotionType=RotMotionType=BldMotionType=1).
+yaml_equiv_driver("aerodyn" "ad_BAR_CombinedCases" "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
+yaml_equiv_driver("aerodyn" "ad_BAR_RNAMotion"     "${CTEST_AERODYN_EXECUTABLE}" "aerodyn;yaml")
+
 # MoorDyn standalone-driver yaml-equivalence: the four cases together span the
 # free-form schema: md_BodiesAndRods (BODIES + RODS incl. Body1/Body1Pinned
 # attachments, option-keyword aliases kb/cb/WtrDpth, an unrecognized option keyword,

@@ -33,7 +33,13 @@
                         driver file itself to YAML (convert_hydrodyn_driver) and runs
                         a full-yaml case (yaml driver -> yaml primary), same
                         convention as seastate/subdyn's driver mode above.
-      aerodyn         - standalone AeroDyn driver case.
+      aerodyn         - standalone AeroDyn driver case (class-A/FileInfoType-ParseVar
+                        driver, the largest Wave-4 driver schema: per-turbine/per-blade
+                        blocks + a combined-case table). Optional mode "driver"
+                        additionally converts the .dvr driver file itself to YAML
+                        (convert_aerodyn_driver) and runs a full-yaml case (yaml driver
+                        -> yaml primary), same convention as the other Wave-4 drivers'
+                        driver mode above.
       moordyn         - standalone MoorDyn driver case.
       beamdyn         - standalone BeamDyn driver case (class-B/sequential-reader
                         driver, with a multi-point-loads table). Optional mode
@@ -910,7 +916,9 @@ elif module == "aerodyn":
     # via CreateMotion.py-generated CSV files referenced from the driver file.
     INPUT_GLOBS = ("*.dat", "*.inp", "*.dvr", "*.csv")
     DRIVER = "ad_driver.dvr"
-    OUTPUT = "ad_driver.outb"
+    # No single fixed OUTPUT constant: AnalysisType=1/2 writes one 'ad_driver.outb',
+    # AnalysisType=3 (combined case) writes one 'ad_driver.<i>.outb' per case -- see
+    # compareAerodynOutputs below, which discovers whichever pattern is present.
 
     # BAR-baseline cases reference shared airfoil/blade files by a relative path that
     # climbs out of the case directory ("../BAR_Baseline/..."); stage it once at the
@@ -957,6 +965,22 @@ elif module == "aerodyn":
             return sum(int(v) for v in vals)
         return 3 * nTurbines
 
+    def compareAerodynOutputs(dir1, dir2):
+        """A combined-case run (AnalysisType=3) writes one 'ad_driver.<i>.outb' per
+        case instead of a single OUTPUT ('ad_driver.outb'); glob for whichever pattern
+        is actually present (mirrors executeAerodynRegressionCase.py's own output
+        discovery) and compare every matched file, requiring the same count on both
+        sides."""
+        files1 = sorted(glob.glob(os.path.join(dir1, "ad_driver*.outb")))
+        files2 = sorted(glob.glob(os.path.join(dir2, "ad_driver*.outb")))
+        if not files1 or not files2:
+            rtl.exitWithError("No 'ad_driver*.outb' output found in '{}' and/or '{}'.".format(dir1, dir2))
+        if len(files1) != len(files2):
+            rtl.exitWithError("Output file count differs: {} ({}) vs {} ({}).".format(
+                dir1, len(files1), dir2, len(files2)))
+        for f1, f2 in zip(files1, files2):
+            compareBitIdentical(f1, f2)
+
     ### text variant
     textDir = stage("text")
 
@@ -988,8 +1012,47 @@ elif module == "aerodyn":
         if returnCode != 0:
             rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(d, returnCode))
 
-    ### compare: bit-identical required
-    compareBitIdentical(os.path.join(textDir, OUTPUT), os.path.join(yamlDir, OUTPUT))
+    ### compare: bit-identical required (see compareAerodynOutputs for why this is not
+    ### a plain compareBitIdentical(OUTPUT, OUTPUT) call)
+    compareAerodynOutputs(textDir, yamlDir)
+
+    ### driver-conversion mode (opt-in, mode == "driver"): additionally convert the
+    ### .dvr itself to YAML (convert_aerodyn_driver) and run a full-yaml case (yaml
+    ### driver -> yaml primary), still checked bit-identical against the same text
+    ### baseline. Same convention as the other Wave-4 drivers' driver mode above.
+    ### convert_aerodyn_driver repoints AeroFile at the converted primary's .yaml
+    ### sibling itself (aerodisk convention), so -- unlike moordyn/hydrodyn/subdyn's
+    ### harness-side replace() -- only the primary conversion needs to land at the
+    ### exact basename the converted driver text already references.
+    if mode == "driver":
+        yamlDvrDir = stage("yaml_driver")
+        yamlDvrDriverFile = os.path.join(yamlDvrDir, DRIVER)
+        with open(yamlDvrDriverFile) as f:
+            yamlDvrDriverText = f.read()
+
+        nTurbinesDvr = findNumTurbines(yamlDvrDriverText)
+        nBladesTotalDvr = findNumBladesTotal(yamlDvrDriverText, nTurbinesDvr)
+        yamlDvrPrimaryBase = findPrimaryBaseName(yamlDvrDriverText, yamlDvrDriverFile)
+        yamlDvrPrimaryYaml = os.path.splitext(yamlDvrPrimaryBase)[0] + ".yaml"
+        yamlDvrPrimaryText = yamlDeckConverter.convert_aerodyn(os.path.join(yamlDvrDir, yamlDvrPrimaryBase),
+                                                               n_rotors=nTurbinesDvr, num_blades_total=nBladesTotalDvr)
+        with open(os.path.join(yamlDvrDir, yamlDvrPrimaryYaml), "w") as f:
+            f.write(yamlDvrPrimaryText)
+        os.remove(os.path.join(yamlDvrDir, yamlDvrPrimaryBase))
+
+        yamlDriverFile = DRIVER.replace(".dvr", ".yaml")
+        yamlDriverText = yamlDeckConverter.convert_aerodyn_driver(yamlDvrDriverFile)
+        if yamlDvrPrimaryYaml not in yamlDriverText:
+            rtl.exitWithError("Converted driver {} does not reference {}.".format(yamlDvrDriverFile, yamlDvrPrimaryYaml))
+        with open(os.path.join(yamlDvrDir, yamlDriverFile), "w") as f:
+            f.write(yamlDriverText)
+        os.remove(yamlDvrDriverFile)
+
+        returnCode = openfastDrivers.runAerodynDriverCase(os.path.join(yamlDvrDir, yamlDriverFile), executable)
+        if returnCode != 0:
+            rtl.exitWithError("Case failed to run in '{}' (exit {}).".format(yamlDvrDir, returnCode))
+
+        compareAerodynOutputs(textDir, yamlDvrDir)
 
 elif module == "moordyn":
     #### moordyn (standalone driver) case ############################################

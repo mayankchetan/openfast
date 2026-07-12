@@ -26,7 +26,9 @@ module AeroDyn_Driver_Subs
    use AeroDyn_IO,     only: AD_WrVTK_Surfaces, AD_WrVTK_LinesPoints
    use SeaState,       only: SeaSt_Init, SeaSt_CalcOutput
    
-   use AeroDyn_Driver_Types   
+   use AeroDyn_Driver_Types
+   use AeroDyn_Driver_Yaml, only: AD_Dvr_ParseYamlFile
+   use YamlInput, only: IsYamlExt
    use AeroDyn
    use InflowWind
    use VersionInfo
@@ -989,10 +991,18 @@ subroutine Dvr_ReadInputFile(fileName, dvr, errStat, errMsg )
    UnIn = -1
    UnEc = -1
 
-   ! Read all input file lines into fileinfo
+   ! Read all input file lines into fileinfo -- .yaml/.yml driver files are dispatched to
+   ! a dedicated YAML parser that fills `dvr` directly (the same outputs the rest of this
+   ! routine produces from FileInfo_In); the text path (ProcessComFile + the ParseVar/
+   ! ParseAry sequence below) is unchanged.
+   if (IsYamlExt(fileName)) then
+      call AD_Dvr_ParseYamlFile(fileName, dvr, errStat2, errMsg2); if (Failed()) return
+      call cleanup()
+      return
+   end if
    call ProcessComFile(fileName, FileInfo_In, errStat2, errMsg2); if (Failed()) return
    call GetPath(fileName, PriPath)     ! Input files will be relative to the path where the primary input file is located.
-   call GetRoot(fileName, dvr%root)      
+   call GetRoot(fileName, dvr%root)
 
    CurLine = 4    ! Skip the first three lines as they are known to be header lines and separators
    call ParseVar(FileInfo_In, CurLine, 'Echo', echo, errStat2, errMsg2); if (Failed()) return;

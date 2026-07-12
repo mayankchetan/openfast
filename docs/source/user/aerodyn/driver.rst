@@ -572,4 +572,131 @@ Pitch motion file:
     0.100000 , 0.000000    , 0.000000           , 0.000000
     0.200000 , 0.000000    , 0.000000           , 0.000000
 
+.. _aerodyn-driver-yaml-input:
+
+YAML driver input file
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The standalone AeroDyn driver's own input file (normally ``*.dvr``) may also be
+written in YAML (name it ``*.yaml`` or ``*.yml``); the driver detects the format
+from the file extension, exactly like the primary input file (see
+:ref:`aerodyn-yaml-input`). Parameters keep their documented names, grouped into
+sections that mirror the text driver format's banners: ``general`` (``Echo``),
+``configuration`` (``MHK``, ``analysisType``, ``tMax``, ``dt``, ``AeroFile``),
+``environmental_conditions``, ``inflow``, ``seastate``, ``turbines``,
+``time_dependent_analysis``, ``combined_case_analysis``, and ``outputs``.
+
+``turbines`` is a YAML list with one block-mapping entry per turbine; its length
+is the turbine count (``NumTurbines`` is never itself a YAML key -- it is
+derived from the list length, and the parser never cross-checks it against a
+separate count). Each entry's ``basicHAWTFormat`` flag selects between two
+mutually exclusive geometry/motion schemas, exactly like the text format:
+
+- ``true`` (basic): ``baseOriginInit``, ``numBlades``, ``hubRad``, ``hubHt``,
+  ``overhang``, ``shftTilt``, ``precone``, ``twr2Shft``. Blade geometry is
+  derived from ``precone``/``numBlades``, never read directly, so there is no
+  per-blade list. RNA motion is three scalars: ``nacYaw``, ``rotSpeed``,
+  ``bldPitch``.
+- ``false`` (advanced): ``baseOriginInit``, ``baseOrientationInit``,
+  ``hasTower``, ``HAWTprojection``, ``twrOrigin_t``, ``nacOrigin_t``,
+  ``hubOrigin_n``, ``hubOrientation_n``, ``numBlades``, and (when
+  ``numBlades`` > 0) a ``blades`` list -- one block-mapping entry per blade,
+  merging what the text format reads as two separate passes (geometry, then
+  motion) into a single row: ``origin_h``, ``orientation_h``, ``hubRad_bl``,
+  plus either ``bldPitch`` (when ``bldMotionType`` == 0) or
+  ``bldMotionFileName`` (when ``bldMotionType`` == 1). RNA motion adds
+  ``nacMotionType``/``nacMotionFileName``, ``rotMotionType``/
+  ``rotMotionFileName``, and ``bldMotionType`` alongside the scalar/file pairs.
+
+Every turbine entry always carries the base-motion keys
+(``baseMotionType``, ``degreeOfFreedom``, ``amplitude``, ``frequency``,
+``baseMotionFileName``) and the RNA-motion keys, regardless of
+``analysisType`` -- exactly as the text format physically carries those lines
+regardless of analysis type (only their *use* is analysis-type-gated).
+
+``combined_case_analysis:cases`` (used only when ``analysisType`` is 3) is a
+list of block-mapping rows -- never one-line flow mappings, which
+``YamlInput``'s block-sequence reader rejects -- each with 10 keys:
+``HWindSpeed``, ``PLExp``, ``rotSpeed``, ``bldPitch``, ``nacYaw``, ``dT``,
+``tMax``, ``DOF``, ``amplitude``, ``frequency``. Its length is the case count.
+
+``AeroFile``/``InflowFile``/``SeaStFile`` and every motion/time-series file
+referenced from a turbine entry stay path-valued (resolved relative to the
+YAML driver file's own directory) and are never inlined.
+
+.. code-block:: yaml
+
+   # AeroDyn driver input file (YAML form; abridged, basic-HAWT single turbine)
+   general:
+     Echo: false
+
+   configuration:
+     MHK: 0
+     analysisType: 3
+     tMax: 11.0
+     dt: 0.5
+     AeroFile: "OpenFAST_BAR_00_AeroDyn.yaml"
+
+   environmental_conditions:
+     FldDens: 1.225
+     KinVisc: 1.4775510204081631e-05
+     SpdSound: 335.0
+     Patm: 103500.0
+     Pvap: 1700.0
+     WtrDpth: 0
+
+   inflow:
+     compInflow: 0
+     InflowFile: "unused"
+     HWindSpeed: 9.0
+     RefHt: 140
+     PLExp: 0.10
+
+   seastate:
+     CompSeaSt: 0
+     SeaStFile: "unused"
+
+   turbines:
+     - basicHAWTFormat: true
+       baseOriginInit: [0, 0, 0]
+       numBlades: 3
+       hubRad: 3.0
+       hubHt: 140.82513
+       overhang: -7
+       shftTilt: -6
+       precone: -4
+       twr2Shft: 3.09343
+       baseMotionType: 1
+       degreeOfFreedom: 1
+       amplitude: 5.0
+       frequency: 0.1
+       baseMotionFileName: ""
+       nacYaw: 0
+       rotSpeed: 7
+       bldPitch: 1
+
+   time_dependent_analysis:
+     TimeAnalysisFileName: "unused"
+
+   combined_case_analysis:
+     cases:
+       - HWindSpeed: 8
+         PLExp: 0.0
+         rotSpeed: 6.
+         bldPitch: 0.
+         nacYaw: 0.
+         dT: 1.0
+         tMax: 100
+         DOF: 0
+         amplitude: 0
+         frequency: 0
+
+   outputs:
+     outFmt: "ES15.8E2"
+     outFileFmt: 2
+     WrVTK: 0
+     WrVTK_Type: 1
+     VTKHubRad: 2
+     VTKNacDim: [-1, -1, -1, 2, 2, 2]
+
 

@@ -84,8 +84,9 @@ target_link_libraries(adilib aerodynlib ifwlib)
 
 # AeroDyn Driver Subs Library
 add_library(aerodyn_driver_subs STATIC
-  src/AeroDyn_Driver_Subs.f90
   src/AeroDyn_Driver_Types.f90
+  src/AeroDyn_Driver_Yaml.f90
+  src/AeroDyn_Driver_Subs.f90
 )
 target_link_libraries(aerodyn_driver_subs adilib aerodynlib versioninfolib)
 
