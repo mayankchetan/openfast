@@ -525,6 +525,12 @@ int32_t ua_dll_update(void *ctx, double t, int64_t step,
             e->x[j] = x0[j] + (k1[j] + 2.0 * k2[j] + 2.0 * k3[j] + k4[j]) / 6.0;
 
         e->x[3] = clampd(e->x[3], 0.0, 1.0); /* UnsteadyAero.f90:2427 */
+#ifdef HGM_DLL_DEBUG
+        if (i == 0) {
+            fprintf(stderr, "DBG step=%lld t=%.6f alpha34_t=%.6f alpha34_tp1=%.6f x=%.8f %.8f %.8f %.8f\n",
+                    (long long)step, t, u_t[i].alpha34, u_tp1[i].alpha34, e->x[0], e->x[1], e->x[2], e->x[3]);
+        }
+#endif
     }
     return UA_DLL_OK;
 }

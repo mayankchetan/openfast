@@ -33,6 +33,7 @@ module UA_Dvr_Subs
       ! 
       integer         :: UAMod
       logical         :: Flookup
+      integer         :: IntegrationMethod ! State integration method (1=RK4,2=AB4,3=ABM4,4=BDF2); optional input line, defaults to UA_Method_ABM4 (3) for back-compat
       character(1024) :: UADLLFileName   ! Path to user UA dynamic library [used only when UAMod=9]
       character(1024) :: UADLLParamFile  ! Parameter string passed to the UA DLL init [used only when UAMod=9]
       logical         :: UseCm
@@ -229,6 +230,15 @@ subroutine ReadDriverInputFile( FileName, InitInp, ErrStat, ErrMsg )
    call ParseCom(FI, iLine, Line                              , errStat2, errMsg2, UnEcho); if(Failed()) return
    call ParseVar(FI, iLine, 'UAMod'      , InitInp%UAMod      , errStat2, errMsg2, UnEcho); if(Failed()) return
    call ParseVar(FI, iLine, 'Flookup'    , InitInp%Flookup    , errStat2, errMsg2, UnEcho); if(Failed()) return
+   ! IntegrationMethod - optional line (1=RK4,2=AB4,3=ABM4,4=BDF2). Older driver input files lack it entirely,
+   ! so on a name-mismatch (we've landed on the next section's line already) default to UA_Method_ABM4, matching
+   ! this driver's historical hardcoded behavior, and leave iLine untouched for the next parse.
+   call ParseVar(FI, iLine, 'IntegrationMethod', InitInp%IntegrationMethod, errStat2, errMsg2, UnEcho)
+   if (ErrStat2 >= AbortErrLev) then
+      InitInp%IntegrationMethod = UA_Method_ABM4
+      errStat2 = ErrID_None
+      errMsg2  = ''
+   end if
    ! UADLLFileName / UADLLParamFile - optional lines, only present in driver input files written for UA_Mod=9
    ! (user DLL). Older driver input files lack them entirely, so if the line does not match the expected
    ! keyname (i.e. we've actually landed on the next section's line), default both and leave iLine untouched
@@ -429,7 +439,15 @@ subroutine driverInputsToUAInitData(p, InitInData, AFI_Params, AFIndx, errStat, 
    
 
    ! -- UA Init Input Data
-   InitInData%nNodesPerBlade  = 1 
+   InitInData%dt               = p%dt  ! Bug fix (task-9): UA_DLL_ctx%dt (UA_Dll.f90 ini%dt) is sourced solely from
+                                        ! this field; BEMT_Set_UA_InitData sets it from `interval` for the production
+                                        ! path, but this standalone driver never set it, leaving it at its
+                                        ! default-initialized value (0.0). A dt=0 makes the DLL's RK4 stage sizes
+                                        ! (k1..k4 *= dt) all zero, so DLL states silently froze at their t=0
+                                        ! steady-state value for the entire run -- only affects UAMod=9 (the
+                                        ! built-in Kelvin-chain models get their dt via the separate `interval`
+                                        ! argument to UA_Init, so they were never affected).
+   InitInData%nNodesPerBlade  = 1
    InitInData%numBlades       = 1
    call AllocAry(InitInData%c, InitInData%nNodesPerBlade, InitInData%numBlades, 'chord', errStat2, errMsg2); if(Failed()) return
    call AllocAry(InitInData%UAOff_innerNode             , InitInData%numBlades, 'UAO'  , errStat2, errMsg2); if(Failed()) return
@@ -441,7 +459,7 @@ subroutine driverInputsToUAInitData(p, InitInData, AFI_Params, AFIndx, errStat, 
    InitInData%a_s          = p%SpdSound
    InitInData%c(1,1)       = p%Chord
    InitInData%UAMod        = p%UAMod
-   InitInData%IntegrationMethod = UA_Method_ABM4
+   InitInData%IntegrationMethod = p%IntegrationMethod
    InitInData%Flookup      = p%Flookup
    InitInData%UA_DLL_FileName  = p%UADLLFileName
    InitInData%UA_DLL_ParamFile = p%UADLLParamFile
