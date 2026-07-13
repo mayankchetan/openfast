@@ -43,6 +43,7 @@ module UnsteadyAero
    use UnsteadyAero_Types
    use AirfoilInfo
    use NWTC_LAPACK
+   use UA_Dll
    
    implicit none 
 
@@ -63,6 +64,13 @@ private
    real(ReKi), parameter, public :: UA_u_min = 0.01_ReKi           ! m/s; used to provide a minimum value so UA equations don't blow up (this should be much lower than range where UA is turned off)
    real(ReKi), parameter         :: K1pos=1.0_ReKi, K1neg=0.5_ReKi ! K1 coefficients for BV model
    real(ReKi), parameter         :: MaxTuOmega = 1.5_ReKi          ! adding a little safety factor for UA models
+
+   ! NOTE: unlike the other UA model IDs (UA_None..UA_HGMV360), this is NOT a registry
+   ! parameter in AirfoilInfo_Registry.txt: AirfoilInfo_Types/UnsteadyAero_Types are both
+   ! used directly by the UA_Dll module, and (Fortran being case-insensitive) a public
+   ! module-level entity named UA_DLL there collides with that module's own name "UA_Dll".
+   ! Declared here as a plain module parameter instead to avoid the collision.
+   integer(IntKi), parameter :: UA_DLL = 9   ! user-supplied dynamic library model (UA_Mod=9)
 
    contains
    
@@ -749,7 +757,13 @@ subroutine UA_SetParameters( dt, InitInp, p, AFInfo, AFIndx, ErrStat, ErrMsg )
    p%Flookup    = InitInp%Flookup
    p%ShedEffect = InitInp%ShedEffect
    p%UA_OUTS    = InitInp%UA_OUTS
-   
+
+   if (p%UAMod == UA_DLL) then
+      p%UA_DLL_ParamFile = InitInp%UA_DLL_ParamFile
+      call UADll_Load(p, InitInp%UA_DLL_FileName, ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+      if (ErrStat >= AbortErrLev) return
+   end if
+
    if (p%UAMod==UA_HGM .or. p%UAMod==UA_HGMV .or. p%UAMod==UA_HGMV360) then
       UA_NumLinStates = 4
       ! set the maximum number of states
@@ -920,7 +934,10 @@ subroutine UA_InitStates_Misc( p, x, xd, OtherState, m, ErrStat, ErrMsg )
       call AllocAry( xd%alpha_dot_minus1 ,   p%nNodesPerBlade,p%numBlades, 'xd%alpha_dot_minus1',  ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
       allocate     ( OtherState%activeL     (p%nNodesPerBlade,p%numBlades), stat=ErrStat2); if(ErrStat2 /= 0) call SetErrStat( ErrID_Fatal, " Error allocating OtherState%activeL.", ErrStat, ErrMsg, RoutineName)
       allocate     ( OtherState%activeD     (p%nNodesPerBlade,p%numBlades), stat=ErrStat2); if(ErrStat2 /= 0) call SetErrStat( ErrID_Fatal, " Error allocating OtherState%activeD.", ErrStat, ErrMsg, RoutineName)
-      
+
+   elseif (p%UAMod == UA_DLL) then
+      ! The DLL owns and packs/unpacks its own internal state (xd%UA_DLL_blob, m%UA_DLL_ctx);
+      ! none of the Kelvin-chain x/xd/OtherState arrays below apply.
    else
       call AllocAry( xd%alpha_minus1,        p%nNodesPerBlade,p%numBlades, 'xd%alpha_minus1', ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
       call AllocAry( xd%alpha_filt_minus1,   p%nNodesPerBlade,p%numBlades, 'xd%alpha_filt_minus1', ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
@@ -1050,7 +1067,9 @@ subroutine UA_ReInit( p, x, xd, OtherState, m, ErrStat, ErrMsg )
       xd%alpha_dot_minus1     = 0.0_ReKi
       OtherState%activeL      = .False.
       OtherState%activeD      = .False.
-      
+
+   elseif (p%UAMod == UA_DLL) then
+      ! nothing to reinitialize here; DLL state (if any) is established by UADll_Init
    else
       OtherState%sigma1    = 1.0_ReKi
       OtherState%sigma1c   = 1.0_ReKi
@@ -1155,7 +1174,11 @@ subroutine UA_Init( InitInp, u, p, x, xd, OtherState, y,  m, Interval, &
    
       ! initialize the states and misc variables
    call UA_InitStates_Misc( p, x, xd, OtherState, m, ErrStat2, ErrMsg2 ); if(Failed()) return
-      
+
+   if (p%UAMod == UA_DLL) then
+      call UADll_Init( p, InitInp, AFInfo, AFIndx, m, ErrStat2, ErrMsg2 ); if(Failed()) return
+   end if
+
    ! --- Write Outputs
    call UA_Init_Outputs(InitInp, p, y, InitOut, errStat2, errMsg2); if(Failed()) return
    
@@ -1489,19 +1512,21 @@ subroutine UA_ValidateInput(InitInp, ErrStat, ErrMsg)
    type(UA_InitInputType),       intent(in   )  :: InitInp     ! Input data for initialization routine
    integer(IntKi),               intent(  out)  :: ErrStat     ! Error status of the operation
    character(*),                 intent(  out)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
-   integer, parameter :: UA_VALID(8) = (/UA_None, UA_Gonzalez, UA_MinnemaPierce, UA_HGM, UA_HGMV, UA_Oye, UA_BV, UA_HGMV360/)
+   integer, parameter :: UA_VALID(9) = (/UA_None, UA_Gonzalez, UA_MinnemaPierce, UA_HGM, UA_HGMV, UA_Oye, UA_BV, UA_HGMV360, UA_DLL/)
 
    character(*), parameter                      :: RoutineName = 'UA_ValidateInput'
-   
+
    ErrStat = ErrID_None
    ErrMsg  = ""
 
    if (.not.(any(InitInp%UAMod==UA_VALID))) call SetErrStat( ErrID_Fatal, &
       "In this version, UAMod must be 0 (None), 2 (Gonzalez's variant), 3 (Minnema/Pierce variant), 4 (continuous HGM model), 5 (HGM with vortex), &
-      &6 (Oye), 7 (Boeing-Vertol), or 8 (HGM-360)", ErrStat, ErrMsg, RoutineName )  ! NOTE: for later-  1 (baseline/original) 
-      
-   if (.not. InitInp%FLookUp ) call SetErrStat( ErrID_Fatal, 'FLookUp must be TRUE for this version.', ErrStat, ErrMsg, RoutineName )
-   
+      &6 (Oye), 7 (Boeing-Vertol), 8 (HGM-360), or 9 (user DLL)", ErrStat, ErrMsg, RoutineName )  ! NOTE: for later-  1 (baseline/original)
+
+   if (InitInp%UAMod /= UA_DLL) then
+      if (.not. InitInp%FLookUp ) call SetErrStat( ErrID_Fatal, 'FLookUp must be TRUE for this version.', ErrStat, ErrMsg, RoutineName )
+   end if
+
    if (InitInp%a_s <= 0.0) call SetErrStat ( ErrID_Fatal, 'The speed of sound (SpdSound) must be greater than zero.', ErrStat, ErrMsg, RoutineName )
 
    if (InitInp%UAMod == UA_HGM .or. InitInp%UAMod == UA_HGMV .or. InitInp%UAMod == UA_OYE .or. InitInp%UAMod == UA_HGMV360) then ! these are the continuous methods that integrate states
@@ -1512,7 +1537,12 @@ subroutine UA_ValidateInput(InitInp, ErrStat, ErrMsg)
    end if
 
    if (InitInp%UAMod == UA_HGMV360) call SetErrStat( ErrID_Fatal, 'HGMV360 model not implemented for this version. Choose another model for UA_Mod.', ErrStat, ErrMsg, RoutineName )
-   
+
+   if (InitInp%UAMod == UA_DLL) then
+      if (len_trim(InitInp%UA_DLL_FileName) == 0 .or. trim(InitInp%UA_DLL_FileName) == 'unused') &
+         call SetErrStat( ErrID_Fatal, 'UA_DLL_FileName required when UAMod = 9 (user DLL).', ErrStat, ErrMsg, RoutineName )
+   end if
+
 end subroutine UA_ValidateInput
 !==============================================================================     
 subroutine UA_ValidateAFI(UAMod, FLookup, AFInfo, ErrStat, ErrMsg)
@@ -1522,7 +1552,7 @@ subroutine UA_ValidateAFI(UAMod, FLookup, AFInfo, ErrStat, ErrMsg)
    integer(IntKi),                  intent(  out)  :: ErrStat     ! Error status of the operation
    character(*),                    intent(  out)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
 
-   integer(IntKi)                                  :: j
+   integer(IntKi)                                  :: j, k
    integer(IntKi)                                  :: indx
    real(ReKi)                                      :: cl_fs, vmax
    character(*), parameter                         :: RoutineName = 'UA_ValidateAFI'
@@ -1535,6 +1565,22 @@ subroutine UA_ValidateAFI(UAMod, FLookup, AFInfo, ErrStat, ErrMsg)
    
    if (.not. allocated(AFInfo%Table)) then
       call SetErrStat(ErrID_Fatal, 'Airfoil table not allocated in "'//trim(AFInfo%FileName)//'".', ErrStat, ErrMsg, RoutineName )
+   else if (UAMod == UA_DLL) then
+      ! The DLL decides what it needs internally; only require monotonic alpha
+      ! and the presence of Cl/Cd columns (no UA_BL-specific checks apply).
+      if (AFInfo%ColCl <= 0 .or. AFInfo%ColCd <= 0) then
+         call SetErrStat(ErrID_Fatal, 'UA_DLL requires Cl and Cd columns in "'//trim(AFInfo%FileName)//'".', ErrStat, ErrMsg, RoutineName )
+      end if
+      do j=1, AFInfo%NumTabs
+         associate( tab => AFInfo%Table(j) )
+         do k=2, tab%NumAlf
+            if ( tab%alpha(k) <= tab%alpha(k-1) ) then
+               call SetErrStat(ErrID_Fatal, 'UA_DLL requires strictly monotonic alpha in "'//trim(AFInfo%FileName)//'".', ErrStat, ErrMsg, RoutineName )
+               exit
+            end if
+         end do
+         end associate
+      end do
    else
 
       do j=1, AFInfo%NumTabs
