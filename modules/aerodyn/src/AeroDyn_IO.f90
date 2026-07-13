@@ -25,6 +25,7 @@ MODULE AeroDyn_IO
    use AeroDyn_Types
    use BEMTUncoupled, only : VelocityIsZero
    use FVW_Subs,      only : FVW_AeroOuts
+   use UnsteadyAero,  only : UA_DLL
 
    USE AeroDyn_AllBldNdOuts_IO
    
@@ -962,6 +963,25 @@ SUBROUTINE ParsePrimaryFileInfo( PriPath, InitInp, InputFile, RootName, NumBlade
       if (UAModProvided) then
          call LegacyAbort('Cannot have both UA_Mod and UAMod in the input file'); return
       endif
+   endif
+
+      ! UADLLFileName - Path to user UA dynamic library [used only when UA_Mod=9; if line is missing, defaults to "unused"].
+      ! Optional line (same idiom as UAStartRad/UAEndRad below): silently default both DLL fields when absent, so
+      ! files without them remain valid without a legacy-format warning -- these lines are conditional on UA_Mod=9,
+      ! not a format change. ParseVar does not advance CurLine on a keyname mismatch, so the next parse is unaffected.
+      ! UA_Init fatals later if UA_Mod=9 but no DLL file was given.
+   call ParseVar( FileInfo_In, CurLine, "UADLLFileName", InputFileData%UA_Init%UA_DLL_FileName, ErrStat2, ErrMsg2, UnEc, IsPath=.true. )
+   if (ErrStat2 >= AbortErrLev) then
+      InputFileData%UA_Init%UA_DLL_FileName  = 'unused'
+      InputFileData%UA_Init%UA_DLL_ParamFile = ''
+      ErrStat2 = ErrID_None
+      ErrMsg2  = ''
+   else
+      IF ( PathIsRelative( InputFileData%UA_Init%UA_DLL_FileName ) ) InputFileData%UA_Init%UA_DLL_FileName = TRIM(PriPath)//TRIM(InputFileData%UA_Init%UA_DLL_FileName)
+         ! UADLLParamFile - Free-form string passed verbatim to the UA DLL's init call (e.g. the DLL's own config/weights
+         ! file); NOT resolved with PriPath because the DLL - not AeroDyn - interprets this string. [used only when UA_Mod=9]
+      call ParseVar( FileInfo_In, CurLine, "UADLLParamFile", InputFileData%UA_Init%UA_DLL_ParamFile, ErrStat2, ErrMsg2, UnEc )
+         if (Failed()) return
    endif
 
 
@@ -1992,11 +2012,17 @@ SUBROUTINE AD_PrintSum( InputFileData, p, p_AD, u, y, NumBlades, BladeInputFileD
          Msg = 'Stieg Oye dynamic stall model'
       case (UA_BV)
          Msg = 'Boeing-Vertol dynamic stall model (e.g. used in CACTUS)'
+      case (UA_DLL)
+         Msg = 'user-supplied dynamic library (UA DLL)'
       case default
          Msg = 'unknown'
    end select
    WRITE (UnSu,Ec_IntFrmt) InputFileData%UA_Init%UAMod, 'UA_Mod', 'Unsteady Aero Model: '//TRIM(Msg)
 
+   if (InputFileData%UA_Init%UAMod==UA_DLL) then
+      WRITE (UnSu,Ec_StrFrmt) 'UADLLFileName',  'Path to user UA dynamic library',              '"'//TRIM(InputFileData%UA_Init%UA_DLL_FileName )//'"'
+      WRITE (UnSu,Ec_StrFrmt) 'UADLLParamFile', 'Parameter string passed to the UA DLL init',    '"'//TRIM(InputFileData%UA_Init%UA_DLL_ParamFile)//'"'
+   end if
 
    ! FLookup
    if (InputFileData%UA_Init%FLookup) then

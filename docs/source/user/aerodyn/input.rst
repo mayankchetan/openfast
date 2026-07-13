@@ -340,6 +340,8 @@ Most ``UA_Mod`` will require `AoA34` to be set to true. But when using quasi-ste
 - ``5``: 5-states continuous-time B-L model similar to HGM with an additional state for vortex generation
 - ``6``: 1-state continuous-time developed by Oye
 - ``7``: discrete-time Boeing-Vertol (BV) model
+- ``8``: 5-states continuous-time HGM model with vortex modifications, adapted for the full [-180, 180] deg AoA range
+- ``9``: user-supplied dynamic library (user UA DLL); see ``UADLLFileName`` and ``UADLLParamFile`` below
 
 Linearization is supported with ``UA_Mod=4,5,6`` (which use continuous-time states) but not with the other models. The different models are described in :numref:`AD_UA`.
 
@@ -382,6 +384,18 @@ to indicate the last rotor radius where unsteady aerodynamics should be turned o
 omitted from the input file, ``UAEndRad`` will default to 1 (the blade tip).
 All blade nodes that are located at a rotor radius greater than ``UAEndRad`` will have
 unsteady aerodynamics turned off for the entire simulation.
+
+``UADLLFileName`` is the path to the user-supplied UA dynamic library (shared object/DLL)
+implementing the ``UA_Mod=9`` model. [used only when ``UA_Mod=9``] A relative path is
+resolved relative to the directory containing the AeroDyn primary input file. If this line
+is omitted from the input file (older input files predating this feature), the value
+defaults to ``"unused"`` and ``UA_Mod=9`` cannot be used.
+
+``UADLLParamFile`` is a free-form string passed verbatim to the UA DLL's initialization
+routine, e.g. a path to the DLL's own configuration/weights file. [used only when
+``UA_Mod=9``] Unlike ``UADLLFileName``, this string is **not** resolved relative to the
+AeroDyn input file directory -- the DLL, not AeroDyn, is responsible for interpreting it.
+If this line is omitted, it defaults to an empty string.
 
 
 .. _airfoil_information:

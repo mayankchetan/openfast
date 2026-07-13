@@ -31,10 +31,12 @@ module UA_Dvr_Subs
       real(ReKi)      :: FldDens
       real(ReKi)      :: SpdSound        
       ! 
-      integer         :: UAMod           
-      logical         :: Flookup        
-      logical         :: UseCm         
-      character(1024) :: AirFoil1 
+      integer         :: UAMod
+      logical         :: Flookup
+      character(1024) :: UADLLFileName   ! Path to user UA dynamic library [used only when UAMod=9]
+      character(1024) :: UADLLParamFile  ! Parameter string passed to the UA DLL init [used only when UAMod=9]
+      logical         :: UseCm
+      character(1024) :: AirFoil1
       real(ReKi)      :: Chord
       ! 
       integer         :: SimMod          
@@ -227,7 +229,23 @@ subroutine ReadDriverInputFile( FileName, InitInp, ErrStat, ErrMsg )
    call ParseCom(FI, iLine, Line                              , errStat2, errMsg2, UnEcho); if(Failed()) return
    call ParseVar(FI, iLine, 'UAMod'      , InitInp%UAMod      , errStat2, errMsg2, UnEcho); if(Failed()) return
    call ParseVar(FI, iLine, 'Flookup'    , InitInp%Flookup    , errStat2, errMsg2, UnEcho); if(Failed()) return
-   
+   ! UADLLFileName / UADLLParamFile - optional lines, only present in driver input files written for UA_Mod=9
+   ! (user DLL). Older driver input files lack them entirely, so if the line does not match the expected
+   ! keyname (i.e. we've actually landed on the next section's line), default both and leave iLine untouched
+   ! for the next parse -- ParseVar does not advance iLine on a name-mismatch failure, so this is safe.
+   call ParseVar(FI, iLine, 'UADLLFileName', InitInp%UADLLFileName, errStat2, errMsg2, UnEcho, IsPath=.true.)
+   if (errStat2 == ErrID_Fatal) then
+      InitInp%UADLLFileName  = 'unused'
+      InitInp%UADLLParamFile = ''
+      errStat2 = ErrID_None
+      errMsg2  = ''
+   else
+      if(Failed()) return
+      ! UADLLParamFile is a free string passed verbatim to the DLL (e.g. path to its own config/weights file);
+      ! NOT resolved with PriPath since the DLL, not the driver, interprets it.
+      call ParseVar(FI, iLine, 'UADLLParamFile', InitInp%UADLLParamFile, errStat2, errMsg2, UnEcho); if(Failed()) return
+   endif
+
    ! --- AIRFOIL PROPERTIES section
    call ParseCom(FI, iLine, Line                        , errStat2, errMsg2, UnEcho); if(Failed()) return
    call ParseVar(FI, iLine, 'AirFoil' , InitInp%AirFoil1, errStat2, errMsg2, UnEcho); if(Failed()) return
@@ -292,6 +310,7 @@ subroutine ReadDriverInputFile( FileName, InitInp, ErrStat, ErrMsg )
    !InitInp%OutRootName=trim(InitInp%OutRootName)//'.UA' ! For backward compatibility
    !if (PathIsRelative(InitInp%OutRootName)) InitInp%OutRootName = TRIM(PriPath)//TRIM(InitInp%OutRootName)
    if (PathIsRelative(InitInp%Airfoil1))    InitInp%Airfoil1 = TRIM(PriPath)//TRIM(InitInp%Airfoil1)
+   if (trim(InitInp%UADLLFileName)/='unused' .and. PathIsRelative(InitInp%UADLLFileName)) InitInp%UADLLFileName = TRIM(PriPath)//TRIM(InitInp%UADLLFileName)
    if (PathIsRelative(InitInp%AeroTSFile   )) InitInp%AeroTSFile   = TRIM(PriPath)//TRIM(InitInp%AeroTSFile  )
    if (PathIsRelative(InitInp%InflowTSFile )) InitInp%InflowTSFile = TRIM(PriPath)//TRIM(InitInp%InflowTSFile)
    if (PathIsRelative(InitInp%MotionTSFile )) InitInp%MotionTSFile = TRIM(PriPath)//TRIM(InitInp%MotionTSFile)
@@ -421,9 +440,11 @@ subroutine driverInputsToUAInitData(p, InitInData, AFI_Params, AFIndx, errStat, 
    InitInData%UAOff_outerNode = InitInData%nNodesPerBlade + 1
    InitInData%a_s          = p%SpdSound
    InitInData%c(1,1)       = p%Chord
-   InitInData%UAMod        = p%UAMod 
+   InitInData%UAMod        = p%UAMod
    InitInData%IntegrationMethod = UA_Method_ABM4
    InitInData%Flookup      = p%Flookup
+   InitInData%UA_DLL_FileName  = p%UADLLFileName
+   InitInData%UA_DLL_ParamFile = p%UADLLParamFile
    InitInData%OutRootName  = trim(p%OutRootName)//'.UA'
    InitInData%WrSum        = p%SumPrint
    InitInData%d_34_to_ac   = p%d_34_to_ac !  d_34_to_ac = d_QT ~0.5 [-], Approximated using y coordinate
