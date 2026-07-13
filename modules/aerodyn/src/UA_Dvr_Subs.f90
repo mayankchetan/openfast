@@ -410,7 +410,13 @@ subroutine driverInputsToUAInitData(p, InitInData, AFI_Params, AFIndx, errStat, 
    
 
    ! -- UA Init Input Data
-   InitInData%nNodesPerBlade  = 1 
+   InitInData%dt               = p%dt  ! Bug fix: this standalone driver never set InitInData%dt, leaving it at its
+                                        ! default-initialized value (0.0). Consumers of InitInData%dt (e.g. a UA_Mod=9
+                                        ! user DLL, whose init context sources dt solely from this field) would see
+                                        ! dt=0. The built-in Kelvin-chain UA models are unaffected because UA_Init
+                                        ! takes the timestep via its separate `Interval` dummy argument and sets
+                                        ! p%dt from that -- InitInData%dt is silently ignored on those paths.
+   InitInData%nNodesPerBlade  = 1
    InitInData%numBlades       = 1
    call AllocAry(InitInData%c, InitInData%nNodesPerBlade, InitInData%numBlades, 'chord', errStat2, errMsg2); if(Failed()) return
    call AllocAry(InitInData%UAOff_innerNode             , InitInData%numBlades, 'UAO'  , errStat2, errMsg2); if(Failed()) return
