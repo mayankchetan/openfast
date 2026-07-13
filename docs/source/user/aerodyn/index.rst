@@ -37,6 +37,7 @@ The documentation here was derived from AeroDyn Manual for AeroDyn version 15.04
    driver.rst
    theory.rst
    theory_ua.rst
+   ua_dll_api.rst
    theory_tailfin.rst
    zrefs.rst
    appendix.rst

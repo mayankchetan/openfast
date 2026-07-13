@@ -480,7 +480,7 @@ The calculation of the dynamic lift and drag coefficients is done as follows
 
 .. math::
     \begin{aligned}
-        C_{l,\text{dyn}}&=\frac{C_l^{st}(\alpha_{e,L})}{\alpha_{e,L}-\alpha_0} ,\quad  \text{if dynamic stall active for $C_l$}\  \\
+        C_{l,\text{dyn}}&=\frac{C_l^{st}(\alpha_{e,L})}{\alpha_{e,L}-\alpha_0} \left(\alpha_{34}-\alpha_0\right) ,\quad  \text{if dynamic stall active for $C_l$}\  \\
         C_{l,\text{dyn}}&=C_l^{st}(\alpha_{34}) ,\quad\quad  \text{otherwise} \\
         C_{d,\text{dyn}}&=C_d^{st}(\alpha_{e,D})
     \end{aligned}
@@ -494,6 +494,28 @@ The moment coefficient is calculated based on values at the aerodynamic center a
 where :math:`\alpha_{50}` is computed the same way as :math:`\alpha_{34}` (using the velocity at the aerodynamic center and the rotational rate of the airfoil) but using the distance from the aerodynamic center to the mid-chord (see :numref:`ua_notations`).
 
 
+
+
+User-supplied DLL model (UAMod=9)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``UAMod=9`` delegates the unsteady-aerodynamics model itself to a
+user-supplied shared library (``.so``/``.dylib``/``.dll``), loaded at run
+time and called through a small, fixed C ABI. AeroDyn contributes no
+built-in physics for this mode beyond marshalling element inputs to the
+DLL and caching its outputs; the model -- attached-flow behavior, dynamic
+stall, or anything else expressible as a function of element kinematics
+and internal state -- is entirely defined by the DLL. Enabling it requires
+two additional input lines (``UADLLFileName``, ``UADLLParamFile``)
+immediately after ``UA_Mod`` in the AeroDyn primary input file; see
+:numref:`ad_ua_inputs`. Linearization is not supported with this model.
+``UA_Mod=9`` is currently rejected at initialization when combined with
+the free-vortex-wake model (``WakeMod=3``/OLAF).
+
+The full ABI contract -- entry points, struct layouts, lifecycle,
+threading/purity rules, error convention, checkpoint/restart semantics,
+and a worked walk-through of the reference HGM DLL -- is documented
+separately in :numref:`ua_dll_api`.
 
 
 
@@ -662,7 +684,7 @@ The differente inputs are described below.
 
 **Unsteady aerodynamics options**
 
-``UAMod``     : Unsteady Aero Model Switch (switch) {2=B-L Gonzalez, 3=B-L Minnema/Pierce, 4=B-L HGM 4-states, 5=B-L 5 states, 6=Oye, 7=Boeing-Vertol} [used only when AFAeroMod=2]
+``UAMod``     : Unsteady Aero Model Switch (switch) {2=B-L Gonzalez, 3=B-L Minnema/Pierce, 4=B-L HGM 4-states, 5=B-L 5 states, 6=Oye, 7=Boeing-Vertol, 9=user DLL} [used only when AFAeroMod=2]
 
 ``FLookup``   : Flag to indicate whether a lookup for f' will be calculated (TRUE) or whether best-fit exponential equations will be used (FALSE); if FALSE S1-S4 must be provided in airfoil input files (flag) [used only when AFAeroMod=2]
 
