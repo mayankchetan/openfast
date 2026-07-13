@@ -424,8 +424,8 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
       ! wired into the BEMT loop and the standalone UA driver (see UnsteadyAero.f90 task-7 notes);
       ! FVW's per-panel UA_UpdateStates/UA_CalcOutput calls (FVW.f90) would silently never advance
       ! the DLL's state or refresh its output cache. Fail loudly instead of shipping wrong outputs.
-      call SetErrStat(ErrID_Fatal, 'UA_Mod = 9 (user DLL) is not yet supported with Wake_Mod = FVW/OLAF; '// &
-                       'use the BEMT wake model, or a different UAMod.', ErrStat, ErrMsg, RoutineName)
+      call Fatal('UA_Mod = 9 (user DLL) is not yet supported with Wake_Mod = FVW/OLAF; '// &
+                 'use the BEMT wake model, or a different UAMod.')
       return
    end if
    do iR = 1, nRotors
