@@ -144,3 +144,5 @@ install(TARGETS aerodynlib aeroacousticslib basicaerolib aerodyn_driver_subs aer
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
 )
+
+install(FILES src/ua_dll_api.h DESTINATION include/openfast)
