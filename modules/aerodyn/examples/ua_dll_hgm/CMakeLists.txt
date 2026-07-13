@@ -1,0 +1,6 @@
+add_library(ua_hgm SHARED hgm_dll.c)
+target_include_directories(ua_hgm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
+set_target_properties(ua_hgm PROPERTIES PREFIX "lib" C_STANDARD 11)
+if(NOT WIN32)
+  target_link_libraries(ua_hgm m)
+endif()

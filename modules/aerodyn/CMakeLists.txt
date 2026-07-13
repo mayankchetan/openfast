@@ -147,3 +147,11 @@ install(TARGETS aerodynlib aeroacousticslib basicaerolib aerodyn_driver_subs aer
 )
 
 install(FILES src/ua_dll_api.h DESTINATION include/openfast)
+
+# Reference UA user-DLL examples (UA_Mod=9 ABI). Built under BUILD_TESTING so
+# they're available to the acceptance tests that exercise DLL == built-in
+# equivalence; also buildable standalone via BUILD_UA_DLL_EXAMPLES.
+option(BUILD_UA_DLL_EXAMPLES "Build reference UA user-DLL examples (modules/aerodyn/examples/ua_dll_*)" OFF)
+if(BUILD_TESTING OR BUILD_UA_DLL_EXAMPLES)
+  add_subdirectory(examples/ua_dll_hgm)
+endif()
