@@ -29,13 +29,14 @@ endif()
 
 # BasicAero Library
 add_library(basicaerolib STATIC
-  # UnsteadyAero lib
-  src/UnsteadyAero.f90
-  src/UnsteadyAero_Types.f90
-
   # AirFoil Info lib
-  src/AirfoilInfo.f90
   src/AirfoilInfo_Types.f90
+  src/AirfoilInfo.f90
+
+  # UnsteadyAero lib
+  src/UnsteadyAero_Types.f90
+  src/UA_Dll.f90
+  src/UnsteadyAero.f90
 )
 target_link_libraries(basicaerolib ifwlib nwtclibs)
 
