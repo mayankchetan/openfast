@@ -418,6 +418,16 @@ subroutine AD_Init( InitInp, u, p, x, xd, z, OtherState, y, m, Interval, InitOut
    p%CompAeroMaps  = InitInp%CompAeroMaps
    p%DT            = InputFileData%DTAero
    p%Wake_Mod      = InputFileData%Wake_Mod
+
+   if (p%UA_Flag .and. InputFileData%UA_Init%UAMod == UA_DLL .and. p%Wake_Mod == WakeMod_FVW) then
+      ! UA_UpdateStates_DLL / UA_CalcOutput_DLL (the rotor-level batched UA_Mod=9 hooks) are only
+      ! wired into the BEMT loop and the standalone UA driver (see UnsteadyAero.f90 task-7 notes);
+      ! FVW's per-panel UA_UpdateStates/UA_CalcOutput calls (FVW.f90) would silently never advance
+      ! the DLL's state or refresh its output cache. Fail loudly instead of shipping wrong outputs.
+      call SetErrStat(ErrID_Fatal, 'UA_Mod = 9 (user DLL) is not yet supported with Wake_Mod = FVW/OLAF; '// &
+                       'use the BEMT wake model, or a different UAMod.', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
    do iR = 1, nRotors
       p%rotors(iR)%AeroProjMod = AeroProjMod(iR)
       call WrScr('   AeroDyn: projMod: '//trim(num2lstr(p%rotors(iR)%AeroProjMod)))
@@ -1771,7 +1781,7 @@ subroutine AD_End( u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
          if ( p%UA_Flag ) then
             if (allocated(m%FVW%W)) then
                do iW=1,p%FVW%nWings
-                  call UA_End(m%FVW%W(iW)%p_UA)
+                  call UA_End(m%FVW%W(iW)%p_UA, m%FVW%W(iW)%m_UA)
                enddo
             endif
          end if

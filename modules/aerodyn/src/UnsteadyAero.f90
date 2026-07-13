@@ -52,7 +52,9 @@ private
 
    public :: UA_Init
    public :: UA_UpdateStates
+   public :: UA_UpdateStates_DLL  ! rotor-level batched UpdateStates for UA_Mod=9; call once per rotor before the per-element UA_UpdateStates loop
    public :: UA_CalcOutput
+   public :: UA_CalcOutput_DLL    ! rotor-level batched CalcOutput for UA_Mod=9; call once per rotor before the per-element UA_CalcOutput loop
    public :: UA_CalcContStateDeriv
    public :: UA_End
    public :: UA_WriteOutputToFile
@@ -70,7 +72,13 @@ private
    ! used directly by the UA_Dll module, and (Fortran being case-insensitive) a public
    ! module-level entity named UA_DLL there collides with that module's own name "UA_Dll".
    ! Declared here as a plain module parameter instead to avoid the collision.
-   integer(IntKi), parameter :: UA_DLL = 9   ! user-supplied dynamic library model (UA_Mod=9)
+   ! Public (unlike the rest of this block's rationale might suggest) so callers outside this module
+   ! (BEMT.f90, UnsteadyAero_Driver.f90) can branch on p%UAMod == UA_DLL to invoke the rotor-level
+   ! batched UA_UpdateStates_DLL / UA_CalcOutput_DLL wrappers. This is safe: the collision described
+   ! above is specifically about exporting UA_DLL from UnsteadyAero_Types/AirfoilInfo_Types (which
+   ! the UA_Dll module itself USEs); module UnsteadyAero is never USEd by UA_Dll (that would be
+   ! circular), so no such collision exists here.
+   integer(IntKi), parameter, public :: UA_DLL = 9   ! user-supplied dynamic library model (UA_Mod=9)
 
    contains
    
@@ -938,6 +946,10 @@ subroutine UA_InitStates_Misc( p, x, xd, OtherState, m, ErrStat, ErrMsg )
    elseif (p%UAMod == UA_DLL) then
       ! The DLL owns and packs/unpacks its own internal state (xd%UA_DLL_blob, m%UA_DLL_ctx);
       ! none of the Kelvin-chain x/xd/OtherState arrays below apply.
+      ! m%UA_DLL_y caches the last batched UADll_CalcOutput result (5 x nElem: Cn,Cc,Cl,Cd,Cm),
+      ! filled by UA_CalcOutput_DLL and read back element-by-element in UA_CalcOutput.
+      call AllocAry(m%UA_DLL_y, 5_IntKi, p%nNodesPerBlade*p%numBlades, 'm%UA_DLL_y', ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+      m%UA_DLL_y = 0.0_R8Ki
    else
       call AllocAry( xd%alpha_minus1,        p%nNodesPerBlade,p%numBlades, 'xd%alpha_minus1', ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
       call AllocAry( xd%alpha_filt_minus1,   p%nNodesPerBlade,p%numBlades, 'xd%alpha_filt_minus1', ErrStat2, ErrMsg2); call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
@@ -1225,6 +1237,8 @@ subroutine UA_Init_Outputs(InitInp, p, y, InitOut, errStat, errMsg)
       p%NumOuts = 22
    elseif(p%UAMod == UA_BV) then
       p%NumOuts = 26
+   elseif(p%UAMod == UA_DLL) then
+      p%NumOuts = 7  ! only the 7 base columns (Alpha,Vrel,Cn,Cc,Cl,Cd,Cm); the DLL doesn't expose Kelvin-chain internals
    else
       p%NumOuts = 45
    end if
@@ -1371,7 +1385,11 @@ subroutine UA_Init_Outputs(InitInp, p, y, InitOut, errStat, errMsg)
             InitOut%WriteOutputUnt(iOffset+25)  = '(m/s)'
             InitOut%WriteOutputUnt(iOffset+26)  = '(m/s)'
             iOffAcc = iOffset+26
-            
+
+         else if (p%UAmod == UA_DLL) then
+            ! No extra columns beyond the 7 base ones -- the DLL doesn't expose Kelvin-chain internals.
+            iOffAcc = iOffset+7
+
          else if (p%UAmod == UA_Baseline .or. p%UAMod == UA_Gonzalez .or. p%UAMod == UA_MinnemaPierce) then
 
             InitOut%WriteOutputHdr(iOffset+ 8)  = trim(chanPrefix)//'Cn_aq_circ'
@@ -1744,7 +1762,10 @@ subroutine UA_TurnOff_param(p, AFInfo, ErrStat, ErrMsg)
          ErrStat = ErrID_Fatal
          ErrMsg  = 'polar has constant data.'
          return
-      else if ( .not. AFInfo%Table(j)%InclUAdata ) then
+      else if ( (p%UAMod /= UA_DLL) .and. .not. AFInfo%Table(j)%InclUAdata ) then
+         ! UA_DLL note: the DLL init marshals tab%UA_BL (alpha0, Cl_alpha, ...) when present, but
+         ! doesn't require it (see controller decision, task-7 brief) -- BL data absence must not
+         ! silently disable UA_DLL nodes via p%UA_off_forGood the way it does for the Kelvin-chain models.
          ErrStat = ErrID_Fatal
          ErrMsg  = 'UA parameters are not included in airfoil.'
          return
@@ -2416,9 +2437,13 @@ subroutine UA_UpdateStates( i, j, t, n, u, uTimes, p, x, xd, OtherState, AFInfo,
    !BJJ: u%u == 0 seems to be the root cause of all sorts of numerical problems....
 
    if (p%UAMod == UA_None) return ! we don't have any states to update here
-      
+
    if (p%UA_off_forGood(i,j)) return   ! we don't have any states to update here
-   
+
+   if (p%UAMod == UA_DLL) return   ! DLL states are advanced in one batched call per rotor from
+                                    ! UA_UpdateStates_DLL (see the BEMT and standalone-UA-driver callers);
+                                    ! this per-element entry point is a no-op for UA_Mod=9.
+
    CALL UA_Input_ExtrapInterp( u, utimes, u_interp_raw, t, ErrStat2, ErrMsg2 )
       CALL SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
       IF ( ErrStat >= AbortErrLev ) RETURN
@@ -2556,8 +2581,60 @@ subroutine UA_UpdateStates( i, j, t, n, u, uTimes, p, x, xd, OtherState, AFInfo,
    end if
 
    OtherState%FirstPass(i,j)   = .false.
-   
+
 end subroutine UA_UpdateStates
+!==============================================================================
+!> Rotor-level batched UpdateStates for UA_Mod=9 (UA_DLL). Advances the DLL's
+!! internal state for every node/blade element in a single call, then packs
+!! xd%UA_DLL_blob so the checkpoint blob stays current (controller decision,
+!! task-7 brief: pack every batch; if this proves >2% of step cost, gate it
+!! behind a checkpoint-only hook -- left to Task 9/10 to measure).
+!! Callers (BEMT_UpdateStates, the standalone UA driver) call this ONCE per
+!! rotor with u_t(node,blade) and u_tp1(node,blade) BEFORE running their
+!! existing per-element UA_UpdateStates loop (which is a no-op for UA_DLL).
+subroutine UA_UpdateStates_DLL(t, n, p, xd, m, u_t, u_tp1, ErrStat, ErrMsg)
+   real(DbKi),                  intent(in   ) :: t          !< current simulation time (s)
+   integer(IntKi),               intent(in   ) :: n          !< current simulation time step n = 0,1,...
+   type(UA_ParameterType),       intent(in   ) :: p          !< Parameters (shared across all elements on this rotor)
+   type(UA_DiscreteStateType),   intent(inout) :: xd         !< Discrete states (xd%UA_DLL_blob is (re)packed here)
+   type(UA_MiscVarType),         intent(inout) :: m          !< Misc/optimization variables (holds m%UA_DLL_ctx)
+   type(UA_InputType),           intent(in   ) :: u_t(:,:)   !< Inputs at t,    shape (nNodesPerBlade,numBlades)
+   type(UA_InputType),           intent(in   ) :: u_tp1(:,:) !< Inputs at t+dt, shape (nNodesPerBlade,numBlades)
+   integer(IntKi),                intent(  out) :: ErrStat
+   character(*),                  intent(  out) :: ErrMsg
+
+   character(*), parameter              :: RoutineName = 'UA_UpdateStates_DLL'
+   type(UA_InputType), allocatable      :: u_t_flat(:), u_tp1_flat(:)
+   integer(IntKi)                       :: nNodes, nBlades, nElem, i, j, iElem
+   integer(IntKi)                       :: ErrStat2
+   character(ErrMsgLen)                 :: ErrMsg2
+
+   ErrStat = ErrID_None
+   ErrMsg  = ''
+
+   if (p%UAMod /= UA_DLL) return
+
+   nNodes  = size(u_t,1)
+   nBlades = size(u_t,2)
+   nElem   = nNodes*nBlades
+
+   allocate(u_t_flat(nElem), u_tp1_flat(nElem))
+   do j = 1,nBlades
+      do i = 1,nNodes
+         iElem = (j-1)*nNodes + i   ! must match UADll_Init's elem ordering (UA_Dll.f90)
+         u_t_flat(iElem)   = u_t(i,j)
+         u_tp1_flat(iElem) = u_tp1(i,j)
+      end do
+   end do
+
+   call UADll_UpdateStates(p, m, t, n, u_t_flat, u_tp1_flat, ErrStat2, ErrMsg2)
+      call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+      if (ErrStat >= AbortErrLev) return
+
+   call UADll_Pack(p, m, xd, ErrStat2, ErrMsg2)
+      call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+
+end subroutine UA_UpdateStates_DLL
 !==============================================================================
 !!----------------------------------------------------------------------------------------------------------------------------------
 !> routine to initialize the states based on inputs at t=0
@@ -3522,7 +3599,8 @@ subroutine UA_CalcOutput( i, j, t, u_in, p, x, xd, OtherState, AFInfo, y, misc, 
    real(ReKi)                                   :: Cm_common                     ! 
    real(ReKi)                                   :: k ! reduced frequency
    real(ReKi)                                   :: SinAlpha, CosAlpha
-   
+   integer(IntKi)                               :: iElemDLL ! element index into misc%UA_DLL_y for UA_DLL
+
    ! for UA_HGM
    real(ReKi)                                   :: alphaE
    real(ReKi)                                   :: alphaF
@@ -3636,6 +3714,17 @@ subroutine UA_CalcOutput( i, j, t, u_in, p, x, xd, OtherState, AFInfo, y, misc, 
       endif
       call BV_CalcOutput()
       if (ErrStat >= AbortErrLev) return
+
+   elseif (p%UAMod == UA_DLL) then
+      ! --- CalcOutput for the user DLL (UA_Mod=9): no Kirchhoff reconstruction here --
+      ! just copy the batched result cached by UA_CalcOutput_DLL (called once per rotor,
+      ! before this per-element loop, by BEMT_CalcOutput / the standalone UA driver).
+      iElemDLL = (j-1)*p%nNodesPerBlade + i   ! must match UADll_Init's elem ordering (UA_Dll.f90)
+      y%Cn = real(misc%UA_DLL_y(1,iElemDLL), ReKi)
+      y%Cc = real(misc%UA_DLL_y(2,iElemDLL), ReKi)
+      y%Cl = real(misc%UA_DLL_y(3,iElemDLL), ReKi)
+      y%Cd = real(misc%UA_DLL_y(4,iElemDLL), ReKi)
+      y%Cm = real(misc%UA_DLL_y(5,iElemDLL), ReKi)
 
    elseif (p%UAMod == UA_HGM .or. p%UAMod == UA_HGMV .or. p%UAMod == UA_OYE .or. p%UAMod == UA_HGMV360) then
       ! --- CalcOutput State Space models
@@ -3988,7 +4077,12 @@ contains
          y%WriteOutput(iOffset+25)    = u%v_ac(1)
          y%WriteOutput(iOffset+26)    = u%v_ac(2)
          iOffAcc = iOffset+26
-         
+
+      elseif (p%UAMod == UA_DLL) then
+         ! No extra columns beyond the 7 base ones (already written above, unconditionally)
+         ! -- the DLL doesn't expose Kelvin-chain internals.
+         iOffAcc = iOffset+7
+
       else
          ! Baseline, Gonzales, MinnemaPierce
          y%WriteOutput(iOffset+ 8)    = KC%Cn_alpha_q_circ               ! CNCP in ADv14
@@ -4129,10 +4223,58 @@ contains
    end subroutine BV_CalcOutput
    
 end subroutine UA_CalcOutput
+!==============================================================================
+!> Rotor-level batched CalcOutput for UA_Mod=9 (UA_DLL). Calls the DLL once for
+!! every node/blade element at time t and caches the result in m%UA_DLL_y
+!! (5 x nElem: Cn,Cc,Cl,Cd,Cm). Callers (BEMT_CalcOutput, the standalone UA
+!! driver) call this ONCE per rotor BEFORE running their existing per-element
+!! UA_CalcOutput loop, which for UA_DLL just copies out of this cache.
+subroutine UA_CalcOutput_DLL(t, p, m, u, ErrStat, ErrMsg)
+   real(DbKi),                  intent(in   ) :: t        !< current simulation time (s)
+   type(UA_ParameterType),      intent(in   ) :: p        !< Parameters (shared across all elements on this rotor)
+   type(UA_MiscVarType),        intent(inout) :: m        !< Misc/optimization variables (m%UA_DLL_ctx, m%UA_DLL_y)
+   type(UA_InputType),          intent(in   ) :: u(:,:)   !< Inputs at t, shape (nNodesPerBlade,numBlades)
+   integer(IntKi),               intent(  out) :: ErrStat
+   character(*),                 intent(  out) :: ErrMsg
 
+   character(*), parameter           :: RoutineName = 'UA_CalcOutput_DLL'
+   type(UA_InputType),  allocatable  :: u_flat(:)
+   type(UA_OutputType), allocatable  :: y_flat(:)
+   integer(IntKi)                    :: nNodes, nBlades, nElem, i, j, iElem
+   integer(IntKi)                    :: ErrStat2
+   character(ErrMsgLen)              :: ErrMsg2
 
+   ErrStat = ErrID_None
+   ErrMsg  = ''
 
-!==============================================================================   
+   if (p%UAMod /= UA_DLL) return
+
+   nNodes  = size(u,1)
+   nBlades = size(u,2)
+   nElem   = nNodes*nBlades
+
+   allocate(u_flat(nElem), y_flat(nElem))
+   do j = 1,nBlades
+      do i = 1,nNodes
+         iElem = (j-1)*nNodes + i   ! must match UADll_Init's elem ordering (UA_Dll.f90)
+         u_flat(iElem) = u(i,j)
+      end do
+   end do
+
+   call UADll_CalcOutput(p, m, t, u_flat, y_flat, ErrStat2, ErrMsg2)
+      call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+      if (ErrStat >= AbortErrLev) return
+
+   do iElem = 1,nElem
+      m%UA_DLL_y(1,iElem) = real(y_flat(iElem)%Cn, R8Ki)
+      m%UA_DLL_y(2,iElem) = real(y_flat(iElem)%Cc, R8Ki)
+      m%UA_DLL_y(3,iElem) = real(y_flat(iElem)%Cl, R8Ki)
+      m%UA_DLL_y(4,iElem) = real(y_flat(iElem)%Cd, R8Ki)
+      m%UA_DLL_y(5,iElem) = real(y_flat(iElem)%Cm, R8Ki)
+   end do
+
+end subroutine UA_CalcOutput_DLL
+!==============================================================================
 subroutine UA_WriteOutputToFile(t, p, y)
    real(DbKi),                   intent(in   )  :: t           ! current time (s)
    type(UA_ParameterType),       intent(in   )  :: p           ! Parameters
@@ -4188,7 +4330,7 @@ subroutine UA_WriteAFIParamsToFile(InitInp, AFInfo, ErrStat, ErrMsg)
       
 end subroutine UA_WriteAFIParamsToFile
 !==============================================================================
-subroutine UA_End(p)
+subroutine UA_End(p, m)
    type(UA_ParameterType),       intent(inout)  :: p           ! Parameters
 !   type(UA_ContinuousStateType), intent(in   )  :: x           ! Continuous states at Time
 !   type(UA_DiscreteStateType),   intent(in   )  :: xd          ! Discrete states at Time
@@ -4196,9 +4338,17 @@ subroutine UA_End(p)
 !   type(AFI_ParameterType),      intent(in   )  :: AFInfo      ! The airfoil parameter data
 !   type(UA_OutputType),          intent(inout)  :: y           ! Outputs computed at Time (Input only so that mesh con-
 !                                                               !   nectivity information does not have to be recalculated)
-!   type(UA_MiscVarType),         intent(inout)  :: misc        ! Misc/optimization variables
+   type(UA_MiscVarType), optional, intent(inout) :: m          ! Misc/optimization variables (needed only to tear down UA_DLL's context; existing
+                                                                !   callers that don't have m in scope may omit it -- harmless for UAMod /= UA_DLL)
 !   integer(IntKi),               intent(  out)  :: ErrStat     ! Error status of the operation
 !   character(*),                 intent(  out)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
+   integer(IntKi)       :: ErrStat2
+   character(ErrMsgLen) :: ErrMsg2
+
+   if (p%UAMod == UA_DLL .and. present(m)) then
+      call UADll_End(p, m, ErrStat2, ErrMsg2)
+      if (ErrStat2 /= ErrID_None) call WrScr('UA_End: '//trim(ErrMsg2))
+   end if
 
    if (p%NumOuts > 0 .and. p%UnOutFile > 0) CLOSE(p%UnOutFile)
    p%unOutFile = -1

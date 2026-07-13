@@ -975,6 +975,14 @@ subroutine BEMT_UpdateStates( t, n, u, utimes, p, x, xd, z, OtherState, AFInfo, 
       !...............................................................................................................................
       !  compute UA states at t+dt
       !...............................................................................................................................
+      if (p%UA%UAMod == UA_DLL) then
+         ! Batched: one DLL call for every node/blade on this rotor (see UA_UpdateStates_DLL); the
+         ! per-element UA_UpdateStates loop below is still run but is a no-op for UA_DLL.
+         call UA_UpdateStates_DLL( t, n, p%UA, xd%UA, m%UA, m%u_UA(:,:,TimeIndex_t), m%u_UA(:,:,TimeIndex_t_plus_dt), errStat2, errMsg2 )
+            call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+            if (errStat >= AbortErrLev) return
+      end if
+
       do j = 1,p%numBlades
          do i = 1,p%numBladeNodes
 
@@ -1344,7 +1352,15 @@ subroutine BEMT_CalcOutput( t, u, p, x, xd, z, OtherState, AFInfo, y, m, errStat
    
       ! Now depending on the option for UA get the airfoil coefs, Cl, Cd, Cm for unsteady or steady implementation
    if (p%UA_Flag ) then
-   
+
+      if (p%UA%UAMod == UA_DLL) then
+         ! Batched: one DLL call for every node/blade on this rotor, cached in m%UA%UA_DLL_y (see
+         ! UA_CalcOutput_DLL); the per-element UA_CalcOutput loop below just copies out of that cache.
+         call UA_CalcOutput_DLL( t, p%UA, m%UA, m%u_UA(:,:,InputIndex), errStat2, errMsg2 )
+            call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+            if (errStat >= AbortErrLev) return
+      end if
+
       do j = 1,p%numBlades ! Loop through all blades
          do i = 1,p%numBladeNodes ! Loop through the blade nodes / elements
 

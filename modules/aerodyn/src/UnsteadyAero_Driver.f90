@@ -135,7 +135,8 @@ program UnsteadyAero_Driver
          call setUAinputs(dvr%U0(iu,:), dvr%LD_x, dvr%p, dvr%m, dvr%UA_u(iu))
       enddo
       ! LD inputs
-      do iu = 1, NumInp-1 !u(NumInp) is overwritten in time-sim loop, so no need to init here 
+      do iu = 1, NumInp-1 !u(NumInp) is overwritten in time-sim loop, so no need to init here
+         call DLL_CalcOutput_1(dvr%uTimes(iu), dvr%UA_u(iu))
          call UA_CalcOutput(i, j, dvr%uTimes(iu), dvr%UA_u(iu), dvr%UA_p, dvr%UA_x, dvr%UA_xd, dvr%UA_OtherState, dvr%AFI_Params(dvr%AFIndx(i,j)), dvr%UA_y, dvr%UA_m, errStat, errMsg ); call checkError()
          call setLDinputs(dvr%U0(iu,:), dvr%LD_x, dvr%UA_y, dvr%p, dvr%m, dvr%LD_u(iu))
       enddo
@@ -172,8 +173,9 @@ program UnsteadyAero_Driver
          iu             = 2                ! Index 2 is t
          dvr%uTimes(iu) = (n  -1)*dvr%p%dt ! t
          t              = dvr%uTimes(iu)   ! t(2)= t
-         ! --- Calc Outputs at t 
+         ! --- Calc Outputs at t
          ! Use existing states to compute the outputs
+         call DLL_CalcOutput_1(t, dvr%UA_u(iu))
          call UA_CalcOutput(i, j, t, dvr%UA_u(iu),  dvr%UA_p, dvr%UA_x, dvr%UA_xd, dvr%UA_OtherState, dvr%AFI_Params(dvr%AFIndx(i,j)), dvr%UA_y, dvr%UA_m, errStat, errMsg ); call checkError()
          ! "True" force based on UA outputs - Also compute Misc outputs
          !call AeroKinetics(dvr%U0(iu,:), dvr%LD_x%q(1:3), dvr%LD_x%q(4:6), (/dvr%UA_y%Cl, dvr%UA_y%Cd, dvr%UA_y%Cm/), dvr%p, dvr%m)
@@ -208,6 +210,7 @@ program UnsteadyAero_Driver
          call setUAinputs(dvr%U0(iu,:), dvr%LD_x, dvr%p, dvr%m, dvr%UA_u(iu))
 
          ! --- Integrate UA from t to t+dt
+         call DLL_UpdateStates_1(t, n, dvr%UA_u(2), dvr%UA_u(1))  ! index 2 = t, index 1 = t+dt (see comments above)
          call UA_UpdateStates(i, j, t, n, dvr%UA_u, dvr%uTimes, dvr%UA_p, dvr%UA_x, dvr%UA_xd, dvr%UA_OtherState, dvr%AFI_Params(dvr%AFIndx(i,j)), dvr%UA_m, errStat, errMsg ); call checkError()
 
          ! --- One extra iteration with better LD inputs at t+dt
@@ -240,14 +243,16 @@ program UnsteadyAero_Driver
          t = dvr%uTimes(2)
 
          ! Use existing states to compute the outputs
+         call DLL_CalcOutput_1(t, dvr%UA_u(2))
          call UA_CalcOutput(i, j, t, dvr%UA_u(2), dvr%UA_p, dvr%UA_x, dvr%UA_xd, dvr%UA_OtherState, dvr%AFI_Params(dvr%AFIndx(i,j)), dvr%UA_y, dvr%UA_m, errStat, errMsg ); call checkError()
-               
+
          ! Generate file outputs
          call UA_WriteOutputToFile(t, dvr%UA_p, dvr%UA_y)
-         ! Write/Store outputs 
+         ! Write/Store outputs
          call Dvr_WriteOutputs(n, t, dvr, dvr%out, errStat, errMsg); call checkError()
-         
+
          ! Prepare states for next time step
+         call DLL_UpdateStates_1(t, n, dvr%UA_u(2), dvr%UA_u(1))  ! index 2 = t, index 1 = t+dt (see comments above)
          call UA_UpdateStates(i, j, t, n, dvr%UA_u, dvr%uTimes, dvr%UA_p, dvr%UA_x, dvr%UA_xd, dvr%UA_OtherState, dvr%AFI_Params(dvr%AFIndx(i,j)), dvr%UA_m, errStat, errMsg ); call checkError()
          
       end do
@@ -259,6 +264,29 @@ program UnsteadyAero_Driver
    call NormStop()
 
 contains
+   !> Batched rotor-level UA_Mod=9 hooks for this driver's single (i=1,j=1) element.
+   !! A no-op when dvr%UA_p%UAMod /= UA_DLL. See BEMT.f90's UA_UpdateStates_DLL /
+   !! UA_CalcOutput_DLL call sites for the multi-element analog.
+   subroutine DLL_CalcOutput_1(tCall, uCall)
+      real(DbKi),          intent(in) :: tCall
+      type(UA_InputType),  intent(in) :: uCall
+      type(UA_InputType) :: u2(1,1)
+      if (dvr%UA_p%UAMod /= UA_DLL) return
+      u2(1,1) = uCall
+      call UA_CalcOutput_DLL(tCall, dvr%UA_p, dvr%UA_m, u2, errStat, errMsg); call checkError()
+   end subroutine DLL_CalcOutput_1
+
+   subroutine DLL_UpdateStates_1(tCall, nCall, uCall_t, uCall_tp1)
+      real(DbKi),          intent(in) :: tCall
+      integer(IntKi),      intent(in) :: nCall
+      type(UA_InputType),  intent(in) :: uCall_t, uCall_tp1
+      type(UA_InputType) :: u_t2(1,1), u_tp1_2(1,1)
+      if (dvr%UA_p%UAMod /= UA_DLL) return
+      u_t2(1,1)   = uCall_t
+      u_tp1_2(1,1) = uCall_tp1
+      call UA_UpdateStates_DLL(tCall, nCall, dvr%UA_p, dvr%UA_xd, dvr%UA_m, u_t2, u_tp1_2, errStat, errMsg); call checkError()
+   end subroutine DLL_UpdateStates_1
+
    subroutine backupStates()
       call UA_CopyContState (dvr%UA_x          , dvr%UA_x_swp          , MESH_UPDATECOPY , errStat , errMsg)
       call UA_CopyDiscState (dvr%UA_xd         , dvr%UA_xd_swp         , MESH_UPDATECOPY , errStat , errMsg)
@@ -277,7 +305,7 @@ contains
    end subroutine
    !====================================================================================================
    subroutine Cleanup()
-      call UA_End(dvr%UA_p)
+      call UA_End(dvr%UA_p, dvr%UA_m)
       ! probably should also deallocate driver variables here...
       
    end subroutine Cleanup

@@ -206,6 +206,7 @@ IMPLICIT NONE
     LOGICAL , DIMENSION(:,:), ALLOCATABLE  :: BEDSEP      !< logical flag indicating if this is undergoing separated flow [-]
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: weight      !< value between 0 and 1 indicating if UA is on (1) or off (0) or somewhere in between [-]
     TYPE(C_PTR)  :: UA_DLL_ctx = C_NULL_PTR      !< Opaque DLL context (not checkpointed; recreated + unpacked on restart) [-]
+    REAL(R8Ki) , DIMENSION(:,:), ALLOCATABLE  :: UA_DLL_y      !< Cached batched DLL CalcOutput result (Cn,Cc,Cl,Cd,Cm; nElem), filled by UA_CalcOutput_DLL and read by per-element UA_CalcOutput [-]
   END TYPE UA_MiscVarType
 ! =======================
 ! =========  UA_ParameterType  =======
@@ -1895,6 +1896,18 @@ subroutine UA_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
       DstMiscData%weight = SrcMiscData%weight
    end if
    DstMiscData%UA_DLL_ctx = SrcMiscData%UA_DLL_ctx
+   if (allocated(SrcMiscData%UA_DLL_y)) then
+      LB(1:2) = lbound(SrcMiscData%UA_DLL_y)
+      UB(1:2) = ubound(SrcMiscData%UA_DLL_y)
+      if (.not. allocated(DstMiscData%UA_DLL_y)) then
+         allocate(DstMiscData%UA_DLL_y(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstMiscData%UA_DLL_y.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstMiscData%UA_DLL_y = SrcMiscData%UA_DLL_y
+   end if
 end subroutine
 
 subroutine UA_DestroyMisc(MiscData, ErrStat, ErrMsg)
@@ -1925,6 +1938,9 @@ subroutine UA_DestroyMisc(MiscData, ErrStat, ErrMsg)
       deallocate(MiscData%weight)
    end if
    MiscData%UA_DLL_ctx = c_null_ptr
+   if (allocated(MiscData%UA_DLL_y)) then
+      deallocate(MiscData%UA_DLL_y)
+   end if
 end subroutine
 
 subroutine UA_PackMisc(RF, Indata)
@@ -1941,6 +1957,7 @@ subroutine UA_PackMisc(RF, Indata)
    call RegPackAlloc(RF, InData%T_Sh)
    call RegPackAlloc(RF, InData%BEDSEP)
    call RegPackAlloc(RF, InData%weight)
+   call RegPackAlloc(RF, InData%UA_DLL_y)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -1962,6 +1979,7 @@ subroutine UA_UnPackMisc(RF, OutData)
    call RegUnpackAlloc(RF, OutData%BEDSEP); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%weight); if (RegCheckErr(RF, RoutineName)) return
    OutData%UA_DLL_ctx = c_null_ptr ! not checkpointed
+   call RegUnpackAlloc(RF, OutData%UA_DLL_y); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine UA_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)

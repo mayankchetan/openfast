@@ -188,6 +188,7 @@ typedef   ^                            MiscVarType                   ReKi       
 typedef   ^                            MiscVarType                   LOGICAL                  BEDSEP                          {:}{:}        -         -        "logical flag indicating if this is undergoing separated flow"   -
 typedef   ^                            MiscVarType                   ReKi                     weight                          {:}{:}        -         -        "value between 0 and 1 indicating if UA is on (1) or off (0) or somewhere in between"   -
 typedef   ^                            MiscVarType                   C_PTR                    UA_DLL_ctx                      -             -         -        "Opaque DLL context (not checkpointed; recreated + unpacked on restart)"   -
+typedef   ^                            MiscVarType                   R8Ki                     UA_DLL_y                        {:}{:}        -         -        "Cached batched DLL CalcOutput result (Cn,Cc,Cl,Cd,Cm; nElem), filled by UA_CalcOutput_DLL and read by per-element UA_CalcOutput"   -
 
 
 # ..... Parameters ................................................................................................................
