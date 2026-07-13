@@ -173,7 +173,10 @@ typedef   ^        ParameterType  ^             QPtWeight        {:}       - -  
 typedef   ^        ParameterType  ^             Shp              {:}{:}    - -  "Shape function matrix (index 1 = FE nodes; index 2=quadrature points)" -
 typedef   ^        ParameterType  ^             ShpDer           {:}{:}    - -  "Derivative of shape function matrix (index 1 = FE nodes; index 2=quadrature points)" -
 typedef   ^        ParameterType  ^             Jacobian         {:}{:}    - -  "Jacobian value at each quadrature point" -
-typedef   ^        ParameterType  ^             uu0              {:}{:}{:} - -  "Initial Disp/Rot value at quadrature point (at T=0)" -
+typedef   ^        ParameterType  ^             GLL_Nodes        {:}       - -  "GLL (FE) node locations in element natural frame [-1,1] (for summary file)" -
+typedef   ^        ParameterType  ^             kp_fit_coef      {:}{:}{:} - -  "Reference-line least-squares fit: nodal values on the qfit-node GLL Lagrange basis (index 1=fit node [1:kp_fit_order], index 2=X/Y/Z/twist, index 3=element) (for summary file)" -
+typedef   ^        ParameterType IntKi          kp_fit_order     {:}       - -  "Number of GLL basis nodes (qfit) used in the reference-line least-squares fit, per element (fit polynomial order = qfit-1) (for summary file)" -
+typedef   ^        ParameterType R8Ki           uu0              {:}{:}{:} - -  "Initial Disp/Rot value at quadrature point (at T=0)" -
 typedef   ^        ParameterType  ^             rrN0             {:}{:}{:} - -  "Initial relative rotation array, relative to root (at T=0) (index 1=rot DOF; index 2=FE nodes; index 3=element)" -
 typedef   ^        ParameterType  ^             E10              {:}{:}{:} - -  "Initial E10 at quadrature point" -
 #end of BDKi-type variables
