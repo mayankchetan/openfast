@@ -29,7 +29,7 @@ MODULE FAST_Subs
    use FAST_Solver
    use FAST_Mapping, only: FAST_InitMappings
    use AeroDisk, only: ADsk_Init
-   use AeroDyn, only: AD_Init
+   use AeroDyn, only: AD_Init, AD_RestoreUADllContext
    use BeamDyn, only: BD_Init
    use ElastoDyn, only: ED_Init
    use ExtLoads, only: ExtLd_Init
@@ -7364,6 +7364,17 @@ SUBROUTINE FAST_RestoreFromCheckpoint_T(t_initial, n_t_global, NumTurbines, Turb
          CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
    END IF
 
+
+      ! A hack to restore the UnsteadyAero user-DLL (UA_Mod=9) run-time context.
+      ! Registry-generated Pack/UnPack already restored p%rotors(:)%BEMT%UA%UA_DLL
+      ! (reloads the shared library; see nwtc_io::dlltypeunpack) and
+      ! xd%rotors(:)%BEMT%UA%UA_DLL_blob (the DLL's packed internal state), but the
+      ! opaque DLL-side context m%rotors(:)%BEMT%UA%UA_DLL_ctx is a bare C_PTR
+      ! (excluded from Pack/UnPack, nulled on restore) and must be recreated here.
+   IF (Turbine%p_FAST%CompAero == Module_AD) THEN
+      CALL AD_RestoreUADllContext( Turbine%AD%p, Turbine%AD%xd(STATE_CURR), Turbine%AD%m, ErrStat2, ErrMsg2 )
+         CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
+   END IF
 
       ! A hack to restore Bladed-style DLL data
    do iRot = 1, Turbine%p_FAST%NRotors

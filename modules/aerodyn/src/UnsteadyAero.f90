@@ -60,6 +60,7 @@ private
    public :: UA_WriteOutputToFile
 
    public :: UA_ReInit
+   public :: UA_ReInit_DLL          ! restores the UA_Mod=9 DLL context + state after FAST checkpoint/restart
    public :: UA_InitStates_AllNodes ! used for AD linearization initialization
 
    real(ReKi), parameter         :: Gonzalez_factor = 0.2_ReKi     ! this factor, proposed by Gonzalez (for "all" models) is used to modify Cc to account for negative values seen at f=0 (see Eqn 1.40)
@@ -1130,6 +1131,76 @@ subroutine UA_ReInit( p, x, xd, OtherState, m, ErrStat, ErrMsg )
    end if
 
 end subroutine UA_ReInit
+!==============================================================================
+!> Restores the UA_Mod=9 (user DLL) run-time context after a FAST checkpoint/
+!! restart. Registry-generated Pack/UnPack already restored everything that is
+!! plain data:
+!!   - p%UA_DLL (DLL_Type) is reloaded by DLLTypeUnPack (nwtc_io::dlltypeunpack),
+!!     so p%UA_DLL%ProcAddr(:) are valid again.
+!!   - p%c, p%dt, p%a_s, p%d_34_to_ac, p%numBlades, p%nNodesPerBlade and
+!!     p%UA_DLL_ParamFile (all plain UA_ParameterType fields) survived the
+!!     restore, so a UA_InitInputType equivalent to the one used at the
+!!     original UA_Init call can be reconstructed here without needing the
+!!     original InitInp from the caller.
+!!   - xd%UA_DLL_blob holds the DLL's last-packed internal state (refreshed by
+!!     UADll_Pack after every batched UpdateStates_DLL call).
+!! What does NOT survive restore is m%UA_DLL_ctx (a bare C_PTR, excluded from
+!! Pack/UnPack and nulled by the registry-generated UnPack) because the
+!! DLL-side memory it points to no longer exists in the restarted process (the
+!! DLL was just re-loaded fresh by DLLTypeUnPack). So this routine:
+!!   1) re-runs the DLL's getinfo+init handshake (UADll_Init) to obtain a
+!!      fresh, valid ctx from the freshly-reloaded library, using AFInfo/
+!!      AFIndx supplied by the caller (available at the AD-level restart hook,
+!!      see AeroDyn.f90::AD_RestoreUADllContext, called from
+!!      FAST_Subs.f90::FAST_RestoreFromCheckpoint_T);
+!!   2) replays the checkpointed state into that fresh ctx via UADll_Unpack.
+!! Must be called only when p%UAMod == UA_DLL; it is a no-op error otherwise.
+subroutine UA_ReInit_DLL( p, xd, m, AFInfo, AFIndx, ErrStat, ErrMsg )
+   type(UA_ParameterType),       intent(inout)  :: p           ! Parameters (UA_DLL_ParamFile is rewritten with its own current value; harmless)
+   type(UA_DiscreteStateType),   intent(in   )  :: xd          ! Discrete states; xd%UA_DLL_blob is replayed into the fresh ctx
+   type(UA_MiscVarType),         intent(inout)  :: m           ! Misc/optimization variables; m%UA_DLL_ctx is (re)populated here
+   type(AFI_ParameterType),      intent(in   )  :: AFInfo(:)   !< The airfoil parameter data (e.g. AD's p%AFI(:))
+   integer(IntKi),                intent(in   )  :: AFIndx(:,:) !< AFIndx(node,blade) -> index into AFInfo (e.g. BEMT's p%AFindx)
+
+   integer(IntKi),               intent(  out)  :: ErrStat     ! Error status of the operation
+   character(*),                 intent(  out)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
+
+   type(UA_InitInputType)                       :: InitInp
+   integer(IntKi)                               :: ErrStat2
+   character(ErrMsgLen)                         :: ErrMsg2
+   character(*), parameter                      :: RoutineName = 'UA_ReInit_DLL'
+
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   if (p%UAMod /= UA_DLL) then
+      call SetErrStat(ErrID_Fatal, RoutineName//': called with p%UAMod /= UA_DLL.', ErrStat, ErrMsg, RoutineName)
+      return
+   end if
+
+   ! Reconstruct the InitInputType fields UADll_Init actually reads (see UA_Dll.f90::UADll_Init):
+   ! dt, a_s, d_34_to_ac, numBlades, nNodesPerBlade, c, UA_DLL_ParamFile.
+   InitInp%dt                = p%dt
+   InitInp%a_s                = p%a_s
+   InitInp%d_34_to_ac        = p%d_34_to_ac
+   InitInp%numBlades         = p%numBlades
+   InitInp%nNodesPerBlade    = p%nNodesPerBlade
+   InitInp%UA_DLL_ParamFile  = p%UA_DLL_ParamFile
+   call AllocAry(InitInp%c, p%nNodesPerBlade, p%numBlades, 'InitInp%c', ErrStat2, ErrMsg2)
+      call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+      if (ErrStat >= AbortErrLev) return
+   InitInp%c = p%c
+
+   ! 1) fresh ctx from the freshly-reloaded DLL
+   call UADll_Init(p, InitInp, AFInfo, AFIndx, m, ErrStat2, ErrMsg2)
+      call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+      if (ErrStat >= AbortErrLev) return
+
+   ! 2) replay the checkpointed internal state into that fresh ctx
+   call UADll_Unpack(p, m, xd, ErrStat2, ErrMsg2)
+      call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+
+end subroutine UA_ReInit_DLL
 !==============================================================================
 subroutine UA_Init( InitInp, u, p, x, xd, OtherState, y,  m, Interval, &
                     AFInfo, AFIndx, InitOut,ErrStat, ErrMsg )

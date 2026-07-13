@@ -43,6 +43,7 @@ module AeroDyn
 
    public :: AD_Init                           ! Initialization routine
    public :: AD_ReInit                         ! Routine to reinitialize driver (re-initializes the states)
+   public :: AD_RestoreUADllContext            ! Recreates the UA_Mod=9 DLL context after FAST checkpoint/restart
    public :: AD_End                            ! Ending routine (includes clean up)
    public :: AD_UpdateStates                   ! Loose coupling routine for solving for constraint states, integrating
                                                !   continuous states, and updating discrete states
@@ -711,7 +712,51 @@ subroutine AD_ReInit(p, x, xd, z, OtherState, m, Interval, ErrStat, ErrMsg )
 
       
 end subroutine AD_ReInit
-!----------------------------------------------------------------------------------------------------------------------------------   
+!----------------------------------------------------------------------------------------------------------------------------------
+!> Restores the UA_Mod=9 (user DLL) run-time context after a FAST checkpoint/restart.
+!! Called from FAST_Subs.f90::FAST_RestoreFromCheckpoint_T, mirroring the existing
+!! MAP/Bladed-DLL "hack" blocks there for external-library state that can't be
+!! reconstructed by the registry-generated Pack/UnPack alone: registry UnPack already
+!! restores p%rotors(:)%BEMT%UA%UA_DLL (DLL_Type; reloads the shared library via
+!! DLLTypeUnPack) and xd%rotors(:)%BEMT%UA%UA_DLL_blob (the packed DLL state), but
+!! m%rotors(:)%BEMT%UA%UA_DLL_ctx (a bare C_PTR) is excluded from Pack/UnPack and is
+!! nulled on restore, since the DLL-side memory it pointed to no longer exists once the
+!! library has been freshly reloaded. This routine re-creates that ctx (UA_ReInit_DLL,
+!! in UnsteadyAero.f90) using this rotor's airfoil tables (p%AFI, shared across rotors)
+!! and per-node polar indices (p%rotors(iR)%BEMT%AFindx), then replays the checkpointed
+!! DLL state into the fresh ctx. Only applies to the BEMT wake path: UA_Mod=9 is
+!! rejected together with Wake_Mod=FVW at AD_Init (see the UA_DLL/WakeMod_FVW check
+!! above), so there is nothing to restore on the OLAF/FVW path.
+subroutine AD_RestoreUADllContext(p, xd, m, ErrStat, ErrMsg)
+   type(AD_ParameterType),     intent(inout) :: p             !< Parameters (top-level; carries p%AFI(:), shared across rotors). inout only
+                                                                !!   because UA_ReInit_DLL's p arg is inout (it re-writes UA_DLL_ParamFile with
+                                                                !!   its own current value); no field is otherwise changed.
+   type(AD_DiscreteStateType), intent(in   ) :: xd            !< Discrete states (carries xd%rotors(:)%BEMT%UA%UA_DLL_blob)
+   type(AD_MiscVarType),       intent(inout) :: m             !< Misc/optimization variables (m%rotors(:)%BEMT%UA%UA_DLL_ctx is set here)
+   integer(IntKi),             intent(  out) :: ErrStat       !< Error status of the operation
+   character(*),               intent(  out) :: ErrMsg        !< Error message if ErrStat /= ErrID_None
+
+   integer(IntKi)                            :: iR            ! loop on rotors
+   integer(IntKi)                            :: ErrStat2
+   character(ErrMsgLen)                      :: ErrMsg2
+   character(*), parameter                   :: RoutineName = 'AD_RestoreUADllContext'
+
+   ErrStat = ErrID_None
+   ErrMsg = ''
+
+   if (.not. p%UA_Flag) return
+   if (p%Wake_Mod == WakeMod_FVW) return   ! UA_Mod=9 + FVW is rejected at Init; nothing to restore here
+
+   do iR = 1, size(p%rotors)
+      if (p%rotors(iR)%BEMT%UA%UAMod /= UA_DLL) cycle
+
+      call UA_ReInit_DLL( p%rotors(iR)%BEMT%UA, xd%rotors(iR)%BEMT%UA, m%rotors(iR)%BEMT%UA, &
+                           p%AFI, p%rotors(iR)%BEMT%AFindx, ErrStat2, ErrMsg2 )
+         call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
+   end do
+
+end subroutine AD_RestoreUADllContext
+!----------------------------------------------------------------------------------------------------------------------------------
 !> This routine initializes (allocates) the misc variables for use during the simulation.
 subroutine Init_MiscVars(m, p, p_AD, u, y, errStat, errMsg)
    type(RotMiscVarType),          intent(inout)  :: m                !< misc/optimization data (not defined in submodules)
@@ -1789,7 +1834,7 @@ subroutine AD_End( u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
          call FVW_End( m%FVW_u, p%FVW, x%FVW, xd%FVW, z%FVW, OtherState%FVW, m%FVW_y, m%FVW, ErrStat, ErrMsg )
       
       else
-         
+
          if (allocated(p%rotors)) then
             do iR = 1, SIZE(p%rotors)
 
@@ -1797,9 +1842,18 @@ subroutine AD_End( u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
                   call AA_End( m%rotors(iR)%AA_u, p%rotors(iR)%AA, xd%rotors(iR)%AA, OtherState%rotors(iR)%AA, m%rotors(iR)%AA_y, m%rotors(iR)%AA, ErrStat, ErrMsg )
                end if
 
+               ! Tear down UA's state (in particular UA_Mod=9's DLL context/library; a no-op
+               ! for other UAMod values). The FVW path above already does this for its own
+               ! per-wing UA instances (m%FVW%W(iW)%p_UA/m_UA); on the BEMT path this call was
+               ! previously missing entirely, which for UA_Mod=9 leaked the DLL-side context
+               ! and left the shared library handle open past the end of the run.
+               if (p%UA_Flag) then
+                  call UA_End(p%rotors(iR)%BEMT%UA, m%rotors(iR)%BEMT%UA)
+               end if
+
             enddo
          end if
-         
+
       end if
       
       
