@@ -56,7 +56,7 @@ MODULE NWTC_Base
    INTEGER(IntKi)                :: AbortErrLev  = ErrID_Fatal                    !< ErrStat that indicates the error level when program should end; ErrID_Fatal by default. Note that this is not a PARAMETER
 
    
-   INTEGER(IntKi), PARAMETER     :: NWTC_MAX_DLL_PROC  = 5                        !< maximum number of procedures that can be dynamically loaded from a DLL (see DLL_Type nwtc_base::dll_type)
+   INTEGER(IntKi), PARAMETER     :: NWTC_MAX_DLL_PROC  = 8                        !< maximum number of procedures that can be dynamically loaded from a DLL (raised from 5 for the UnsteadyAero DLL interface, which needs 7)
    
 #ifdef FLANG_COMPILER
    TYPE(C_FUNPTR), PARAMETER     :: NULL_PROC_ADDR(NWTC_MAX_DLL_PROC) = C_NULL_FUNPTR  !< this is a hack so the Flang compiler will initialize ProcAddr to C_NULL_FUNPTR in DLL_Type (remove if no longer needed)
