@@ -116,10 +116,12 @@ typedef struct {
  * pass only -- the "Ensuring everything is in harmony" second pass,
  * lines 1279-1292, is an algebraic no-op away from clipped boundary rows and
  * is not reproduced here; see task-5-report.md). This is the exact same
- * Kirchhoff-inversion formula used by the Oye reference DLL's fs_st/cl_fs. */
-static void build_separation_tables(Polar *p) {
+ * Kirchhoff-inversion formula used by the Oye reference DLL's fs_st/cl_fs.
+ * Returns 0 on success, -1 on allocation failure. */
+static int build_separation_tables(Polar *p) {
     p->f_st  = (double *)malloc(sizeof(double) * (size_t)p->n_alpha);
     p->cl_fs = (double *)malloc(sizeof(double) * (size_t)p->n_alpha);
+    if (!p->f_st || !p->cl_fs) return -1; /* partial allocs freed by free_ctx */
     for (int32_t i = 0; i < p->n_alpha; i++) {
         double a = p->alpha[i];
         double cl = p->Cl[i];
@@ -147,6 +149,7 @@ static void build_separation_tables(Polar *p) {
         p->f_st[i]  = f_st;
         p->cl_fs[i] = fs;
     }
+    return 0;
 }
 
 static double fst_query(const Polar *p, double alpha) {
@@ -285,10 +288,12 @@ static void hgm_deriv(const double x[4], const Polar *pol, double chord, double 
 }
 
 /* ------------------------------------------------------------------ */
-/* Steady-state init -- UnsteadyAero.f90 HGM_Steady, lines 2559-2651.
- * NOTE: x4 is intentionally left at 0.0 -- the Fortran routine's x(4)
- * assignment is commented out (see HGM_Steady body); only x(1..3) get a
- * nonzero steady value. Ported verbatim, including that quirk.            */
+/* Steady-state init -- UnsteadyAero.f90 HGM_Steady, lines 2559-2656.
+ * x4 IS set at steady state: the assignment at line 2653
+ * (x%x(4) = AFI_interp%f_st) runs unconditionally after the per-model
+ * branch, with AFI_interp evaluated at alphaF = alphaE = alpha_34
+ * (lines 2617-2619). Only the HGMV-branch recomputation at 2643-2645 is
+ * commented out in the Fortran.                                           */
 /* ------------------------------------------------------------------ */
 static void hgm_steady_init(double x[4], const Polar *pol, double chord, double d34_frac,
                              const UA_DllElemInput *u_raw) {
@@ -303,7 +308,7 @@ static void hgm_steady_init(double x[4], const Polar *pol, double chord, double 
 
     double alphaE = alpha_34; /* :2617, after substituting x1,x2 initializations */
     x[2] = pol->Cl_alpha * (alphaE - pol->alpha0);    /* :2626 */
-    x[3] = 0.0;                                       /* :2591, never overwritten for UA_HGM */
+    x[3] = fst_query(pol, alpha_34);                  /* :2653, AFI_interp at alphaF==alpha_34 (:2618-2619) */
 }
 
 /* ------------------------------------------------------------------ */
@@ -354,6 +359,22 @@ static void hgm_output(const double x[4], const Polar *pol, double chord, double
     y->Cc = Cl * SinAlpha - Cd * CosAlpha; /* :3680 */
 }
 
+/* Frees a (possibly partially constructed) context. Safe on NULL members
+ * because everything is calloc-zeroed before any malloc can fail. */
+static void free_ctx(Ctx *c) {
+    if (!c) return;
+    if (c->polars) {
+        for (int32_t k = 0; k < c->n_polars; k++) {
+            Polar *p = &c->polars[k];
+            free(p->alpha); free(p->Cl); free(p->Cd); free(p->Cm);
+            free(p->f_st); free(p->cl_fs);
+        }
+        free(c->polars);
+    }
+    free(c->e);
+    free(c);
+}
+
 /* ------------------------------------------------------------------ */
 /* ABI entry points                                                    */
 /* ------------------------------------------------------------------ */
@@ -361,6 +382,11 @@ static void hgm_output(const double x[4], const Polar *pol, double chord, double
 int32_t ua_dll_getinfo(UA_DllInfo *info, char *msg, int32_t msg_len) {
     if (info->abi_version != UA_DLL_ABI_VERSION) {
         snprintf(msg, (size_t)msg_len, "ABI %d != %d", info->abi_version, UA_DLL_ABI_VERSION);
+        return -1;
+    }
+    if (info->struct_size < (int32_t)sizeof(UA_DllInfo)) {
+        snprintf(msg, (size_t)msg_len, "ua_dll_getinfo: struct_size %d < %d",
+                 info->struct_size, (int32_t)sizeof(UA_DllInfo));
         return -1;
     }
     snprintf(info->model_name, sizeof info->model_name, "Reference HGM (C)");
@@ -377,6 +403,11 @@ int32_t ua_dll_init(const UA_DllInitInput *init, void **ctx, char *msg, int32_t 
         snprintf(msg, (size_t)msg_len, "ua_dll_init: ABI %d != %d", init->abi_version, UA_DLL_ABI_VERSION);
         return -1;
     }
+    if (init->struct_size < (int32_t)sizeof(UA_DllInitInput)) {
+        snprintf(msg, (size_t)msg_len, "ua_dll_init: struct_size %d < %d",
+                 init->struct_size, (int32_t)sizeof(UA_DllInitInput));
+        return -1;
+    }
 
     Ctx *c = (Ctx *)calloc(1, sizeof(Ctx));
     if (!c) { snprintf(msg, (size_t)msg_len, "ua_dll_init: out of memory"); return -1; }
@@ -387,8 +418,15 @@ int32_t ua_dll_init(const UA_DllInitInput *init, void **ctx, char *msg, int32_t 
     c->n_elem   = init->n_blades * init->n_nodes_per_blade;
 
     /* Deep-copy polars: init->polars and everything it points to is not
-     * guaranteed to persist past this call (per ua_dll_api.h contract). */
+     * guaranteed to persist past this call (per ua_dll_api.h contract).
+     * Every allocation is checked; on failure, free_ctx releases whatever
+     * was built so far (calloc-zeroed members make partial frees safe). */
     c->polars = (Polar *)calloc((size_t)(c->n_polars > 0 ? c->n_polars : 1), sizeof(Polar));
+    if (!c->polars) {
+        free_ctx(c);
+        snprintf(msg, (size_t)msg_len, "ua_dll_init: out of memory (polars)");
+        return -1;
+    }
     for (int32_t k = 0; k < c->n_polars; k++) {
         const UA_DllPolar *src = &init->polars[k];
         Polar *p = &c->polars[k];
@@ -396,22 +434,32 @@ int32_t ua_dll_init(const UA_DllInitInput *init, void **ctx, char *msg, int32_t 
         p->alpha    = (double *)malloc(sizeof(double) * (size_t)p->n_alpha);
         p->Cl       = (double *)malloc(sizeof(double) * (size_t)p->n_alpha);
         p->Cd       = (double *)malloc(sizeof(double) * (size_t)p->n_alpha);
+        p->Cm       = src->Cm ? (double *)malloc(sizeof(double) * (size_t)p->n_alpha) : NULL;
+        if (!p->alpha || !p->Cl || !p->Cd || (src->Cm && !p->Cm)) {
+            free_ctx(c);
+            snprintf(msg, (size_t)msg_len, "ua_dll_init: out of memory (polar %d tables)", k);
+            return -1;
+        }
         memcpy(p->alpha, src->alpha, sizeof(double) * (size_t)p->n_alpha);
         memcpy(p->Cl,    src->Cl,    sizeof(double) * (size_t)p->n_alpha);
         memcpy(p->Cd,    src->Cd,    sizeof(double) * (size_t)p->n_alpha);
-        if (src->Cm) {
-            p->Cm = (double *)malloc(sizeof(double) * (size_t)p->n_alpha);
-            memcpy(p->Cm, src->Cm, sizeof(double) * (size_t)p->n_alpha);
-        } else {
-            p->Cm = NULL;
-        }
+        if (src->Cm) memcpy(p->Cm, src->Cm, sizeof(double) * (size_t)p->n_alpha);
         p->alpha0   = src->alpha0;   /* UA_Dll.f90:225, exact match to BL_p%alpha0 */
         p->Cl_alpha = src->Cl_alpha; /* UA_Dll.f90:226, exact match to BL_p%c_lalpha */
         p->Cd0      = compute_default_cd0(p);
-        build_separation_tables(p);
+        if (build_separation_tables(p) != 0) {
+            free_ctx(c);
+            snprintf(msg, (size_t)msg_len, "ua_dll_init: out of memory (polar %d separation tables)", k);
+            return -1;
+        }
     }
 
     c->e = (Elem *)calloc((size_t)(c->n_elem > 0 ? c->n_elem : 1), sizeof(Elem));
+    if (!c->e) {
+        free_ctx(c);
+        snprintf(msg, (size_t)msg_len, "ua_dll_init: out of memory (elements)");
+        return -1;
+    }
     for (int32_t i = 0; i < c->n_elem; i++) {
         c->e[i].chord       = init->chord[i];
         c->e[i].polar_id    = init->polar_id[i];
@@ -490,14 +538,23 @@ int32_t ua_dll_output(void *ctx, double t, const UA_DllElemInput *u, int32_t n_e
         return -1;
     }
     for (int32_t i = 0; i < n_elem; i++) {
-        Elem *e = &c->e[i];
+        const Elem *e = &c->e[i];
         const Polar *pol = &c->polars[e->polar_id];
         if (!e->initialized) {
-            /* Fallback FirstPass path, mirrors UA_CalcOutput:3598-3601. */
-            hgm_steady_init(e->x, pol, e->chord, c->d34_frac, &u[i]);
-            e->initialized = 1;
+            /* FirstPass path, mirrors UA_CalcOutput:3596-3601: the built-in
+             * runs HGM_Steady on a LOCAL copy (x_in) that is discarded after
+             * the call -- OtherState%FirstPass is not cleared and x%element
+             * is not written. So: compute steady states into a stack array
+             * for this call only; NO writes to ctx (ua_dll_api.h: output
+             * MUST NOT modify ctx state). Repeated output calls before the
+             * first update therefore recompute steady state from each call's
+             * own inputs, exactly like the built-in. */
+            double x_local[4];
+            hgm_steady_init(x_local, pol, e->chord, c->d34_frac, &u[i]);
+            hgm_output(x_local, pol, e->chord, c->d34_frac, &u[i], &y[i]);
+        } else {
+            hgm_output(e->x, pol, e->chord, c->d34_frac, &u[i], &y[i]);
         }
-        hgm_output(e->x, pol, e->chord, c->d34_frac, &u[i], &y[i]);
     }
     (void)msg; (void)msg_len;
     return UA_DLL_OK;
@@ -551,16 +608,7 @@ int32_t ua_dll_unpack(void *ctx, const unsigned char *buf, int64_t n_bytes, char
 }
 
 int32_t ua_dll_end(void *ctx, char *msg, int32_t msg_len) {
-    Ctx *c = (Ctx *)ctx;
     (void)msg; (void)msg_len;
-    if (!c) return UA_DLL_OK;
-    for (int32_t k = 0; k < c->n_polars; k++) {
-        Polar *p = &c->polars[k];
-        free(p->alpha); free(p->Cl); free(p->Cd); free(p->Cm);
-        free(p->f_st); free(p->cl_fs);
-    }
-    free(c->polars);
-    free(c->e);
-    free(c);
+    free_ctx((Ctx *)ctx);
     return UA_DLL_OK;
 }
