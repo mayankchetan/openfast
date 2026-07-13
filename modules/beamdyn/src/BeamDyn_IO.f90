@@ -2077,6 +2077,17 @@ SUBROUTINE BD_PrintSum( p, x, OtherState, m, InitInp, ErrStat, ErrMsg )
    call yaml_write_array(UnSu, 'Init_q'   , transpose(x%q(1:6,:)   ), 'ES18.5', ErrStat, ErrMsg, comment='Initial displacement and rotation')
    call yaml_write_array(UnSu, 'Init_dqdt', transpose(x%dqdt(1:6,:)), 'ES18.5', ErrStat, ErrMsg, comment='Initial velocity and angular velocity')
 
+   WRITE (UnSu,'(/,A)')  '# --- FE basis and reference-line fit (internal representation of user inputs)'
+   call yaml_write_list (UnSu, 'GLL_nodes_xi', p%GLL_Nodes    , 'ES18.5', ErrStat, ErrMsg, comment='GLL (FE) node locations in element natural coordinate [-1,1]')
+   call yaml_write_list (UnSu, 'QP_xi'       , p%QPtN         , 'ES18.5', ErrStat, ErrMsg, comment='Quadrature point locations in element natural coordinate [-1,1]')
+   call yaml_write_array(UnSu, 'Shp'         , p%Shp          , 'ES18.5', ErrStat, ErrMsg, comment='Shape functions Shp(i,j)=N_i(QP_xi(j)): Lagrange interpolants on the GLL nodes, evaluated at quadrature points')
+   call yaml_write_array(UnSu, 'ShpDer'      , p%ShpDer       , 'ES18.5', ErrStat, ErrMsg, comment='Shape function derivatives dN_i/dxi at quadrature points')
+   call yaml_write_array(UnSu, 'Jacobian'    , p%Jacobian     , 'ES18.5', ErrStat, ErrMsg, comment='Jacobian d(arclength)/d(xi) at each quadrature point (rows) per element (columns)')
+   call yaml_write_list (UnSu, 'kp_fit_order', p%kp_fit_order , 'I5'    , ErrStat, ErrMsg, comment='Nodes (qfit) in the least-squares GLL-basis fit of the keypoint reference line, per element; polynomial order = qfit-1')
+   DO i=1,p%elem_total
+      call yaml_write_array(UnSu, 'kp_fit_coef_E'//num2lstr(i), p%kp_fit_coef(1:p%kp_fit_order(i),1:4,i), 'ES18.5', ErrStat, ErrMsg, &
+         comment='Reference-line fit for element '//num2lstr(i)//': nodal values (columns X,Y,Z,twist) on the qfit-node GLL Lagrange basis; first/last rows pinned to first/last keypoint')
+   ENDDO
 
    WRITE (UnSu,'(/,A)')  '# --- Outputs'
    select case (p%BldMotionNodeLoc)

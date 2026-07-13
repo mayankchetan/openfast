@@ -167,6 +167,9 @@ IMPLICIT NONE
     REAL(R8Ki) , DIMENSION(:,:), ALLOCATABLE  :: Shp      !< Shape function matrix (index 1 = FE nodes; index 2=quadrature points) [-]
     REAL(R8Ki) , DIMENSION(:,:), ALLOCATABLE  :: ShpDer      !< Derivative of shape function matrix (index 1 = FE nodes; index 2=quadrature points) [-]
     REAL(R8Ki) , DIMENSION(:,:), ALLOCATABLE  :: Jacobian      !< Jacobian value at each quadrature point [-]
+    REAL(R8Ki) , DIMENSION(:), ALLOCATABLE  :: GLL_Nodes      !< GLL (FE) node locations in element natural frame [-1,1] (for summary file) [-]
+    REAL(R8Ki) , DIMENSION(:,:,:), ALLOCATABLE  :: kp_fit_coef      !< Reference-line least-squares fit: nodal values on the qfit-node GLL Lagrange basis (index 1=fit node [1:kp_fit_order], index 2=X/Y/Z/twist, index 3=element) (for summary file) [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: kp_fit_order      !< Number of GLL basis nodes (qfit) used in the reference-line least-squares fit, per element (fit polynomial order = qfit-1) (for summary file) [-]
     REAL(R8Ki) , DIMENSION(:,:,:), ALLOCATABLE  :: uu0      !< Initial Disp/Rot value at quadrature point (at T=0) [-]
     REAL(R8Ki) , DIMENSION(:,:,:), ALLOCATABLE  :: rrN0      !< Initial relative rotation array, relative to root (at T=0) (index 1=rot DOF; index 2=FE nodes; index 3=element) [-]
     REAL(R8Ki) , DIMENSION(:,:,:), ALLOCATABLE  :: E10      !< Initial E10 at quadrature point [-]
@@ -1297,6 +1300,42 @@ subroutine BD_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
       end if
       DstParamData%Jacobian = SrcParamData%Jacobian
    end if
+   if (allocated(SrcParamData%GLL_Nodes)) then
+      LB(1:1) = lbound(SrcParamData%GLL_Nodes)
+      UB(1:1) = ubound(SrcParamData%GLL_Nodes)
+      if (.not. allocated(DstParamData%GLL_Nodes)) then
+         allocate(DstParamData%GLL_Nodes(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%GLL_Nodes.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%GLL_Nodes = SrcParamData%GLL_Nodes
+   end if
+   if (allocated(SrcParamData%kp_fit_coef)) then
+      LB(1:3) = lbound(SrcParamData%kp_fit_coef)
+      UB(1:3) = ubound(SrcParamData%kp_fit_coef)
+      if (.not. allocated(DstParamData%kp_fit_coef)) then
+         allocate(DstParamData%kp_fit_coef(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%kp_fit_coef.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%kp_fit_coef = SrcParamData%kp_fit_coef
+   end if
+   if (allocated(SrcParamData%kp_fit_order)) then
+      LB(1:1) = lbound(SrcParamData%kp_fit_order)
+      UB(1:1) = ubound(SrcParamData%kp_fit_order)
+      if (.not. allocated(DstParamData%kp_fit_order)) then
+         allocate(DstParamData%kp_fit_order(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%kp_fit_order.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%kp_fit_order = SrcParamData%kp_fit_order
+   end if
    if (allocated(SrcParamData%uu0)) then
       LB(1:3) = lbound(SrcParamData%uu0)
       UB(1:3) = ubound(SrcParamData%uu0)
@@ -1589,6 +1628,15 @@ subroutine BD_DestroyParam(ParamData, ErrStat, ErrMsg)
    if (allocated(ParamData%Jacobian)) then
       deallocate(ParamData%Jacobian)
    end if
+   if (allocated(ParamData%GLL_Nodes)) then
+      deallocate(ParamData%GLL_Nodes)
+   end if
+   if (allocated(ParamData%kp_fit_coef)) then
+      deallocate(ParamData%kp_fit_coef)
+   end if
+   if (allocated(ParamData%kp_fit_order)) then
+      deallocate(ParamData%kp_fit_order)
+   end if
    if (allocated(ParamData%uu0)) then
       deallocate(ParamData%uu0)
    end if
@@ -1684,6 +1732,9 @@ subroutine BD_PackParam(RF, Indata)
    call RegPackAlloc(RF, InData%Shp)
    call RegPackAlloc(RF, InData%ShpDer)
    call RegPackAlloc(RF, InData%Jacobian)
+   call RegPackAlloc(RF, InData%GLL_Nodes)
+   call RegPackAlloc(RF, InData%kp_fit_coef)
+   call RegPackAlloc(RF, InData%kp_fit_order)
    call RegPackAlloc(RF, InData%uu0)
    call RegPackAlloc(RF, InData%rrN0)
    call RegPackAlloc(RF, InData%E10)
@@ -1782,6 +1833,9 @@ subroutine BD_UnPackParam(RF, OutData)
    call RegUnpackAlloc(RF, OutData%Shp); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%ShpDer); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%Jacobian); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%GLL_Nodes); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%kp_fit_coef); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%kp_fit_order); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%uu0); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%rrN0); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%E10); if (RegCheckErr(RF, RoutineName)) return

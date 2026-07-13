@@ -130,6 +130,10 @@ SUBROUTINE BD_Init( InitInp, u, p, x, xd, z, OtherState, y, MiscVar, Interval, I
    ! Temporary GLL point intrinsic coordinates array
    CALL BD_GenerateGLL(p%nodes_per_elem,GLL_nodes,ErrStat2,ErrMsg2); if (Failed()) return
 
+      ! persist GLL node locations for the summary file
+   call AllocAry(p%GLL_Nodes,p%nodes_per_elem,'p%GLL_Nodes',ErrStat2,ErrMsg2); if (Failed()) return
+   p%GLL_Nodes = GLL_nodes
+
    ! In the following, trapezoidalpointweight should be generalized to multi-element; likewise for gausspointweight
 
    IF(p%quadrature .EQ. GAUSS_QUADRATURE) THEN
@@ -461,6 +465,15 @@ subroutine InitializeNodalLocations(member_total,kp_member,kp_coordinate,p,GLL_n
    ErrStat = ErrID_None
    ErrMsg  = ""
 
+   ! storage for the reference-line fit, written to the summary file
+   CALL AllocAry(p%kp_fit_order,p%elem_total,'p%kp_fit_order',ErrStat2,ErrMsg2)
+      CALL SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+   CALL AllocAry(p%kp_fit_coef,7,4,p%elem_total,'p%kp_fit_coef',ErrStat2,ErrMsg2)
+      CALL SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+   if (ErrStat >= AbortErrLev) return
+   p%kp_fit_order = 0
+   p%kp_fit_coef  = 0.0_BDKi
+
    !MIKE
 
    !-------------------------------------------------
@@ -554,6 +567,10 @@ subroutine InitializeNodalLocations(member_total,kp_member,kp_coordinate,p,GLL_n
       ! solve the linear system
       CALL LAPACK_getrs( 'N', qfit, least_sq_mat, least_sq_indx, least_sq_rhs, ErrStat2, ErrMsg2)
          CALL SetErrStat( ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName )
+
+      ! persist the fit actually used (before least_sq_rhs is consumed below)
+      p%kp_fit_order(elem) = qfit
+      p%kp_fit_coef(1:qfit,1:4,elem) = least_sq_rhs
 
       ! we now have qfit LSFE coefficent that are a least squares fit to the keypoint data for XYZT
       ! next, we calculate the coefficent of the p%nodes_per_elem LSFE for this element
