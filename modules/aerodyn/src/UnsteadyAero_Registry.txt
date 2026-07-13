@@ -42,9 +42,11 @@ typedef   ^                            ^                             INTEGER    
 typedef   ^                            ^                             INTEGER                  UAOff_outerNode                 {:}           -         -        "First node on each blade where UA should be turned off based on span location from blade tip (>nNodesPerBlade if always on)"    -
 typedef   ^                            ^                             IntKi                    UA_OUTS                         -             0         -        "Store write outputs 0=None, 1=WriteOutpus, 2=WriteToFile"    -
 typedef   ^                            ^                             INTEGER                  integrationMethod               -             3         -        "method to integrate states (default is 3=UA_Method_ABM4)"    -
+typedef   ^                            ^                             CHARACTER(1024)          UA_DLL_FileName                 -             'unused'  -        "Path to user UA dynamic library (UA_Mod=9)"    -
+typedef   ^                            ^                             CHARACTER(1024)          UA_DLL_ParamFile                -             ''        -        "Free string passed to the UA DLL at init (e.g. its parameter/weights file)"    -
 
 #
-# Define outputs from the initialization routine here:                                                                                    
+# Define outputs from the initialization routine here:                                                                                  
 #                                                                                                                                         
 typedef   ^                            InitOutputType                ProgDesc                 Version                         -             -         -        "Version structure" -
 typedef   ^                            InitOutputType                CHARACTER(ChanLen)       WriteOutputHdr                  {:}           -         -        "The is the list of all UA-related output channel header strings (includes all sub-module channels)"    -
@@ -147,6 +149,7 @@ typedef   ^                            DiscreteStateType             ReKi       
 typedef   ^                            DiscreteStateType             ReKi                     Cn_v_minus1                     {:}{:}        -         -        "normal force coefficient due to the presence of LE vortex, previous time step"        -                 
 typedef   ^                            DiscreteStateType             ReKi                     C_V_minus1                      {:}{:}        -         -        "contribution to the normal force coefficient due to accumulated vorticity in the LE vortex, previous time step"        -                 
 typedef   ^                            DiscreteStateType             ReKi                     Cn_prime_minus1                 {:}{:}        -         -        "difference between Cn_prime and Cn_prime_minus1, previous time step"       rad
+typedef   ^                            DiscreteStateType             B1Ki                     UA_DLL_blob                     {:}           -         -        "Serialized DLL state for checkpoint (filled by ua_dll_pack each UpdateStates when checkpointing)"        -
 #
 #
 # Define constraint states here:
@@ -184,6 +187,7 @@ typedef   ^                            MiscVarType                   LOGICAL    
 typedef   ^                            MiscVarType                   ReKi                     T_Sh                            {:}{:}        -         -        "shedding frequency"   -
 typedef   ^                            MiscVarType                   LOGICAL                  BEDSEP                          {:}{:}        -         -        "logical flag indicating if this is undergoing separated flow"   -
 typedef   ^                            MiscVarType                   ReKi                     weight                          {:}{:}        -         -        "value between 0 and 1 indicating if UA is on (1) or off (0) or somewhere in between"   -
+typedef   ^                            MiscVarType                   C_PTR                    UA_DLL_ctx                      -             -         -        "Opaque DLL context (not checkpointed; recreated + unpacked on restart)"   -
 
 
 # ..... Parameters ................................................................................................................
@@ -209,6 +213,8 @@ typedef   ^                            ^                             INTEGER    
 typedef   ^                            ^                             R8Ki                     dx                              {7}           -         -        "array to indicate size of state perturbations (x array)"   -
 typedef   ^                            ^                             IntKi                    UA_OUTS                         -             0         -        "Store write outputs 0=None, 1=WriteOutpus, 2=WriteToFile"    -
 typedef   ^                            ^                             INTEGER                  integrationMethod               -             3         -        "method to integrate states"    -
+typedef   ^                            ParameterType                 DLL_Type                 UA_DLL                          -             -         -        "Handle to user UA DLL (UA_Mod=9)"    -
+typedef   ^                            ^                             CHARACTER(1024)          UA_DLL_ParamFile                -             -         -        "Param string handed to the DLL"    -
 
 # ..... Inputs ....................................................................................................................
 # Define inputs that are contained on the mesh here:

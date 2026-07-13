@@ -55,6 +55,8 @@ IMPLICIT NONE
     INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: UAOff_outerNode      !< First node on each blade where UA should be turned off based on span location from blade tip (>nNodesPerBlade if always on) [-]
     INTEGER(IntKi)  :: UA_OUTS = 0      !< Store write outputs 0=None, 1=WriteOutpus, 2=WriteToFile [-]
     INTEGER(IntKi)  :: integrationMethod = 3      !< method to integrate states (default is 3=UA_Method_ABM4) [-]
+    CHARACTER(1024)  :: UA_DLL_FileName = 'unused'      !< Path to user UA dynamic library (UA_Mod=9) [-]
+    CHARACTER(1024)  :: UA_DLL_ParamFile = ''      !< Free string passed to the UA DLL at init (e.g. its parameter/weights file) [-]
   END TYPE UA_InitInputType
 ! =======================
 ! =========  UA_InitOutputType  =======
@@ -165,6 +167,7 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: Cn_v_minus1      !< normal force coefficient due to the presence of LE vortex, previous time step [-]
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: C_V_minus1      !< contribution to the normal force coefficient due to accumulated vorticity in the LE vortex, previous time step [-]
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: Cn_prime_minus1      !< difference between Cn_prime and Cn_prime_minus1, previous time step [rad]
+    INTEGER(B1Ki) , DIMENSION(:), ALLOCATABLE  :: UA_DLL_blob      !< Serialized DLL state for checkpoint (filled by ua_dll_pack each UpdateStates when checkpointing) [-]
   END TYPE UA_DiscreteStateType
 ! =======================
 ! =========  UA_ConstraintStateType  =======
@@ -202,6 +205,7 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: T_Sh      !< shedding frequency [-]
     LOGICAL , DIMENSION(:,:), ALLOCATABLE  :: BEDSEP      !< logical flag indicating if this is undergoing separated flow [-]
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: weight      !< value between 0 and 1 indicating if UA is on (1) or off (0) or somewhere in between [-]
+    TYPE(C_PTR)  :: UA_DLL_ctx = C_NULL_PTR      !< Opaque DLL context (not checkpointed; recreated + unpacked on restart) [-]
   END TYPE UA_MiscVarType
 ! =======================
 ! =========  UA_ParameterType  =======
@@ -227,6 +231,8 @@ IMPLICIT NONE
     REAL(R8Ki) , DIMENSION(1:7)  :: dx = 0.0_R8Ki      !< array to indicate size of state perturbations (x array) [-]
     INTEGER(IntKi)  :: UA_OUTS = 0      !< Store write outputs 0=None, 1=WriteOutpus, 2=WriteToFile [-]
     INTEGER(IntKi)  :: integrationMethod = 3      !< method to integrate states [-]
+    TYPE(DLL_Type)  :: UA_DLL      !< Handle to user UA DLL (UA_Mod=9) [-]
+    CHARACTER(1024)  :: UA_DLL_ParamFile      !< Param string handed to the DLL [-]
   END TYPE UA_ParameterType
 ! =======================
 ! =========  UA_InputType  =======
@@ -324,6 +330,8 @@ subroutine UA_CopyInitInput(SrcInitInputData, DstInitInputData, CtrlCode, ErrSta
    end if
    DstInitInputData%UA_OUTS = SrcInitInputData%UA_OUTS
    DstInitInputData%integrationMethod = SrcInitInputData%integrationMethod
+   DstInitInputData%UA_DLL_FileName = SrcInitInputData%UA_DLL_FileName
+   DstInitInputData%UA_DLL_ParamFile = SrcInitInputData%UA_DLL_ParamFile
 end subroutine
 
 subroutine UA_DestroyInitInput(InitInputData, ErrStat, ErrMsg)
@@ -364,6 +372,8 @@ subroutine UA_PackInitInput(RF, Indata)
    call RegPackAlloc(RF, InData%UAOff_outerNode)
    call RegPack(RF, InData%UA_OUTS)
    call RegPack(RF, InData%integrationMethod)
+   call RegPack(RF, InData%UA_DLL_FileName)
+   call RegPack(RF, InData%UA_DLL_ParamFile)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -390,6 +400,8 @@ subroutine UA_UnPackInitInput(RF, OutData)
    call RegUnpackAlloc(RF, OutData%UAOff_outerNode); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%UA_OUTS); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%integrationMethod); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UA_DLL_FileName); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%UA_DLL_ParamFile); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine UA_CopyInitOutput(SrcInitOutputData, DstInitOutputData, CtrlCode, ErrStat, ErrMsg)
@@ -1225,6 +1237,18 @@ subroutine UA_CopyDiscState(SrcDiscStateData, DstDiscStateData, CtrlCode, ErrSta
       end if
       DstDiscStateData%Cn_prime_minus1 = SrcDiscStateData%Cn_prime_minus1
    end if
+   if (allocated(SrcDiscStateData%UA_DLL_blob)) then
+      LB(1:1) = lbound(SrcDiscStateData%UA_DLL_blob)
+      UB(1:1) = ubound(SrcDiscStateData%UA_DLL_blob)
+      if (.not. allocated(DstDiscStateData%UA_DLL_blob)) then
+         allocate(DstDiscStateData%UA_DLL_blob(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstDiscStateData%UA_DLL_blob.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstDiscStateData%UA_DLL_blob = SrcDiscStateData%UA_DLL_blob
+   end if
 end subroutine
 
 subroutine UA_DestroyDiscState(DiscStateData, ErrStat, ErrMsg)
@@ -1336,6 +1360,9 @@ subroutine UA_DestroyDiscState(DiscStateData, ErrStat, ErrMsg)
    if (allocated(DiscStateData%Cn_prime_minus1)) then
       deallocate(DiscStateData%Cn_prime_minus1)
    end if
+   if (allocated(DiscStateData%UA_DLL_blob)) then
+      deallocate(DiscStateData%UA_DLL_blob)
+   end if
 end subroutine
 
 subroutine UA_PackDiscState(RF, Indata)
@@ -1377,6 +1404,7 @@ subroutine UA_PackDiscState(RF, Indata)
    call RegPackAlloc(RF, InData%Cn_v_minus1)
    call RegPackAlloc(RF, InData%C_V_minus1)
    call RegPackAlloc(RF, InData%Cn_prime_minus1)
+   call RegPackAlloc(RF, InData%UA_DLL_blob)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -1422,6 +1450,7 @@ subroutine UA_UnPackDiscState(RF, OutData)
    call RegUnpackAlloc(RF, OutData%Cn_v_minus1); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%C_V_minus1); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%Cn_prime_minus1); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%UA_DLL_blob); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine UA_CopyConstrState(SrcConstrStateData, DstConstrStateData, CtrlCode, ErrStat, ErrMsg)
@@ -1786,6 +1815,7 @@ subroutine UA_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
    character(*),    intent(  out) :: ErrMsg
    integer(B4Ki)                  :: LB(2), UB(2)
    integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'UA_CopyMisc'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -1864,12 +1894,15 @@ subroutine UA_CopyMisc(SrcMiscData, DstMiscData, CtrlCode, ErrStat, ErrMsg)
       end if
       DstMiscData%weight = SrcMiscData%weight
    end if
+   DstMiscData%UA_DLL_ctx = SrcMiscData%UA_DLL_ctx
 end subroutine
 
 subroutine UA_DestroyMisc(MiscData, ErrStat, ErrMsg)
    type(UA_MiscVarType), intent(inout) :: MiscData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'UA_DestroyMisc'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -1891,6 +1924,7 @@ subroutine UA_DestroyMisc(MiscData, ErrStat, ErrMsg)
    if (allocated(MiscData%weight)) then
       deallocate(MiscData%weight)
    end if
+   MiscData%UA_DLL_ctx = c_null_ptr
 end subroutine
 
 subroutine UA_PackMisc(RF, Indata)
@@ -1927,6 +1961,7 @@ subroutine UA_UnPackMisc(RF, OutData)
    call RegUnpackAlloc(RF, OutData%T_Sh); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%BEDSEP); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%weight); if (RegCheckErr(RF, RoutineName)) return
+   OutData%UA_DLL_ctx = c_null_ptr ! not checkpointed
 end subroutine
 
 subroutine UA_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
@@ -1937,6 +1972,7 @@ subroutine UA_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
    character(*),    intent(  out) :: ErrMsg
    integer(B4Ki)                  :: LB(2), UB(2)
    integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'UA_CopyParam'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -1994,12 +2030,16 @@ subroutine UA_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
    DstParamData%dx = SrcParamData%dx
    DstParamData%UA_OUTS = SrcParamData%UA_OUTS
    DstParamData%integrationMethod = SrcParamData%integrationMethod
+   DstParamData%UA_DLL = SrcParamData%UA_DLL
+   DstParamData%UA_DLL_ParamFile = SrcParamData%UA_DLL_ParamFile
 end subroutine
 
 subroutine UA_DestroyParam(ParamData, ErrStat, ErrMsg)
    type(UA_ParameterType), intent(inout) :: ParamData
    integer(IntKi),  intent(  out) :: ErrStat
    character(*),    intent(  out) :: ErrMsg
+   integer(IntKi)                 :: ErrStat2
+   character(ErrMsgLen)           :: ErrMsg2
    character(*), parameter        :: RoutineName = 'UA_DestroyParam'
    ErrStat = ErrID_None
    ErrMsg  = ''
@@ -2012,6 +2052,8 @@ subroutine UA_DestroyParam(ParamData, ErrStat, ErrMsg)
    if (allocated(ParamData%lin_xIndx)) then
       deallocate(ParamData%lin_xIndx)
    end if
+   call FreeDynamicLib( ParamData%UA_DLL, ErrStat2, ErrMsg2)
+   call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
 end subroutine
 
 subroutine UA_PackParam(RF, Indata)
@@ -2040,6 +2082,8 @@ subroutine UA_PackParam(RF, Indata)
    call RegPack(RF, InData%dx)
    call RegPack(RF, InData%UA_OUTS)
    call RegPack(RF, InData%integrationMethod)
+   call DLLTypePack(RF, InData%UA_DLL) 
+   call RegPack(RF, InData%UA_DLL_ParamFile)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -2072,6 +2116,8 @@ subroutine UA_UnPackParam(RF, OutData)
    call RegUnpack(RF, OutData%dx); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%UA_OUTS); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%integrationMethod); if (RegCheckErr(RF, RoutineName)) return
+   call DLLTypeUnpack(RF, OutData%UA_DLL) ! UA_DLL 
+   call RegUnpack(RF, OutData%UA_DLL_ParamFile); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine UA_CopyInput(SrcInputData, DstInputData, CtrlCode, ErrStat, ErrMsg)
