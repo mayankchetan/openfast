@@ -468,6 +468,10 @@ py_ad_regression("py_ad_B1n2_OLAF"                   "aerodyn;OLAF;python")
 
 # UnsteadyAero
 ua_regression("ua_redfreq"                  "unsteadyaero")
+# ua_dll_hgm: UA_Mod=9 acceptance case (reference HGM DLL vs built-in UA_Mod=4).
+# Requires the ua_hgm example lib staged into the test run directory; see
+# stage_ua_dll_hgm custom target above this file's inclusion in CMakeLists.txt.
+ua_regression("ua_dll_hgm"                  "unsteadyaero")
 
 # BeamDyn regression tests
 bd_regression("bd_5MW_dynamic"               "beamdyn;dynamic")

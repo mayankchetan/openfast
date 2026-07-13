@@ -101,6 +101,10 @@ foreach(srcDir seastate_wr_kin1)
   file(COPY "${CMAKE_CURRENT_LIST_DIR}/r-test/modules/seastate/${srcDir}"
        DESTINATION "${CTEST_BINARY_DIR}/modules/seastate/")
 endforeach()
+foreach(srcDir ua_dll_hgm)
+  file(COPY "${CMAKE_CURRENT_LIST_DIR}/r-test/modules/unsteadyaero/${srcDir}"
+       DESTINATION "${CTEST_BINARY_DIR}/modules/unsteadyaero/")
+endforeach()
 
 ## openfast test directories
 foreach(srcDir 5MW_Baseline AOC AWT27 SWRT UAE_VI WP_Baseline)
@@ -150,11 +154,26 @@ add_custom_target(
   COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:DISCON> ${ff_dest}/DISCON_WT4.dll
 )
 
+# Stage the reference UA user-DLL example (ua_hgm, built under BUILD_TESTING;
+# see modules/aerodyn/CMakeLists.txt) into the ua_dll_hgm module-test run
+# directory. Named without a platform suffix (dlopen/LoadLibrary resolve an
+# explicit path regardless of extension) so the single, portable UA_dll.dvr
+# committed in r-test works unmodified across the Linux/macOS build matrix.
+add_custom_target(
+  stage_ua_dll_hgm ALL
+  DEPENDS ua_hgm
+  COMMAND "${CMAKE_COMMAND}" -E copy
+    "$<TARGET_FILE:ua_hgm>"
+    "${CTEST_BINARY_DIR}/modules/unsteadyaero/ua_dll_hgm/ua_hgm_dll"
+  COMMENT "Staging reference UA DLL (ua_hgm) into ua_dll_hgm test directory"
+)
+
 add_custom_target(
   regression_tests ALL
   DEPENDS
     openfast
     regression_test_controllers
+    stage_ua_dll_hgm
 )
 
 add_custom_target(
