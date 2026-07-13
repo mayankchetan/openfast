@@ -234,7 +234,7 @@ subroutine ReadDriverInputFile( FileName, InitInp, ErrStat, ErrMsg )
    ! keyname (i.e. we've actually landed on the next section's line), default both and leave iLine untouched
    ! for the next parse -- ParseVar does not advance iLine on a name-mismatch failure, so this is safe.
    call ParseVar(FI, iLine, 'UADLLFileName', InitInp%UADLLFileName, errStat2, errMsg2, UnEcho, IsPath=.true.)
-   if (errStat2 == ErrID_Fatal) then
+   if (ErrStat2 >= AbortErrLev) then
       InitInp%UADLLFileName  = 'unused'
       InitInp%UADLLParamFile = ''
       errStat2 = ErrID_None

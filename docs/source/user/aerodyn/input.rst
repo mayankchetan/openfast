@@ -363,6 +363,20 @@ driver) to examine the accuracy of the normal force, tangential force,
 and pitching-moment coefficient hysteresis and to adjust the UA model
 parameters appropriately.**
 
+``UADLLFileName`` is the path to the user-supplied UA dynamic library (shared object/DLL)
+implementing the ``UA_Mod=9`` model. [used only when ``UA_Mod=9``] When ``UA_Mod=9``, this
+line and ``UADLLParamFile`` must appear directly after the ``UA_Mod`` line (before
+``FLookup``). A relative path is resolved relative to the directory containing the AeroDyn
+primary input file. If this line is omitted from the input file (older input files
+predating this feature), the value defaults to ``"unused"`` and ``UA_Mod=9`` cannot be used.
+
+``UADLLParamFile`` is a free-form string passed verbatim to the UA DLL's initialization
+routine, e.g. a path to the DLL's own configuration/weights file. [used only when
+``UA_Mod=9``] If ``UADLLFileName`` is present, this line is required immediately after it;
+the two lines may only be omitted together. Unlike ``UADLLFileName``, this string is
+**not** resolved relative to the AeroDyn input file directory -- the DLL, not AeroDyn, is
+responsible for interpreting it. If both lines are omitted, it defaults to an empty string.
+
 ``FLookup`` determines how the nondimensional separation distance
 value, *f’*, will be calculated. When ``FLookup`` is set to TRUE, *f’*
 is determined via a lookup into the static lift-force coefficient and
@@ -384,18 +398,6 @@ to indicate the last rotor radius where unsteady aerodynamics should be turned o
 omitted from the input file, ``UAEndRad`` will default to 1 (the blade tip).
 All blade nodes that are located at a rotor radius greater than ``UAEndRad`` will have
 unsteady aerodynamics turned off for the entire simulation.
-
-``UADLLFileName`` is the path to the user-supplied UA dynamic library (shared object/DLL)
-implementing the ``UA_Mod=9`` model. [used only when ``UA_Mod=9``] A relative path is
-resolved relative to the directory containing the AeroDyn primary input file. If this line
-is omitted from the input file (older input files predating this feature), the value
-defaults to ``"unused"`` and ``UA_Mod=9`` cannot be used.
-
-``UADLLParamFile`` is a free-form string passed verbatim to the UA DLL's initialization
-routine, e.g. a path to the DLL's own configuration/weights file. [used only when
-``UA_Mod=9``] Unlike ``UADLLFileName``, this string is **not** resolved relative to the
-AeroDyn input file directory -- the DLL, not AeroDyn, is responsible for interpreting it.
-If this line is omitted, it defaults to an empty string.
 
 
 .. _airfoil_information:
