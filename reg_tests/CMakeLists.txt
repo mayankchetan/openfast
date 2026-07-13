@@ -156,15 +156,30 @@ add_custom_target(
 
 # Stage the reference UA user-DLL example (ua_hgm, built under BUILD_TESTING;
 # see modules/aerodyn/CMakeLists.txt) into the ua_dll_hgm module-test run
-# directory. Named without a platform suffix (dlopen/LoadLibrary resolve an
-# explicit path regardless of extension) so the single, portable UA_dll.dvr
-# committed in r-test works unmodified across the Linux/macOS build matrix.
+# directory, under the name "ua_hgm_dll" that the committed UA_dll.dvr
+# (UADLLFileName = "./ua_hgm_dll") references.
+#
+# On UNIX (dlopen), an explicit path is opened exactly as given -- no
+# extension is appended -- so staging the suffix-free name "ua_hgm_dll"
+# works unmodified.
+#
+# On Windows, LoadLibraryA appends the default ".dll" extension whenever the
+# final path component has no extension (and does not end in '.'), even
+# when a directory/path prefix like "./" is present -- this appending is
+# NOT limited to bare module names without a path, despite how the MSDN
+# wording reads in isolation (confirmed: NWTC's LoadDynamicLib, see
+# modules/nwtc-library/src/SysGnuWin.f90, passes DLL%FileName straight
+# through to LoadLibraryA with no extension handling of its own -- any
+# ".dll" appending happens inside LoadLibraryA itself). So "./ua_hgm_dll"
+# resolves to "./ua_hgm_dll.dll" on Windows: stage the file there too via a
+# generator-expression suffix, and the single committed .dvr needs no
+# platform-specific variant.
 add_custom_target(
   stage_ua_dll_hgm ALL
   DEPENDS ua_hgm
   COMMAND "${CMAKE_COMMAND}" -E copy
     "$<TARGET_FILE:ua_hgm>"
-    "${CTEST_BINARY_DIR}/modules/unsteadyaero/ua_dll_hgm/ua_hgm_dll"
+    "${CTEST_BINARY_DIR}/modules/unsteadyaero/ua_dll_hgm/ua_hgm_dll$<$<PLATFORM_ID:Windows>:.dll>"
   COMMENT "Staging reference UA DLL (ua_hgm) into ua_dll_hgm test directory"
 )
 

@@ -73,9 +73,11 @@ This produces `libua_hgm.dylib` (macOS) / `libua_hgm.so` (Linux) /
 If OpenFAST's regression-test suite is configured (`-DBUILD_TESTING=ON`,
 the default for a normal dev build), `ua_hgm` is built automatically as
 part of the `stage_ua_dll_hgm` target, which also copies it into the
-staged test-run directory (see below) under a platform-independent,
-suffix-free name so the single committed driver input works unmodified
-across the Linux/macOS/Windows build matrix.
+staged test-run directory (see below) as `ua_hgm_dll` (suffix-free on
+Linux/macOS, `ua_hgm_dll.dll` on Windows, since `LoadLibraryA` appends
+the default `.dll` extension whenever the referenced path has none) so
+the single committed driver input works unmodified across the
+Linux/macOS/Windows build matrix.
 
 ## Running the acceptance twin case
 
@@ -90,10 +92,14 @@ prescribed reduced-frequency motion) except for `UAMod`:
   "./ua_hgm_dll"  UADLLFileName  - Path to user UA dynamic library [used only when UAMod=9].
   ""              UADLLParamFile - Parameter string passed to the UA DLL init [used only when UAMod=9]
   ```
-  `UADLLFileName` points at the platform-independent, suffix-free copy of
-  `ua_hgm` that the `stage_ua_dll_hgm` CMake target stages into this test
-  directory at configure/build time (see [Build](#build) above) -- it is
-  not resolved against the source tree.
+  `UADLLFileName` points at the copy of `ua_hgm` that the `stage_ua_dll_hgm`
+  CMake target stages into this test directory at configure/build time as
+  `ua_hgm_dll` (see [Build](#build) above) -- it is not resolved against the
+  source tree. The single committed path works on every platform because
+  `dlopen`/`LoadLibraryA` resolve the extension differently but
+  consistently: `dlopen` opens the exact path given, and `LoadLibraryA`
+  appends `.dll` to an extension-less path, matching the `.dll`-suffixed
+  copy staged on Windows.
 
 This pair is registered as a normal OpenFAST regression test
 (`ua_regression("ua_dll_hgm" "unsteadyaero")` in `reg_tests/CTestList.cmake`),

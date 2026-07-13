@@ -11,7 +11,16 @@
 #define UA_DLL_OK    0
 
 /* capability bits reported by ua_dll_getinfo */
-#define UA_DLL_CAP_PACK   (1u << 0)  /* pack/unpack implemented (required for restart) */
+#define UA_DLL_CAP_PACK   (1u << 0)  /* advisory metadata only, kept for ABI stability.
+                                         ua_dll_pack/ua_dll_unpack are REQUIRED entry points:
+                                         OpenFAST resolves and calls both unconditionally
+                                         (pack after every batched state update, unpack on
+                                         restart) regardless of this bit. A DLL must
+                                         implement both so pack/unpack round-trip its state
+                                         exactly -- that fidelity is what makes checkpoint/
+                                         restart exact. Leaving this bit clear does not skip
+                                         the calls; it only signals (informationally) that
+                                         the DLL's own restart fidelity may be incomplete. */
 
 #ifdef __cplusplus
 extern "C" {

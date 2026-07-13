@@ -177,6 +177,7 @@ subroutine UADll_Init(p, InitInp, AFInfo, AFIndx, m, ErrStat, ErrMsg)
    info%abi_version = UA_DLL_ABI_VERSION
    info%struct_size = int(storage_size(info)/8, C_INT32_T)
    call C_F_PROCPOINTER(p%UA_DLL%ProcAddr(1), fGetInfo)
+   cmsg(1) = C_NULL_CHAR
    rc = fGetInfo(info, cmsg, int(MSGLEN, C_INT32_T))
    call SetFromDllRet(rc, cmsg, RoutineName//'(getinfo)', ErrStat, ErrMsg)
    if (ErrStat >= AbortErrLev) return
@@ -189,8 +190,28 @@ subroutine UADll_Init(p, InitInp, AFInfo, AFIndx, m, ErrStat, ErrMsg)
    end if
    if (.not. BTEST(info%caps, 0)) then
       call SetErrStat(ErrID_Warn, RoutineName//': UA DLL "'//trim(p%UA_DLL%FileName)// &
-                       '" does not report the pack/unpack capability; checkpoint/restart of its '// &
-                       'internal state will not be possible.', ErrStat, ErrMsg, RoutineName)
+                       '" does not report the pack/unpack capability bit. OpenFAST calls '// &
+                       'ua_dll_pack/ua_dll_unpack unconditionally regardless of this bit; '// &
+                       'restart correctness for this DLL depends entirely on the fidelity of '// &
+                       'its pack/unpack implementation, which this bit does not guarantee.', &
+                       ErrStat, ErrMsg, RoutineName)
+   end if
+
+   if (InitInp%dt > 0.0_DbKi) then
+      if (info%dt_min > 0.0_C_DOUBLE .and. real(InitInp%dt,C_DOUBLE) < info%dt_min) then
+         call SetErrStat(ErrID_Fatal, RoutineName//': requested time step ('// &
+                          trim(Num2LStr(InitInp%dt))//' s) is smaller than the UA DLL''s '// &
+                          'minimum supported dt ('//trim(Num2LStr(real(info%dt_min,DbKi)))//' s).', &
+                          ErrStat, ErrMsg, RoutineName)
+         return
+      end if
+      if (info%dt_max > 0.0_C_DOUBLE .and. real(InitInp%dt,C_DOUBLE) > info%dt_max) then
+         call SetErrStat(ErrID_Fatal, RoutineName//': requested time step ('// &
+                          trim(Num2LStr(InitInp%dt))//' s) is larger than the UA DLL''s '// &
+                          'maximum supported dt ('//trim(Num2LStr(real(info%dt_max,DbKi)))//' s).', &
+                          ErrStat, ErrMsg, RoutineName)
+         return
+      end if
    end if
 
    !--------------------------------------------------------------
@@ -199,6 +220,13 @@ subroutine UADll_Init(p, InitInp, AFInfo, AFIndx, m, ErrStat, ErrMsg)
    allocate(dll_polars(max(nPolars,1)))
    allocate(alphaVecs(nPolars), clVecs(nPolars), cdVecs(nPolars), cmVecs(nPolars))
    do k = 1, nPolars
+      if (AFInfo(k)%NumTabs > 1) then
+         call SetErrStat(ErrID_Fatal, RoutineName//': airfoil index '//trim(Num2LStr(k))// &
+                          ' has '//trim(Num2LStr(AFInfo(k)%NumTabs))//' tables, but UA_Mod=9 '// &
+                          'currently marshals only Table(1) to the UA DLL; multi-Re/UserProp '// &
+                          'airfoil tables are not supported for UA_Mod=9.', ErrStat, ErrMsg, RoutineName)
+         return
+      end if
       associate (tab => AFInfo(k)%Table(1))
          n_alpha = tab%NumAlf
          allocate(alphaVecs(k)%v(n_alpha))
@@ -276,12 +304,11 @@ subroutine UADll_Init(p, InitInp, AFInfo, AFIndx, m, ErrStat, ErrMsg)
    ini%pad2      = 0_C_INT32_T
 
    call C_F_PROCPOINTER(p%UA_DLL%ProcAddr(2), fInit)
+   cmsg(1) = C_NULL_CHAR
    rc = fInit(ini, m%UA_DLL_ctx, cmsg, int(MSGLEN, C_INT32_T))
    call SetFromDllRet(rc, cmsg, RoutineName//'(init)', ErrStat2, ErrMsg2)
    call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
    if (ErrStat >= AbortErrLev) return
-
-   p%UA_DLL_ParamFile = InitInp%UA_DLL_ParamFile
 
 end subroutine UADll_Init
 
@@ -332,6 +359,7 @@ subroutine UADll_UpdateStates(p, m, t, step, u_t, u_tp1, ErrStat, ErrMsg)
    end do
 
    call C_F_PROCPOINTER(p%UA_DLL%ProcAddr(3), f)
+   cmsg(1) = C_NULL_CHAR
    rc = f(m%UA_DLL_ctx, real(t,C_DOUBLE), int(step,C_INT64_T), dll_u_t, dll_u_tp1, &
           int(nElem,C_INT32_T), cmsg, int(MSGLEN,C_INT32_T))
    call SetFromDllRet(rc, cmsg, RoutineName, ErrStat, ErrMsg)
@@ -377,6 +405,7 @@ subroutine UADll_CalcOutput(p, m, t, u, y, ErrStat, ErrMsg)
    end do
 
    call C_F_PROCPOINTER(p%UA_DLL%ProcAddr(4), f)
+   cmsg(1) = C_NULL_CHAR
    rc = f(m%UA_DLL_ctx, real(t,C_DOUBLE), dll_u, int(nElem,C_INT32_T), dll_y, cmsg, int(MSGLEN,C_INT32_T))
    call SetFromDllRet(rc, cmsg, RoutineName, ErrStat, ErrMsg)
    if (ErrStat >= AbortErrLev) return
@@ -415,6 +444,7 @@ subroutine UADll_Pack(p, m, xd, ErrStat, ErrMsg)
 
    ! call 1: size query (buf = NULL)
    nBytes = 0_C_INT64_T
+   cmsg(1) = C_NULL_CHAR
    rc = f(m%UA_DLL_ctx, C_NULL_PTR, nBytes, cmsg, int(MSGLEN,C_INT32_T))
    call SetFromDllRet(rc, cmsg, RoutineName//'(size)', ErrStat, ErrMsg)
    if (ErrStat >= AbortErrLev) return
@@ -426,6 +456,7 @@ subroutine UADll_Pack(p, m, xd, ErrStat, ErrMsg)
 
    ! call 2: write into the now-allocated blob
    if (nBytes > 0_C_INT64_T) then
+      cmsg(1) = C_NULL_CHAR
       rc = f(m%UA_DLL_ctx, C_LOC(xd%UA_DLL_blob(1)), nBytes, cmsg, int(MSGLEN,C_INT32_T))
       call SetFromDllRet(rc, cmsg, RoutineName//'(write)', ErrStat2, ErrMsg2)
       call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)
@@ -453,6 +484,7 @@ subroutine UADll_Unpack(p, m, xd, ErrStat, ErrMsg)
 
    call C_F_PROCPOINTER(p%UA_DLL%ProcAddr(6), f)
 
+   cmsg(1) = C_NULL_CHAR
    if (allocated(xd%UA_DLL_blob) .and. size(xd%UA_DLL_blob) > 0) then
       nBytes = int(size(xd%UA_DLL_blob), C_INT64_T)
       rc = f(m%UA_DLL_ctx, C_LOC(xd%UA_DLL_blob(1)), nBytes, cmsg, int(MSGLEN,C_INT32_T))
@@ -482,6 +514,7 @@ subroutine UADll_End(p, m, ErrStat, ErrMsg)
 
    if (C_ASSOCIATED(m%UA_DLL_ctx)) then
       call C_F_PROCPOINTER(p%UA_DLL%ProcAddr(7), f)
+      cmsg(1) = C_NULL_CHAR
       rc = f(m%UA_DLL_ctx, cmsg, int(MSGLEN,C_INT32_T))
       call SetFromDllRet(rc, cmsg, RoutineName, ErrStat, ErrMsg)
       m%UA_DLL_ctx = C_NULL_PTR

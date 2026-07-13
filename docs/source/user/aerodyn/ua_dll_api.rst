@@ -78,11 +78,17 @@ Rendered from ``modules/aerodyn/src/ua_dll_api.h`` (version 1).
        double  dt_max;           /* [out] largest  dt the model supports; 0 = no limit        */
    } UA_DllInfo;
 
-The only capability bit currently defined is ``UA_DLL_CAP_PACK`` (bit 0):
-the DLL implements ``ua_dll_pack``/``ua_dll_unpack`` and therefore supports
-OpenFAST restart. A DLL that leaves this bit clear can still run, but a
-restarted simulation cannot recover its internal state (see
-`Checkpoint/restart semantics`_).
+The only capability bit currently defined is ``UA_DLL_CAP_PACK`` (bit 0).
+**All 7 entry points, including** ``ua_dll_pack``/``ua_dll_unpack``, **are
+required** -- ``UADll_Load`` resolves all 7 symbols and aborts if any is
+missing, regardless of this bit. ``UA_DLL_CAP_PACK`` is advisory metadata,
+kept for ABI stability: OpenFAST calls ``ua_dll_pack`` after every batched
+state update and ``ua_dll_unpack`` on restart unconditionally. A DLL must
+implement both so that a ``pack`` followed by an ``unpack`` round-trips its
+internal state exactly -- that fidelity, not the capability bit, is what
+makes checkpoint/restart exact. Leaving the bit clear only produces a
+startup warning; it does not exempt the DLL from implementing pack/unpack
+correctly (see `Checkpoint/restart semantics`_).
 
 ``UA_DllPolar`` -- one airfoil table (one Re/UserProp interpolation slice),
 passed as an array of ``n_polars`` entries inside ``UA_DllInitInput``:
@@ -104,6 +110,13 @@ passed as an array of ``n_polars`` entries inside ``UA_DllInitInput``:
 ``AFI_ComputeUACoefs``/``UA_BL`` processing of the airfoil file (the same
 values the built-in models use); the DLL does not need to recompute them
 from the ``Cl`` table unless it wants to.
+
+Current limitation: ``UA_Mod=9`` marshals only ``Table(1)`` of each
+airfoil to the DLL (one ``UA_DllPolar`` per airfoil, not per Re/UserProp
+table) -- an airfoil file with more than one table (multi-Reynolds-number
+or multi-UserProp polars) raises a fatal error at initialization; the ABI
+already supports multiple tables per airfoil via ``polar_id`` (a separate
+``polar_id`` per element rather than per airfoil) for a future extension.
 
 ``UA_DllInitInput`` -- passed once to ``ua_dll_init``:
 
@@ -219,6 +232,18 @@ uses this ordering. All blades currently share ``n_nodes_per_blade``
 (uniform node count across blades); a variable node count per blade is not
 representable in this ABI generation.
 
+Note that AeroDyn's ``UAStartRad``/``UAEndRad`` machinery (which disables
+unsteady aerodynamics on inner/outer blade elements by radius) is applied
+*after* the DLL boundary: the DLL still receives inputs for, and advances
+state for, every element in ``0 .. n_elem-1`` regardless of that setting
+-- ``ua_dll_update`` has no way to skip or be told about disabled
+elements. OpenFAST substitutes its own steady-state airfoil-table
+coefficients for a disabled element's output rather than using the DLL's
+computed ``ua_dll_output`` result for that element; the DLL still pays
+the cost of advancing state for elements whose output it will never see
+used, and it cannot distinguish disabled elements from active ones
+today.
+
 
 Entry points
 -------------
@@ -236,9 +261,10 @@ and is not required to write anything on success.
    * - Entry point
      - Purpose
    * - ``ua_dll_getinfo``
-     - Query model metadata (name, capability bits, state count, dt bounds)
-       before any rotor exists. Called once at startup, before the first
-       ``ua_dll_init``.
+     - Query model metadata (name, capability bits, state count, dt bounds).
+       Called once per rotor instance, immediately before that rotor's
+       ``ua_dll_init`` (and again before ``ua_dll_init`` on restart) --
+       it has no ``ctx`` yet and cannot depend on per-rotor state.
    * - ``ua_dll_init``
      - Allocate and initialize a DLL-owned opaque context (``ctx``) for one
        rotor instance, from the deep-copyable ``UA_DllInitInput`` (airfoil
@@ -299,7 +325,7 @@ Lifecycle
 
 .. code-block:: text
 
-   getinfo                                    (once, before any rotor exists)
+   getinfo                                    (once per rotor instance)
       |
       v
    init                                       (once per rotor instance)
@@ -323,8 +349,10 @@ Lifecycle
 
 Key points:
 
-- ``ua_dll_getinfo`` is called once, globally, before any rotor's
-  ``ua_dll_init`` -- it has no ``ctx`` and cannot depend on per-rotor state.
+- ``ua_dll_getinfo`` is called once per rotor instance, immediately before
+  that rotor's ``ua_dll_init`` (and again on restart, before the restart's
+  ``ua_dll_init``/``ua_dll_unpack`` pair) -- it has no ``ctx`` and cannot
+  depend on per-rotor state.
 - ``ua_dll_init`` is called once per rotor instance (a simulation with
   multiple UA-DLL rotors, e.g. FAST.Farm, calls it once per turbine). The
   ``ctx`` it returns is opaque to OpenFAST and threaded through every
@@ -335,12 +363,17 @@ Key points:
   BEMT's induction iteration) including *before the first ``update`` has
   ever run* -- see `Threading and purity rules`_ for what a DLL must do
   about this.
-- ``pack`` is called by the DLLTypePack machinery after every batched
-  update, and the resulting blob is checkpointed as part of OpenFAST's
-  discrete-state (``xd``) restart file. This is not tied 1:1 to every
-  single ``update`` call in general (the OpenFAST checkpoint cadence is a
-  user setting), but a DLL must be prepared to have its state packed at any
-  point after ``init``.
+- ``ua_dll_pack`` (the UA-DLL entry point, ``UADll_Pack`` on the Fortran
+  side) is called after every batched ``update`` to fill ``xd``'s blob with
+  the DLL's current state; this is required, not conditioned on
+  ``UA_DLL_CAP_PACK``. The generic ``DLLTypePack`` machinery is a separate,
+  unrelated mechanism: it only handles the library *handle* (file path,
+  reload/re-``dlopen`` on restart), not the DLL's internal state -- it does
+  not call ``ua_dll_pack``/``ua_dll_unpack`` itself. Because the blob is
+  refreshed after every batched update, it is always current when
+  OpenFAST's own checkpoint cadence (a user setting, not tied 1:1 to every
+  ``update`` call) decides to write ``xd`` to a restart file -- that
+  always-current invariant is what makes checkpoint/restart exact.
 - On restart, OpenFAST reloads the DLL automatically (via the same
   DLLTypePack machinery that reloads other user DLLs, e.g. controller
   DLLs), calls ``ua_dll_init`` fresh with the same ``UA_DllInitInput`` as
@@ -351,11 +384,14 @@ Key points:
   ``initialized = 1`` inside ``ua_dll_unpack`` so its lazy first-touch
   steady-state initialization (see `Worked example: the reference HGM
   DLL`_) does not re-trigger and clobber the restored state.
-- A DLL that does not implement ``pack``/``unpack`` (does not set
-  ``UA_DLL_CAP_PACK`` in ``ua_dll_getinfo``) can still run a simulation
-  end-to-end, but a restarted run cannot recover its state -- the
-  practical effect is that restart silently re-initializes UA state (via
-  each element's own first-touch logic) rather than continuing exactly.
+- ``ua_dll_pack``/``ua_dll_unpack`` are required entry points: OpenFAST
+  resolves all 7 symbols at load time and aborts with a fatal error if any
+  is missing, so a DLL cannot opt out of implementing them. ``UA_DLL_CAP_PACK``
+  left clear in ``ua_dll_getinfo`` only produces a startup warning that the
+  DLL's restart fidelity is not guaranteed -- it does not skip the
+  ``pack``/``unpack`` calls. A DLL whose ``pack``/``unpack`` do not
+  round-trip its state exactly will silently produce an incorrect
+  restarted trajectory rather than failing loudly.
 
 
 Threading and purity rules
@@ -450,10 +486,14 @@ uses a flat ``int32_t`` element count followed by 4 ``double`` states per
 element -- see ``ua_dll_pack``/``ua_dll_unpack`` in ``hgm_dll.c``) as long
 as ``pack`` followed by ``unpack`` round-trips exactly.
 
-A DLL that reports ``UA_DLL_CAP_PACK`` unset in ``ua_dll_getinfo`` is
-telling OpenFAST it has no persistent state worth checkpointing (or has
-chosen not to implement it); such a DLL's ``ua_dll_pack``/``ua_dll_unpack``
-are never called.
+``ua_dll_pack`` and ``ua_dll_unpack`` are always called -- after every
+batched ``update`` and on every restart, respectively -- regardless of
+``UA_DLL_CAP_PACK``. A DLL that reports the bit unset in
+``ua_dll_getinfo`` is only flagging (informationally) that its
+implementation of these two entry points may not be trustworthy for exact
+restart; OpenFAST still calls them, and a DLL is still required to provide
+working (if imperfect) implementations rather than stubs, since
+``UADll_Load`` treats all 7 symbols as mandatory.
 
 
 .. _ua_dll_hgm_walkthrough:
@@ -611,11 +651,12 @@ once per element in ``ua_dll_update`` and read (never mutated) in
 - **Serialize the hidden state in ``pack``, honestly sized.** The hidden
   state is exactly what must round-trip through
   ``ua_dll_pack``/``ua_dll_unpack`` for restart to reproduce the
-  pre-checkpoint trajectory (see `Checkpoint/restart semantics`_). Report
-  ``UA_DLL_CAP_PACK`` and implement both entry points if restart matters
-  for the deployment; if it does not (e.g. a research-only DLL), leave the
-  bit unset rather than shipping a ``pack``/``unpack`` pair that silently
-  loses state.
+  pre-checkpoint trajectory (see `Checkpoint/restart semantics`_). Both
+  entry points are mandatory regardless of ``UA_DLL_CAP_PACK`` (OpenFAST
+  calls them unconditionally), so implement them to round-trip the hidden
+  state exactly. Set ``UA_DLL_CAP_PACK`` once that round-trip is verified;
+  leave it unset only as an honest signal that the implementation has not
+  been validated for exact restart, not as a way to skip implementing it.
 - **Size ``n_states_per_elem`` honestly in ``ua_dll_getinfo``.** If the
   hidden-state size is fixed and known at ``getinfo`` time (before
   ``ua_dll_init``, so before the element count is even known), report it.
