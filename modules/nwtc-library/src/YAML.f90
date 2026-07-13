@@ -215,7 +215,7 @@ subroutine yaml_write_listI(fid, key, A, VarFmt, ErrStat, ErrMsg, level, comment
       if (nc==1) then
          Fmt = '('//trim(Fmt)//'A,": [",'//VarFmt//',"]"'
       else
-         Fmt = '('//trim(Fmt)//'A,": [",'//trim(Num2LStr(nc-1))//'('//VarFmt//',","), '//VarFmt//'"]"' 
+         Fmt = '('//trim(Fmt)//'A,": [",'//trim(Num2LStr(nc-1))//'('//VarFmt//',","), '//VarFmt//',"]"' 
       endif
       if (present(comment)) then
          Fmt = trim(Fmt)//',1X,"#",1X,A)' 
@@ -257,7 +257,7 @@ subroutine yaml_write_listR4(fid, key, A, VarFmt, ErrStat, ErrMsg, level, commen
       if (nc==1) then
          Fmt = '('//trim(Fmt)//'A,": [",'//VarFmt//',"]"'
       else
-         Fmt = '('//trim(Fmt)//'A,": [",'//trim(Num2LStr(nc-1))//'('//VarFmt//',","), '//VarFmt//'"]"' 
+         Fmt = '('//trim(Fmt)//'A,": [",'//trim(Num2LStr(nc-1))//'('//VarFmt//',","), '//VarFmt//',"]"' 
       endif
       if (present(comment)) then
          Fmt = trim(Fmt)//',1X,"#",1X,A)' 
@@ -299,7 +299,7 @@ subroutine yaml_write_listR8(fid, key, A, VarFmt, ErrStat, ErrMsg, level, commen
       if (nc==1) then
          Fmt = '('//trim(Fmt)//'A,": [",'//VarFmt//',"]"'
       else
-         Fmt = '('//trim(Fmt)//'A,": [",'//trim(Num2LStr(nc-1))//'('//VarFmt//',","), '//VarFmt//'"]"' 
+         Fmt = '('//trim(Fmt)//'A,": [",'//trim(Num2LStr(nc-1))//'('//VarFmt//',","), '//VarFmt//',"]"' 
       endif
       if (present(comment)) then
          Fmt = trim(Fmt)//',1X,"#",1X,A)' 
