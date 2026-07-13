@@ -538,6 +538,8 @@ struct Registry
         // Basic types
         auto IntKi =
             std::make_shared<DataType>("IntKi", "INTEGER(IntKi)", DataType::Tag::Integer, 32);
+        auto B1Ki =
+            std::make_shared<DataType>("B1Ki", "INTEGER(B1Ki)", DataType::Tag::Integer, 8);
         auto SiKi = std::make_shared<DataType>("SiKi", "REAL(SiKi)", DataType::Tag::Real, 32);
         auto R4Ki = std::make_shared<DataType>("R4Ki", "REAL(R4Ki)", DataType::Tag::Real, 32);
         auto ReKi = std::make_shared<DataType>("ReKi", "REAL(ReKi)", DataType::Tag::Real);
@@ -552,11 +554,15 @@ struct Registry
         // Derived types
         auto mesh = std::make_shared<DataType>(nullptr, "MeshType", "MeshType", "MeshType");
         auto dll = std::make_shared<DataType>(nullptr, "DLL_Type");
+        // Opaque C pointer (TYPE(C_PTR) from ISO_C_BINDING via NWTC_Base); copied by
+        // assignment, nullified on destroy, excluded from pack/unpack (not checkpointable)
+        auto c_ptr = std::make_shared<DataType>(nullptr, "c_ptr", "c_ptr", "C_PTR");
 
         // Map of data types
         this->data_types = std::map<std::string, std::shared_ptr<DataType>, ci_less>{
             {"integer", IntKi},
             {"intki", IntKi},
+            {"b1ki", B1Ki},
             {"b4ki", IntKi},
             {"real", ReKi},
             {"reki", ReKi},
@@ -568,6 +574,7 @@ struct Registry
             {"logical", logical},
             {"meshtype", mesh},
             {"dll_type", dll},
+            {"c_ptr", c_ptr},
             {"c_int",c_int},
             {"c_float",c_float},
             {"c_double",c_double},
@@ -582,8 +589,10 @@ struct Registry
             {"OutputType", std::make_shared<InterfaceData>("OutputType", "Output", true)},
             {"ContinuousStateType",
              std::make_shared<InterfaceData>("ContinuousStateType", "ContState", true)},
+            // Discrete states are not extrap/interp'd by generated code, so non-real
+            // fields (e.g. byte blobs for opaque module state) are permitted
             {"DiscreteStateType",
-             std::make_shared<InterfaceData>("DiscreteStateType", "DiscState", true)},
+             std::make_shared<InterfaceData>("DiscreteStateType", "DiscState", false)},
             {"ConstraintStateType",
              std::make_shared<InterfaceData>("ConstraintStateType", "ConstrState", true)},
             {"OtherStateType",

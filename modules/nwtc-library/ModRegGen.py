@@ -6,6 +6,7 @@ from itertools import product
 type_map = {
     'C1': 'character(*)',
     'L1': 'logical',
+    'I1': 'integer(B1Ki)',
     'I4': 'integer(B4Ki)',
     'I8': 'integer(B8Ki)',
     'R4': 'real(R4Ki)',

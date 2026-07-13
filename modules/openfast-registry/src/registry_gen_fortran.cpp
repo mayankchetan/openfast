@@ -284,6 +284,8 @@ void Registry::gen_fortran_module(const Module &mod, const std::string &out_dir)
                     // w << "= '' "; // This breaks MAP (TODO)
                     break;
                 case DataType::Tag::Derived:
+                    if (field.data_type->derived.name.compare("c_ptr") == 0)
+                        w << "= C_NULL_PTR ";
                     break;
                 }
             }
@@ -517,6 +519,11 @@ void gen_copy(std::ostream &w, const Module &mod, const DataType::Derived &ddt,
             {
                 w << indent << dst << " = " << src << "";
             }
+            else if (ddt.name_short.compare("c_ptr") == 0)
+            {
+                // Opaque C pointer: copy by plain value assignment
+                w << indent << dst << " = " << src << "";
+            }
             else
             {
                 w << indent << "call " << ddt.module->nickname << "_Copy" << ddt.name_short << "("
@@ -643,6 +650,11 @@ void gen_destroy(std::ostream &w, const Module &mod, const DataType::Derived &dd
                 w << indent << "call FreeDynamicLib( " << var_dims << ", ErrStat2, ErrMsg2)";
                 w << indent << "call SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, RoutineName)";
             }
+            else if (field.data_type->derived.name.compare("c_ptr") == 0)
+            {
+                // Opaque C pointer: nullify (owner is responsible for freeing the target)
+                w << indent << var_dims << " = c_null_ptr";
+            }
             else
             {
                 w << indent << "call " << field.data_type->derived.module->nickname << "_Destroy"
@@ -721,6 +733,11 @@ void gen_pack(std::ostream &w, const Module &mod, const DataType::Derived &ddt,
     {
         auto assoc_alloc = field.is_pointer ? "associated" : "allocated";
         auto var = "InData%" + field.name;
+
+        // Opaque C pointers are not checkpointable; exclude from pack
+        if (field.data_type->tag == DataType::Tag::Derived &&
+            field.data_type->derived.name.compare("c_ptr") == 0)
+            continue;
 
         // w << indent << "! " << field.name;
 
@@ -870,6 +887,15 @@ void gen_unpack(std::ostream &w, const Module &mod, const DataType::Derived &ddt
         std::string var_dims = "OutData%" + field.name + dimstr(field.rank);
         std::string var_c = "OutData%C_obj%" + field.name;
         auto assoc_alloc = field.is_pointer ? "associated" : "allocated";
+
+        // Opaque C pointers are not checkpointed; nullify on unpack
+        // (recreated by the owning module on restart)
+        if (field.data_type->tag == DataType::Tag::Derived &&
+            field.data_type->derived.name.compare("c_ptr") == 0)
+        {
+            w << indent << var << " = c_null_ptr ! not checkpointed";
+            continue;
+        }
 
         // w << indent << "! " << field.name << "";
 

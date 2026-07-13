@@ -52,25 +52,27 @@ module ModReg
    interface RegPack
       module procedure Pack_C1, Pack_C1_Rank1, Pack_C1_Rank2, Pack_C1_Rank3, &
          Pack_C1_Rank4, Pack_C1_Rank5, Pack_L1, Pack_L1_Rank1, Pack_L1_Rank2, &
-         Pack_L1_Rank3, Pack_L1_Rank4, Pack_L1_Rank5, Pack_I4, Pack_I4_Rank1, &
-         Pack_I4_Rank2, Pack_I4_Rank3, Pack_I4_Rank4, Pack_I4_Rank5, Pack_I8, &
-         Pack_I8_Rank1, Pack_I8_Rank2, Pack_I8_Rank3, Pack_I8_Rank4, &
-         Pack_I8_Rank5, Pack_R4, Pack_R4_Rank1, Pack_R4_Rank2, Pack_R4_Rank3, &
-         Pack_R4_Rank4, Pack_R4_Rank5, Pack_R8, Pack_R8_Rank1, Pack_R8_Rank2, &
-         Pack_R8_Rank3, Pack_R8_Rank4, Pack_R8_Rank5
+         Pack_L1_Rank3, Pack_L1_Rank4, Pack_L1_Rank5, Pack_I1, Pack_I1_Rank1, &
+         Pack_I1_Rank2, Pack_I1_Rank3, Pack_I1_Rank4, Pack_I1_Rank5, Pack_I4, &
+         Pack_I4_Rank1, Pack_I4_Rank2, Pack_I4_Rank3, Pack_I4_Rank4, &
+         Pack_I4_Rank5, Pack_I8, Pack_I8_Rank1, Pack_I8_Rank2, Pack_I8_Rank3, &
+         Pack_I8_Rank4, Pack_I8_Rank5, Pack_R4, Pack_R4_Rank1, Pack_R4_Rank2, &
+         Pack_R4_Rank3, Pack_R4_Rank4, Pack_R4_Rank5, Pack_R8, Pack_R8_Rank1, &
+         Pack_R8_Rank2, Pack_R8_Rank3, Pack_R8_Rank4, Pack_R8_Rank5
    end interface
 
    interface RegUnpack
       module procedure Unpack_C1, Unpack_C1_Rank1, Unpack_C1_Rank2, &
          Unpack_C1_Rank3, Unpack_C1_Rank4, Unpack_C1_Rank5, Unpack_L1, &
          Unpack_L1_Rank1, Unpack_L1_Rank2, Unpack_L1_Rank3, Unpack_L1_Rank4, &
-         Unpack_L1_Rank5, Unpack_I4, Unpack_I4_Rank1, Unpack_I4_Rank2, &
-         Unpack_I4_Rank3, Unpack_I4_Rank4, Unpack_I4_Rank5, Unpack_I8, &
-         Unpack_I8_Rank1, Unpack_I8_Rank2, Unpack_I8_Rank3, Unpack_I8_Rank4, &
-         Unpack_I8_Rank5, Unpack_R4, Unpack_R4_Rank1, Unpack_R4_Rank2, &
-         Unpack_R4_Rank3, Unpack_R4_Rank4, Unpack_R4_Rank5, Unpack_R8, &
-         Unpack_R8_Rank1, Unpack_R8_Rank2, Unpack_R8_Rank3, Unpack_R8_Rank4, &
-         Unpack_R8_Rank5
+         Unpack_L1_Rank5, Unpack_I1, Unpack_I1_Rank1, Unpack_I1_Rank2, &
+         Unpack_I1_Rank3, Unpack_I1_Rank4, Unpack_I1_Rank5, Unpack_I4, &
+         Unpack_I4_Rank1, Unpack_I4_Rank2, Unpack_I4_Rank3, Unpack_I4_Rank4, &
+         Unpack_I4_Rank5, Unpack_I8, Unpack_I8_Rank1, Unpack_I8_Rank2, &
+         Unpack_I8_Rank3, Unpack_I8_Rank4, Unpack_I8_Rank5, Unpack_R4, &
+         Unpack_R4_Rank1, Unpack_R4_Rank2, Unpack_R4_Rank3, Unpack_R4_Rank4, &
+         Unpack_R4_Rank5, Unpack_R8, Unpack_R8_Rank1, Unpack_R8_Rank2, &
+         Unpack_R8_Rank3, Unpack_R8_Rank4, Unpack_R8_Rank5
    end interface
 
    interface RegPackAlloc
@@ -78,6 +80,8 @@ module ModReg
          PackAlloc_C1_Rank3, PackAlloc_C1_Rank4, PackAlloc_C1_Rank5, &
          PackAlloc_L1, PackAlloc_L1_Rank1, PackAlloc_L1_Rank2, &
          PackAlloc_L1_Rank3, PackAlloc_L1_Rank4, PackAlloc_L1_Rank5, &
+         PackAlloc_I1, PackAlloc_I1_Rank1, PackAlloc_I1_Rank2, &
+         PackAlloc_I1_Rank3, PackAlloc_I1_Rank4, PackAlloc_I1_Rank5, &
          PackAlloc_I4, PackAlloc_I4_Rank1, PackAlloc_I4_Rank2, &
          PackAlloc_I4_Rank3, PackAlloc_I4_Rank4, PackAlloc_I4_Rank5, &
          PackAlloc_I8, PackAlloc_I8_Rank1, PackAlloc_I8_Rank2, &
@@ -93,7 +97,9 @@ module ModReg
          UnpackAlloc_C1_Rank2, UnpackAlloc_C1_Rank3, UnpackAlloc_C1_Rank4, &
          UnpackAlloc_C1_Rank5, UnpackAlloc_L1, UnpackAlloc_L1_Rank1, &
          UnpackAlloc_L1_Rank2, UnpackAlloc_L1_Rank3, UnpackAlloc_L1_Rank4, &
-         UnpackAlloc_L1_Rank5, UnpackAlloc_I4, UnpackAlloc_I4_Rank1, &
+         UnpackAlloc_L1_Rank5, UnpackAlloc_I1, UnpackAlloc_I1_Rank1, &
+         UnpackAlloc_I1_Rank2, UnpackAlloc_I1_Rank3, UnpackAlloc_I1_Rank4, &
+         UnpackAlloc_I1_Rank5, UnpackAlloc_I4, UnpackAlloc_I4_Rank1, &
          UnpackAlloc_I4_Rank2, UnpackAlloc_I4_Rank3, UnpackAlloc_I4_Rank4, &
          UnpackAlloc_I4_Rank5, UnpackAlloc_I8, UnpackAlloc_I8_Rank1, &
          UnpackAlloc_I8_Rank2, UnpackAlloc_I8_Rank3, UnpackAlloc_I8_Rank4, &
@@ -108,13 +114,14 @@ module ModReg
       module procedure PackPtr_C1, PackPtr_C1_Rank1, PackPtr_C1_Rank2, &
          PackPtr_C1_Rank3, PackPtr_C1_Rank4, PackPtr_C1_Rank5, PackPtr_L1, &
          PackPtr_L1_Rank1, PackPtr_L1_Rank2, PackPtr_L1_Rank3, PackPtr_L1_Rank4, &
-         PackPtr_L1_Rank5, PackPtr_I4, PackPtr_I4_Rank1, PackPtr_I4_Rank2, &
-         PackPtr_I4_Rank3, PackPtr_I4_Rank4, PackPtr_I4_Rank5, PackPtr_I8, &
-         PackPtr_I8_Rank1, PackPtr_I8_Rank2, PackPtr_I8_Rank3, PackPtr_I8_Rank4, &
-         PackPtr_I8_Rank5, PackPtr_R4, PackPtr_R4_Rank1, PackPtr_R4_Rank2, &
-         PackPtr_R4_Rank3, PackPtr_R4_Rank4, PackPtr_R4_Rank5, PackPtr_R8, &
-         PackPtr_R8_Rank1, PackPtr_R8_Rank2, PackPtr_R8_Rank3, PackPtr_R8_Rank4, &
-         PackPtr_R8_Rank5
+         PackPtr_L1_Rank5, PackPtr_I1, PackPtr_I1_Rank1, PackPtr_I1_Rank2, &
+         PackPtr_I1_Rank3, PackPtr_I1_Rank4, PackPtr_I1_Rank5, PackPtr_I4, &
+         PackPtr_I4_Rank1, PackPtr_I4_Rank2, PackPtr_I4_Rank3, PackPtr_I4_Rank4, &
+         PackPtr_I4_Rank5, PackPtr_I8, PackPtr_I8_Rank1, PackPtr_I8_Rank2, &
+         PackPtr_I8_Rank3, PackPtr_I8_Rank4, PackPtr_I8_Rank5, PackPtr_R4, &
+         PackPtr_R4_Rank1, PackPtr_R4_Rank2, PackPtr_R4_Rank3, PackPtr_R4_Rank4, &
+         PackPtr_R4_Rank5, PackPtr_R8, PackPtr_R8_Rank1, PackPtr_R8_Rank2, &
+         PackPtr_R8_Rank3, PackPtr_R8_Rank4, PackPtr_R8_Rank5
    end interface
 
    interface RegUnpackPtr
@@ -122,6 +129,8 @@ module ModReg
          UnpackPtr_C1_Rank3, UnpackPtr_C1_Rank4, UnpackPtr_C1_Rank5, &
          UnpackPtr_L1, UnpackPtr_L1_Rank1, UnpackPtr_L1_Rank2, &
          UnpackPtr_L1_Rank3, UnpackPtr_L1_Rank4, UnpackPtr_L1_Rank5, &
+         UnpackPtr_I1, UnpackPtr_I1_Rank1, UnpackPtr_I1_Rank2, &
+         UnpackPtr_I1_Rank3, UnpackPtr_I1_Rank4, UnpackPtr_I1_Rank5, &
          UnpackPtr_I4, UnpackPtr_I4_Rank1, UnpackPtr_I4_Rank2, &
          UnpackPtr_I4_Rank3, UnpackPtr_I4_Rank4, UnpackPtr_I4_Rank5, &
          UnpackPtr_I8, UnpackPtr_I8_Rank1, UnpackPtr_I8_Rank2, &
@@ -2288,6 +2297,957 @@ contains
       ! Read data
       call RegUnpack(RF, Data)
       if (RegCheckErr(RF, "UnpackPtr_L1_Rank5")) return
+   end subroutine
+
+   subroutine Pack_I1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(in)            :: Data
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Increment data number and write to file
+      RF%NumData = RF%NumData + 1
+      write(RF%Unit) RF%NumData
+
+      ! Write data to file
+      write(RF%Unit) Data
+   end subroutine
+
+   subroutine Unpack_I1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(out)           :: Data
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Read data number, return if invalid
+      if (.not. DataNumValid(RF)) return
+
+      ! Read data from file
+      read(RF%Unit) Data
+   end subroutine
+
+   subroutine PackAlloc_I1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(in)  :: Data
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if allocated
+      call RegPack(RF, allocated(Data))
+      if (RegCheckErr(RF, "PackAlloc_I1")) return
+      if (.not. allocated(Data)) return
+
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackAlloc_I1")) return
+   end subroutine
+
+   subroutine UnpackAlloc_I1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(out)  :: Data
+      integer(IntKi)                       :: stat
+      logical                              :: IsAllocated
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Deallocate if allocated
+      if (allocated(Data)) deallocate(Data)
+
+      ! Read value to see if it was allocated, return if not
+      call RegUnpack(RF, IsAllocated)
+      if (RegCheckErr(RF, "UnpackAlloc_I1")) return
+      if (.not. IsAllocated) return
+
+
+      ! Allocate data
+      allocate(Data, stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackAlloc_I1: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackAlloc_I1")) return
+   end subroutine
+
+   subroutine PackPtr_I1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), pointer, intent(in)   :: Data
+      logical                              :: PtrInIndex
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if associated
+      call RegPack(RF, associated(Data))
+      if (RegCheckErr(RF, "PackPtr_I1")) return
+      if (.not. associated(Data)) return
+
+      ! Write pointer info
+      call RegPackPointer(RF, c_loc(Data), PtrInIndex)
+      if (RegCheckErr(RF, "PackPtr_I1")) return
+      if (PtrInIndex) return
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackPtr_I1")) return
+   end subroutine
+
+   subroutine UnpackPtr_I1(RF, Data)
+      type(RegFile), intent(inout)          :: RF
+      integer(B1Ki), pointer, intent(out)   :: Data
+      integer(IntKi)                        :: stat
+      integer(B8Ki)                         :: PtrIdx
+      logical                               :: IsAssociated
+      type(c_ptr)                           :: Ptr
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! If associated, deallocate and nullify
+      if (associated(Data)) then
+         deallocate(Data)
+         nullify(Data)
+      end if
+
+      ! Read value to see if it was associated, return if not
+      call RegUnpack(RF, IsAssociated)
+      if (RegCheckErr(RF, "UnpackPtr_I1")) return
+      if (.not. IsAssociated) return
+
+      ! Unpack pointer inf
+      call RegUnpackPointer(RF, Ptr, PtrIdx)
+      if (RegCheckErr(RF, "UnpackPtr_I1")) return
+
+      ! If pointer was in index, associate data with pointer, return
+      if (c_associated(Ptr)) then
+         call c_f_pointer(Ptr, Data)
+         return
+      end if
+
+      ! Allocate data
+      allocate(Data, stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackPtr_I1: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackPtr_I1")) return
+   end subroutine
+
+   subroutine Pack_I1_Rank1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(in)            :: Data(:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Increment data number and write to file
+      RF%NumData = RF%NumData + 1
+      write(RF%Unit) RF%NumData
+
+      ! Write data to file
+      write(RF%Unit) Data
+   end subroutine
+
+   subroutine Unpack_I1_Rank1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(out)           :: Data(:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Read data number, return if invalid
+      if (.not. DataNumValid(RF)) return
+
+      ! Read data from file
+      read(RF%Unit) Data
+   end subroutine
+
+   subroutine PackAlloc_I1_Rank1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(in)  :: Data(:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if allocated
+      call RegPack(RF, allocated(Data))
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank1")) return
+      if (.not. allocated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 1, lbound(Data), ubound(Data))
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank1")) return
+   end subroutine
+
+   subroutine UnpackAlloc_I1_Rank1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(out)  :: Data(:)
+      integer(IntKi)                       :: stat
+      logical                              :: IsAllocated
+      integer(B4Ki)                        :: LB(1), UB(1)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Deallocate if allocated
+      if (allocated(Data)) deallocate(Data)
+
+      ! Read value to see if it was allocated, return if not
+      call RegUnpack(RF, IsAllocated)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank1")) return
+      if (.not. IsAllocated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 1, LB, UB)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank1")) return
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackAlloc_I1_Rank1: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank1")) return
+   end subroutine
+
+   subroutine PackPtr_I1_Rank1(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), pointer, intent(in)   :: Data(:)
+      logical                              :: PtrInIndex
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if associated
+      call RegPack(RF, associated(Data))
+      if (RegCheckErr(RF, "PackPtr_I1_Rank1")) return
+      if (.not. associated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 1, lbound(Data), ubound(Data))
+
+      ! Write pointer info
+      call RegPackPointer(RF, c_loc(Data), PtrInIndex)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank1")) return
+      if (PtrInIndex) return
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank1")) return
+   end subroutine
+
+   subroutine UnpackPtr_I1_Rank1(RF, Data, LB, UB)
+      type(RegFile), intent(inout)          :: RF
+      integer(B1Ki), pointer, intent(out)   :: Data(:)
+      integer(B4Ki), intent(out)            :: LB(:), UB(:)
+      integer(IntKi)                        :: stat
+      integer(B8Ki)                         :: PtrIdx
+      logical                               :: IsAssociated
+      type(c_ptr)                           :: Ptr
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! If associated, deallocate and nullify
+      if (associated(Data)) then
+         deallocate(Data)
+         nullify(Data)
+      end if
+
+      ! Read value to see if it was associated, return if not
+      call RegUnpack(RF, IsAssociated)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank1")) return
+      if (.not. IsAssociated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 1, LB, UB)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank1")) return
+
+      ! Unpack pointer inf
+      call RegUnpackPointer(RF, Ptr, PtrIdx)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank1")) return
+
+      ! If pointer was in index, associate data with pointer, return
+      if (c_associated(Ptr)) then
+         call c_f_pointer(Ptr, Data, UB - LB)
+         Data(LB(1):) => Data
+         return
+      end if
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackPtr_I1_Rank1: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank1")) return
+   end subroutine
+
+   subroutine Pack_I1_Rank2(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(in)            :: Data(:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Increment data number and write to file
+      RF%NumData = RF%NumData + 1
+      write(RF%Unit) RF%NumData
+
+      ! Write data to file
+      write(RF%Unit) Data
+   end subroutine
+
+   subroutine Unpack_I1_Rank2(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(out)           :: Data(:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Read data number, return if invalid
+      if (.not. DataNumValid(RF)) return
+
+      ! Read data from file
+      read(RF%Unit) Data
+   end subroutine
+
+   subroutine PackAlloc_I1_Rank2(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(in)  :: Data(:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if allocated
+      call RegPack(RF, allocated(Data))
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank2")) return
+      if (.not. allocated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 2, lbound(Data), ubound(Data))
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank2")) return
+   end subroutine
+
+   subroutine UnpackAlloc_I1_Rank2(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(out)  :: Data(:,:)
+      integer(IntKi)                       :: stat
+      logical                              :: IsAllocated
+      integer(B4Ki)                        :: LB(2), UB(2)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Deallocate if allocated
+      if (allocated(Data)) deallocate(Data)
+
+      ! Read value to see if it was allocated, return if not
+      call RegUnpack(RF, IsAllocated)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank2")) return
+      if (.not. IsAllocated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 2, LB, UB)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank2")) return
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackAlloc_I1_Rank2: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank2")) return
+   end subroutine
+
+   subroutine PackPtr_I1_Rank2(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), pointer, intent(in)   :: Data(:,:)
+      logical                              :: PtrInIndex
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if associated
+      call RegPack(RF, associated(Data))
+      if (RegCheckErr(RF, "PackPtr_I1_Rank2")) return
+      if (.not. associated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 2, lbound(Data), ubound(Data))
+
+      ! Write pointer info
+      call RegPackPointer(RF, c_loc(Data), PtrInIndex)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank2")) return
+      if (PtrInIndex) return
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank2")) return
+   end subroutine
+
+   subroutine UnpackPtr_I1_Rank2(RF, Data, LB, UB)
+      type(RegFile), intent(inout)          :: RF
+      integer(B1Ki), pointer, intent(out)   :: Data(:,:)
+      integer(B4Ki), intent(out)            :: LB(:), UB(:)
+      integer(IntKi)                        :: stat
+      integer(B8Ki)                         :: PtrIdx
+      logical                               :: IsAssociated
+      type(c_ptr)                           :: Ptr
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! If associated, deallocate and nullify
+      if (associated(Data)) then
+         deallocate(Data)
+         nullify(Data)
+      end if
+
+      ! Read value to see if it was associated, return if not
+      call RegUnpack(RF, IsAssociated)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank2")) return
+      if (.not. IsAssociated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 2, LB, UB)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank2")) return
+
+      ! Unpack pointer inf
+      call RegUnpackPointer(RF, Ptr, PtrIdx)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank2")) return
+
+      ! If pointer was in index, associate data with pointer, return
+      if (c_associated(Ptr)) then
+         call c_f_pointer(Ptr, Data, UB - LB)
+         Data(LB(1):,LB(2):) => Data
+         return
+      end if
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackPtr_I1_Rank2: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank2")) return
+   end subroutine
+
+   subroutine Pack_I1_Rank3(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(in)            :: Data(:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Increment data number and write to file
+      RF%NumData = RF%NumData + 1
+      write(RF%Unit) RF%NumData
+
+      ! Write data to file
+      write(RF%Unit) Data
+   end subroutine
+
+   subroutine Unpack_I1_Rank3(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(out)           :: Data(:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Read data number, return if invalid
+      if (.not. DataNumValid(RF)) return
+
+      ! Read data from file
+      read(RF%Unit) Data
+   end subroutine
+
+   subroutine PackAlloc_I1_Rank3(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(in)  :: Data(:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if allocated
+      call RegPack(RF, allocated(Data))
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank3")) return
+      if (.not. allocated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 3, lbound(Data), ubound(Data))
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank3")) return
+   end subroutine
+
+   subroutine UnpackAlloc_I1_Rank3(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(out)  :: Data(:,:,:)
+      integer(IntKi)                       :: stat
+      logical                              :: IsAllocated
+      integer(B4Ki)                        :: LB(3), UB(3)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Deallocate if allocated
+      if (allocated(Data)) deallocate(Data)
+
+      ! Read value to see if it was allocated, return if not
+      call RegUnpack(RF, IsAllocated)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank3")) return
+      if (.not. IsAllocated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 3, LB, UB)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank3")) return
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackAlloc_I1_Rank3: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank3")) return
+   end subroutine
+
+   subroutine PackPtr_I1_Rank3(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), pointer, intent(in)   :: Data(:,:,:)
+      logical                              :: PtrInIndex
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if associated
+      call RegPack(RF, associated(Data))
+      if (RegCheckErr(RF, "PackPtr_I1_Rank3")) return
+      if (.not. associated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 3, lbound(Data), ubound(Data))
+
+      ! Write pointer info
+      call RegPackPointer(RF, c_loc(Data), PtrInIndex)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank3")) return
+      if (PtrInIndex) return
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank3")) return
+   end subroutine
+
+   subroutine UnpackPtr_I1_Rank3(RF, Data, LB, UB)
+      type(RegFile), intent(inout)          :: RF
+      integer(B1Ki), pointer, intent(out)   :: Data(:,:,:)
+      integer(B4Ki), intent(out)            :: LB(:), UB(:)
+      integer(IntKi)                        :: stat
+      integer(B8Ki)                         :: PtrIdx
+      logical                               :: IsAssociated
+      type(c_ptr)                           :: Ptr
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! If associated, deallocate and nullify
+      if (associated(Data)) then
+         deallocate(Data)
+         nullify(Data)
+      end if
+
+      ! Read value to see if it was associated, return if not
+      call RegUnpack(RF, IsAssociated)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank3")) return
+      if (.not. IsAssociated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 3, LB, UB)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank3")) return
+
+      ! Unpack pointer inf
+      call RegUnpackPointer(RF, Ptr, PtrIdx)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank3")) return
+
+      ! If pointer was in index, associate data with pointer, return
+      if (c_associated(Ptr)) then
+         call c_f_pointer(Ptr, Data, UB - LB)
+         Data(LB(1):,LB(2):,LB(3):) => Data
+         return
+      end if
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackPtr_I1_Rank3: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank3")) return
+   end subroutine
+
+   subroutine Pack_I1_Rank4(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(in)            :: Data(:,:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Increment data number and write to file
+      RF%NumData = RF%NumData + 1
+      write(RF%Unit) RF%NumData
+
+      ! Write data to file
+      write(RF%Unit) Data
+   end subroutine
+
+   subroutine Unpack_I1_Rank4(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(out)           :: Data(:,:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Read data number, return if invalid
+      if (.not. DataNumValid(RF)) return
+
+      ! Read data from file
+      read(RF%Unit) Data
+   end subroutine
+
+   subroutine PackAlloc_I1_Rank4(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(in)  :: Data(:,:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if allocated
+      call RegPack(RF, allocated(Data))
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank4")) return
+      if (.not. allocated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 4, lbound(Data), ubound(Data))
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank4")) return
+   end subroutine
+
+   subroutine UnpackAlloc_I1_Rank4(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(out)  :: Data(:,:,:,:)
+      integer(IntKi)                       :: stat
+      logical                              :: IsAllocated
+      integer(B4Ki)                        :: LB(4), UB(4)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Deallocate if allocated
+      if (allocated(Data)) deallocate(Data)
+
+      ! Read value to see if it was allocated, return if not
+      call RegUnpack(RF, IsAllocated)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank4")) return
+      if (.not. IsAllocated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 4, LB, UB)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank4")) return
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3),LB(4):UB(4)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackAlloc_I1_Rank4: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank4")) return
+   end subroutine
+
+   subroutine PackPtr_I1_Rank4(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), pointer, intent(in)   :: Data(:,:,:,:)
+      logical                              :: PtrInIndex
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if associated
+      call RegPack(RF, associated(Data))
+      if (RegCheckErr(RF, "PackPtr_I1_Rank4")) return
+      if (.not. associated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 4, lbound(Data), ubound(Data))
+
+      ! Write pointer info
+      call RegPackPointer(RF, c_loc(Data), PtrInIndex)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank4")) return
+      if (PtrInIndex) return
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank4")) return
+   end subroutine
+
+   subroutine UnpackPtr_I1_Rank4(RF, Data, LB, UB)
+      type(RegFile), intent(inout)          :: RF
+      integer(B1Ki), pointer, intent(out)   :: Data(:,:,:,:)
+      integer(B4Ki), intent(out)            :: LB(:), UB(:)
+      integer(IntKi)                        :: stat
+      integer(B8Ki)                         :: PtrIdx
+      logical                               :: IsAssociated
+      type(c_ptr)                           :: Ptr
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! If associated, deallocate and nullify
+      if (associated(Data)) then
+         deallocate(Data)
+         nullify(Data)
+      end if
+
+      ! Read value to see if it was associated, return if not
+      call RegUnpack(RF, IsAssociated)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank4")) return
+      if (.not. IsAssociated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 4, LB, UB)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank4")) return
+
+      ! Unpack pointer inf
+      call RegUnpackPointer(RF, Ptr, PtrIdx)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank4")) return
+
+      ! If pointer was in index, associate data with pointer, return
+      if (c_associated(Ptr)) then
+         call c_f_pointer(Ptr, Data, UB - LB)
+         Data(LB(1):,LB(2):,LB(3):,LB(4):) => Data
+         return
+      end if
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3),LB(4):UB(4)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackPtr_I1_Rank4: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank4")) return
+   end subroutine
+
+   subroutine Pack_I1_Rank5(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(in)            :: Data(:,:,:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Increment data number and write to file
+      RF%NumData = RF%NumData + 1
+      write(RF%Unit) RF%NumData
+
+      ! Write data to file
+      write(RF%Unit) Data
+   end subroutine
+
+   subroutine Unpack_I1_Rank5(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), intent(out)           :: Data(:,:,:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Read data number, return if invalid
+      if (.not. DataNumValid(RF)) return
+
+      ! Read data from file
+      read(RF%Unit) Data
+   end subroutine
+
+   subroutine PackAlloc_I1_Rank5(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(in)  :: Data(:,:,:,:,:)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if allocated
+      call RegPack(RF, allocated(Data))
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank5")) return
+      if (.not. allocated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 5, lbound(Data), ubound(Data))
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackAlloc_I1_Rank5")) return
+   end subroutine
+
+   subroutine UnpackAlloc_I1_Rank5(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), allocatable, intent(out)  :: Data(:,:,:,:,:)
+      integer(IntKi)                       :: stat
+      logical                              :: IsAllocated
+      integer(B4Ki)                        :: LB(5), UB(5)
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Deallocate if allocated
+      if (allocated(Data)) deallocate(Data)
+
+      ! Read value to see if it was allocated, return if not
+      call RegUnpack(RF, IsAllocated)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank5")) return
+      if (.not. IsAllocated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 5, LB, UB)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank5")) return
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3),LB(4):UB(4),LB(5):UB(5)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackAlloc_I1_Rank5: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackAlloc_I1_Rank5")) return
+   end subroutine
+
+   subroutine PackPtr_I1_Rank5(RF, Data)
+      type(RegFile), intent(inout)         :: RF
+      integer(B1Ki), pointer, intent(in)   :: Data(:,:,:,:,:)
+      logical                              :: PtrInIndex
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! Write if associated
+      call RegPack(RF, associated(Data))
+      if (RegCheckErr(RF, "PackPtr_I1_Rank5")) return
+      if (.not. associated(Data)) return
+
+      ! Write array bounds
+      call RegPackBounds(RF, 5, lbound(Data), ubound(Data))
+
+      ! Write pointer info
+      call RegPackPointer(RF, c_loc(Data), PtrInIndex)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank5")) return
+      if (PtrInIndex) return
+
+      ! Write data to file
+      call RegPack(RF, Data)
+      if (RegCheckErr(RF, "PackPtr_I1_Rank5")) return
+   end subroutine
+
+   subroutine UnpackPtr_I1_Rank5(RF, Data, LB, UB)
+      type(RegFile), intent(inout)          :: RF
+      integer(B1Ki), pointer, intent(out)   :: Data(:,:,:,:,:)
+      integer(B4Ki), intent(out)            :: LB(:), UB(:)
+      integer(IntKi)                        :: stat
+      integer(B8Ki)                         :: PtrIdx
+      logical                               :: IsAssociated
+      type(c_ptr)                           :: Ptr
+
+      ! If error, return
+      if (RF%ErrStat /= ErrID_None) return
+
+      ! If associated, deallocate and nullify
+      if (associated(Data)) then
+         deallocate(Data)
+         nullify(Data)
+      end if
+
+      ! Read value to see if it was associated, return if not
+      call RegUnpack(RF, IsAssociated)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank5")) return
+      if (.not. IsAssociated) return
+
+      ! Read array bounds
+      call RegUnpackBounds(RF, 5, LB, UB)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank5")) return
+
+      ! Unpack pointer inf
+      call RegUnpackPointer(RF, Ptr, PtrIdx)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank5")) return
+
+      ! If pointer was in index, associate data with pointer, return
+      if (c_associated(Ptr)) then
+         call c_f_pointer(Ptr, Data, UB - LB)
+         Data(LB(1):,LB(2):,LB(3):,LB(4):,LB(5):) => Data
+         return
+      end if
+
+      ! Allocate data
+      allocate(Data(LB(1):UB(1),LB(2):UB(2),LB(3):UB(3),LB(4):UB(4),LB(5):UB(5)), stat=stat)
+      if (stat /= 0) then
+         RF%ErrStat = ErrID_Fatal
+         RF%ErrMsg = "UnpackPtr_I1_Rank5: error allocating data"
+         return
+      end if
+
+      ! Read data
+      call RegUnpack(RF, Data)
+      if (RegCheckErr(RF, "UnpackPtr_I1_Rank5")) return
    end subroutine
 
    subroutine Pack_I4(RF, Data)
