@@ -92,6 +92,45 @@ initial blade reference coordinate system, denoted by a subscript
 :math:`r0` that follows the IEC standard, is related to the internal BD
 coordinate system by :numref:`IECBD` in :numref:`beamdyn-theory`.
 
+Summary file: internal representation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When coupled to FAST and ``SumPrint = TRUE``, the YAML-format summary
+file additionally includes a block of entries documenting the FE basis
+and the reference-line fit used internally, under the comment header
+``# --- FE basis and reference-line fit (internal representation of
+user inputs)``:
+
+-  ``GLL_nodes_xi`` — GLL (FE) node locations in element natural
+   coordinate [-1,1].
+
+-  ``QP_xi`` — Quadrature point locations in element natural coordinate
+   [-1,1].
+
+-  ``Shp`` — Shape functions Shp(i,j)=N_i(QP_xi(j)): Lagrange
+   interpolants on the GLL nodes, evaluated at quadrature points.
+
+-  ``ShpDer`` — Shape function derivatives dN_i/dxi at quadrature
+   points.
+
+-  ``Jacobian`` — Jacobian d(arclength)/d(xi) at each quadrature point
+   (rows) per element (columns).
+
+-  ``kp_fit_order`` — Nodes (qfit) in the least-squares GLL-basis fit
+   of the keypoint reference line, per element; polynomial order =
+   qfit-1.
+
+-  ``kp_fit_coef_E<i>`` — Reference-line fit for element ``<i>``:
+   nodal values (columns X,Y,Z,twist) on the qfit-node GLL Lagrange
+   basis; first/last rows pinned to first/last keypoint.
+
+Note that the sectional stiffness and mass matrices are interpolated
+linearly from the input stations to the quadrature points, while the
+reference line is represented by a least-squares polynomial fit (order
+≤ 7) through the key points — the fit does not, in general, pass
+through interior key points; the ``kp_fit_coef_E*`` entries give the
+fit actually used.
+
 Results File
 ------------
 
