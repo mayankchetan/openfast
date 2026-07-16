@@ -613,7 +613,6 @@ subroutine PostconditionInputDelta(Vars, u_delta, JacScale)
 end subroutine
 
 subroutine SS_UpdateInputsStates(AM, delta, T, ErrStat, ErrMsg)
-   use ElastoDyn_IO, only: DOF_BF, DOF_BE
    type(Glue_AeroMap), intent(inout)         :: AM          !< AeroMap data
    type(FAST_TurbineType), intent(inout)     :: T           !< Turbine type
    real(R8Ki), intent(in)                    :: delta(:)    !< Change in state and input arrays
@@ -647,16 +646,16 @@ subroutine SS_UpdateInputsStates(AM, delta, T, ErrStat, ErrMsg)
 
             ! Copy blade1 flap and edge states to other blades
             do j = 2, T%ED%p(iED)%NumBl
-               T%ED%x(iED,STATE_CURR)%QT(DOF_BF(j, 1)) = T%ED%x(iED,STATE_CURR)%QT(DOF_BF(1, 1))
-               T%ED%x(iED,STATE_CURR)%QT(DOF_BF(j, 2)) = T%ED%x(iED,STATE_CURR)%QT(DOF_BF(1, 2))
-               T%ED%x(iED,STATE_CURR)%QT(DOF_BE(j, 1)) = T%ED%x(iED,STATE_CURR)%QT(DOF_BE(1, 1))
+               T%ED%x(iED,STATE_CURR)%QT(T%ED%p(iED)%DOF_BF(j, 1)) = T%ED%x(iED,STATE_CURR)%QT(T%ED%p(iED)%DOF_BF(1, 1))
+               T%ED%x(iED,STATE_CURR)%QT(T%ED%p(iED)%DOF_BF(j, 2)) = T%ED%x(iED,STATE_CURR)%QT(T%ED%p(iED)%DOF_BF(1, 2))
+               T%ED%x(iED,STATE_CURR)%QT(T%ED%p(iED)%DOF_BE(j, 1)) = T%ED%x(iED,STATE_CURR)%QT(T%ED%p(iED)%DOF_BE(1, 1))
             end do
 
             ! Set velocities to zero
             do j = 1, T%ED%p(iED)%NumBl
-               T%ED%x(iED,STATE_CURR)%QDT(DOF_BF(j, 1)) = 0.0_R8Ki
-               T%ED%x(iED,STATE_CURR)%QDT(DOF_BF(j, 2)) = 0.0_R8Ki
-               T%ED%x(iED,STATE_CURR)%QDT(DOF_BE(j, 1)) = 0.0_R8Ki
+               T%ED%x(iED,STATE_CURR)%QDT(T%ED%p(iED)%DOF_BF(j, 1)) = 0.0_R8Ki
+               T%ED%x(iED,STATE_CURR)%QDT(T%ED%p(iED)%DOF_BF(j, 2)) = 0.0_R8Ki
+               T%ED%x(iED,STATE_CURR)%QDT(T%ED%p(iED)%DOF_BE(j, 1)) = 0.0_R8Ki
             end do
 
             ! Transfer loads from ED blade 1 to other blades
