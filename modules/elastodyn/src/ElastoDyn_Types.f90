@@ -667,13 +667,13 @@ IMPLICIT NONE
     INTEGER(IntKi)  :: NumBl = 0_IntKi      !< Number of turbine blades [-]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: AxRedTFA      !< The axial-reduction terms for the fore-aft tower mode shapes [-]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: AxRedTSS      !< The axial-reduction terms for the side-to-side tower mode shapes [-]
-    REAL(ReKi) , DIMENSION(1:2,1:2)  :: CTFA = 0.0_ReKi      !< Generalized damping of tower in fore-aft direction [-]
-    REAL(ReKi) , DIMENSION(1:2,1:2)  :: CTSS = 0.0_ReKi      !< Generalized damping of tower in side-to-side direction [-]
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: CTFA      !< Generalized damping of tower in fore-aft direction [-]
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: CTSS      !< Generalized damping of tower in side-to-side direction [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: DHNodes      !< Length of variable-length tower elements [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: HNodes      !< Location of variable-spaced tower nodes (relative to the tower rigid base height [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: HNodesNorm      !< Normalized location of variable-spaced tower nodes (relative to the tower rigid base height) (0 < HNodesNorm(:) < 1) [-]
-    REAL(ReKi) , DIMENSION(1:2,1:2)  :: KTFA = 0.0_ReKi      !< Generalized stiffness of tower in fore-aft direction [-]
-    REAL(ReKi) , DIMENSION(1:2,1:2)  :: KTSS = 0.0_ReKi      !< Generalized stiffness of tower in side-to-side direction [-]
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: KTFA      !< Generalized stiffness of tower in fore-aft direction [-]
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: KTSS      !< Generalized stiffness of tower in side-to-side direction [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: MassT      !< Interpolated lineal mass density of tower [-]
     REAL(ReKi) , DIMENSION(:), ALLOCATABLE  :: StiffTSS      !< Interpolated side-side tower stiffness [-]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: TwrFASF      !< Tower fore-aft shape functions [-]
@@ -743,8 +743,8 @@ IMPLICIT NONE
     REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: BldEdgSh      !< Blade-edge-mode shape coefficients [-]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: FreqBE      !< Blade edgewise natural frequencies (both w/ and w/o centrifugal stiffening) [-]
     REAL(ReKi) , DIMENSION(:,:,:), ALLOCATABLE  :: FreqBF      !< Blade flapwise natural frequencies (both w/ and w/o centrifugal stiffening) [-]
-    REAL(ReKi) , DIMENSION(1:2,1:2)  :: FreqTFA = 0.0_ReKi      !< Computed fore-aft tower natural frequencies [-]
-    REAL(ReKi) , DIMENSION(1:2,1:2)  :: FreqTSS = 0.0_ReKi      !< Computed side-to-side tower natural frequencies [-]
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: FreqTFA      !< Computed fore-aft tower natural frequencies [-]
+    REAL(ReKi) , DIMENSION(:,:), ALLOCATABLE  :: FreqTSS      !< Computed side-to-side tower natural frequencies [-]
     REAL(ReKi)  :: TeetCDmp = 0.0_ReKi      !< Rotor-teeter rate-independent Coulomb-damping [-]
     REAL(ReKi)  :: TeetDmp = 0.0_ReKi      !< Rotor-teeter damping constant [-]
     REAL(ReKi)  :: TeetDmpP = 0.0_ReKi      !< Rotor-teeter damper position [-]
@@ -5234,8 +5234,30 @@ subroutine ED_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
       end if
       DstParamData%AxRedTSS = SrcParamData%AxRedTSS
    end if
-   DstParamData%CTFA = SrcParamData%CTFA
-   DstParamData%CTSS = SrcParamData%CTSS
+   if (allocated(SrcParamData%CTFA)) then
+      LB(1:2) = lbound(SrcParamData%CTFA)
+      UB(1:2) = ubound(SrcParamData%CTFA)
+      if (.not. allocated(DstParamData%CTFA)) then
+         allocate(DstParamData%CTFA(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%CTFA.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%CTFA = SrcParamData%CTFA
+   end if
+   if (allocated(SrcParamData%CTSS)) then
+      LB(1:2) = lbound(SrcParamData%CTSS)
+      UB(1:2) = ubound(SrcParamData%CTSS)
+      if (.not. allocated(DstParamData%CTSS)) then
+         allocate(DstParamData%CTSS(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%CTSS.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%CTSS = SrcParamData%CTSS
+   end if
    if (allocated(SrcParamData%DHNodes)) then
       LB(1:1) = lbound(SrcParamData%DHNodes)
       UB(1:1) = ubound(SrcParamData%DHNodes)
@@ -5272,8 +5294,30 @@ subroutine ED_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
       end if
       DstParamData%HNodesNorm = SrcParamData%HNodesNorm
    end if
-   DstParamData%KTFA = SrcParamData%KTFA
-   DstParamData%KTSS = SrcParamData%KTSS
+   if (allocated(SrcParamData%KTFA)) then
+      LB(1:2) = lbound(SrcParamData%KTFA)
+      UB(1:2) = ubound(SrcParamData%KTFA)
+      if (.not. allocated(DstParamData%KTFA)) then
+         allocate(DstParamData%KTFA(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%KTFA.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%KTFA = SrcParamData%KTFA
+   end if
+   if (allocated(SrcParamData%KTSS)) then
+      LB(1:2) = lbound(SrcParamData%KTSS)
+      UB(1:2) = ubound(SrcParamData%KTSS)
+      if (.not. allocated(DstParamData%KTSS)) then
+         allocate(DstParamData%KTSS(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%KTSS.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%KTSS = SrcParamData%KTSS
+   end if
    if (allocated(SrcParamData%MassT)) then
       LB(1:1) = lbound(SrcParamData%MassT)
       UB(1:1) = ubound(SrcParamData%MassT)
@@ -5761,8 +5805,30 @@ subroutine ED_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
       end if
       DstParamData%FreqBF = SrcParamData%FreqBF
    end if
-   DstParamData%FreqTFA = SrcParamData%FreqTFA
-   DstParamData%FreqTSS = SrcParamData%FreqTSS
+   if (allocated(SrcParamData%FreqTFA)) then
+      LB(1:2) = lbound(SrcParamData%FreqTFA)
+      UB(1:2) = ubound(SrcParamData%FreqTFA)
+      if (.not. allocated(DstParamData%FreqTFA)) then
+         allocate(DstParamData%FreqTFA(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%FreqTFA.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%FreqTFA = SrcParamData%FreqTFA
+   end if
+   if (allocated(SrcParamData%FreqTSS)) then
+      LB(1:2) = lbound(SrcParamData%FreqTSS)
+      UB(1:2) = ubound(SrcParamData%FreqTSS)
+      if (.not. allocated(DstParamData%FreqTSS)) then
+         allocate(DstParamData%FreqTSS(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%FreqTSS.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%FreqTSS = SrcParamData%FreqTSS
+   end if
    DstParamData%TeetCDmp = SrcParamData%TeetCDmp
    DstParamData%TeetDmp = SrcParamData%TeetDmp
    DstParamData%TeetDmpP = SrcParamData%TeetDmpP
@@ -5949,6 +6015,12 @@ subroutine ED_DestroyParam(ParamData, ErrStat, ErrMsg)
    if (allocated(ParamData%AxRedTSS)) then
       deallocate(ParamData%AxRedTSS)
    end if
+   if (allocated(ParamData%CTFA)) then
+      deallocate(ParamData%CTFA)
+   end if
+   if (allocated(ParamData%CTSS)) then
+      deallocate(ParamData%CTSS)
+   end if
    if (allocated(ParamData%DHNodes)) then
       deallocate(ParamData%DHNodes)
    end if
@@ -5957,6 +6029,12 @@ subroutine ED_DestroyParam(ParamData, ErrStat, ErrMsg)
    end if
    if (allocated(ParamData%HNodesNorm)) then
       deallocate(ParamData%HNodesNorm)
+   end if
+   if (allocated(ParamData%KTFA)) then
+      deallocate(ParamData%KTFA)
+   end if
+   if (allocated(ParamData%KTSS)) then
+      deallocate(ParamData%KTSS)
    end if
    if (allocated(ParamData%MassT)) then
       deallocate(ParamData%MassT)
@@ -6071,6 +6149,12 @@ subroutine ED_DestroyParam(ParamData, ErrStat, ErrMsg)
    end if
    if (allocated(ParamData%FreqBF)) then
       deallocate(ParamData%FreqBF)
+   end if
+   if (allocated(ParamData%FreqTFA)) then
+      deallocate(ParamData%FreqTFA)
+   end if
+   if (allocated(ParamData%FreqTSS)) then
+      deallocate(ParamData%FreqTSS)
    end if
    if (allocated(ParamData%BElmntMass)) then
       deallocate(ParamData%BElmntMass)
@@ -6223,13 +6307,13 @@ subroutine ED_PackParam(RF, Indata)
    call RegPack(RF, InData%NumBl)
    call RegPackAlloc(RF, InData%AxRedTFA)
    call RegPackAlloc(RF, InData%AxRedTSS)
-   call RegPack(RF, InData%CTFA)
-   call RegPack(RF, InData%CTSS)
+   call RegPackAlloc(RF, InData%CTFA)
+   call RegPackAlloc(RF, InData%CTSS)
    call RegPackAlloc(RF, InData%DHNodes)
    call RegPackAlloc(RF, InData%HNodes)
    call RegPackAlloc(RF, InData%HNodesNorm)
-   call RegPack(RF, InData%KTFA)
-   call RegPack(RF, InData%KTSS)
+   call RegPackAlloc(RF, InData%KTFA)
+   call RegPackAlloc(RF, InData%KTSS)
    call RegPackAlloc(RF, InData%MassT)
    call RegPackAlloc(RF, InData%StiffTSS)
    call RegPackAlloc(RF, InData%TwrFASF)
@@ -6299,8 +6383,8 @@ subroutine ED_PackParam(RF, Indata)
    call RegPackAlloc(RF, InData%BldEdgSh)
    call RegPackAlloc(RF, InData%FreqBE)
    call RegPackAlloc(RF, InData%FreqBF)
-   call RegPack(RF, InData%FreqTFA)
-   call RegPack(RF, InData%FreqTSS)
+   call RegPackAlloc(RF, InData%FreqTFA)
+   call RegPackAlloc(RF, InData%FreqTSS)
    call RegPack(RF, InData%TeetCDmp)
    call RegPack(RF, InData%TeetDmp)
    call RegPack(RF, InData%TeetDmpP)
@@ -6514,13 +6598,13 @@ subroutine ED_UnPackParam(RF, OutData)
    call RegUnpack(RF, OutData%NumBl); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%AxRedTFA); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%AxRedTSS); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%CTFA); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%CTSS); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%CTFA); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%CTSS); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%DHNodes); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%HNodes); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%HNodesNorm); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%KTFA); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%KTSS); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%KTFA); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%KTSS); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%MassT); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%StiffTSS); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%TwrFASF); if (RegCheckErr(RF, RoutineName)) return
@@ -6590,8 +6674,8 @@ subroutine ED_UnPackParam(RF, OutData)
    call RegUnpackAlloc(RF, OutData%BldEdgSh); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%FreqBE); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%FreqBF); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%FreqTFA); if (RegCheckErr(RF, RoutineName)) return
-   call RegUnpack(RF, OutData%FreqTSS); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%FreqTFA); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%FreqTSS); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TeetCDmp); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TeetDmp); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TeetDmpP); if (RegCheckErr(RF, RoutineName)) return

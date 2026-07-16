@@ -2228,7 +2228,10 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    CHARACTER(*),             INTENT(OUT)      :: ErrMsg         !< The error message, if an error occurred
 
       ! Local variables
+   INTEGER(IntKi)                             :: I              ! Loop counter (for tower modes)
    INTEGER(IntKi)                             :: K              ! Loop counter (for blades)
+   LOGICAL                                    :: TwFADOF(2)     ! Local repack of TwFADOF1/TwFADOF2 for looping
+   LOGICAL                                    :: TwSSDOF(2)     ! Local repack of TwSSDOF1/TwSSDOF2 for looping
 
       ! Initialize variables
 
@@ -2308,14 +2311,16 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    p%DOF_Desc(p%DOF_TFrl) = 'Tail-furl DOF (internal DOF index = DOF_TFrl), rad'
    p%DOF_Flag(p%DOF_Yaw ) = InputFileData%YawDOF
    p%DOF_Desc(p%DOF_Yaw ) = 'Nacelle yaw DOF (internal DOF index = DOF_Yaw), rad'
-   p%DOF_Flag(DOF_TFA1) = InputFileData%TwFADOF1
-   p%DOF_Desc(DOF_TFA1) = '1st tower fore-aft bending mode DOF (internal DOF index = DOF_TFA1), m'
-   p%DOF_Flag(DOF_TSS1) = InputFileData%TwSSDOF1
-   p%DOF_Desc(DOF_TSS1) = '1st tower side-to-side bending mode DOF (internal DOF index = DOF_TSS1), m'
-   p%DOF_Flag(DOF_TFA2) = InputFileData%TwFADOF2
-   p%DOF_Desc(DOF_TFA2) = '2nd tower fore-aft bending mode DOF (internal DOF index = DOF_TFA2), m'
-   p%DOF_Flag(DOF_TSS2) = InputFileData%TwSSDOF2
-   p%DOF_Desc(DOF_TSS2) = '2nd tower side-to-side bending mode DOF (internal DOF index = DOF_TSS2), m'
+   TwFADOF = (/ InputFileData%TwFADOF1, InputFileData%TwFADOF2 /)   ! local LOGICAL(2)
+   TwSSDOF = (/ InputFileData%TwSSDOF1, InputFileData%TwSSDOF2 /)
+   DO I = 1,p%NTwFAModes
+      p%DOF_Flag(p%DOF_TFA(I)) = TwFADOF(I)
+      p%DOF_Desc(p%DOF_TFA(I)) = TRIM(TwrModeOrd(I))//' tower fore-aft bending mode DOF (internal DOF index = DOF_TFA'//TRIM(Num2LStr(I))//'), m'
+   END DO
+   DO I = 1,p%NTwSSModes
+      p%DOF_Flag(p%DOF_TSS(I)) = TwSSDOF(I)
+      p%DOF_Desc(p%DOF_TSS(I)) = TRIM(TwrModeOrd(I))//' tower side-to-side bending mode DOF (internal DOF index = DOF_TSS'//TRIM(Num2LStr(I))//'), m'
+   END DO
    p%DOF_Flag(DOF_Sg  ) = InputFileData%PtfmSgDOF
    p%DOF_Desc(DOF_Sg  ) = 'Platform horizontal surge translation DOF (internal DOF index = DOF_Sg), m'
    p%DOF_Flag(DOF_Sw  ) = InputFileData%PtfmSwDOF
@@ -2946,15 +2951,22 @@ SUBROUTINE SetOtherParameters( p, InputFileData, ErrStat, ErrMsg )
    END IF
 
    
-   ALLOCATE ( p%TwrFASF(2,0:p%TTopNode,0:2) , &
-              p%TwrSSSF(2,0:p%TTopNode,0:2) , & 
-              p%AxRedTFA(2,2,0:p%TTopNode)  , &
-              p%AxRedTSS(2,2,0:p%TTopNode)  , STAT=ErrStat )
+   ALLOCATE ( p%TwrFASF(p%NTwFAModes,0:p%TTopNode,0:2) , &
+              p%TwrSSSF(p%NTwSSModes,0:p%TTopNode,0:2) , &
+              p%AxRedTFA(p%NTwFAModes,p%NTwFAModes,0:p%TTopNode)  , &
+              p%AxRedTSS(p%NTwSSModes,p%NTwSSModes,0:p%TTopNode)  , STAT=ErrStat )
    IF ( ErrStat /= 0 ) THEN
       ErrStat = ErrID_Fatal
       ErrMsg  = 'Error allocating TwrFASF, TwrSSSF, AxRedTFA, and p%AxRedTSS arrays.'
       RETURN
    END IF
+
+   CALL AllocAry( p%KTFA,    p%NTwFAModes, p%NTwFAModes, 'KTFA',    ErrStat, ErrMsg ); IF ( ErrStat /= ErrID_None ) RETURN
+   CALL AllocAry( p%KTSS,    p%NTwSSModes, p%NTwSSModes, 'KTSS',    ErrStat, ErrMsg ); IF ( ErrStat /= ErrID_None ) RETURN
+   CALL AllocAry( p%CTFA,    p%NTwFAModes, p%NTwFAModes, 'CTFA',    ErrStat, ErrMsg ); IF ( ErrStat /= ErrID_None ) RETURN
+   CALL AllocAry( p%CTSS,    p%NTwSSModes, p%NTwSSModes, 'CTSS',    ErrStat, ErrMsg ); IF ( ErrStat /= ErrID_None ) RETURN
+   CALL AllocAry( p%FreqTFA, p%NTwFAModes, 2_IntKi,      'FreqTFA', ErrStat, ErrMsg ); IF ( ErrStat /= ErrID_None ) RETURN
+   CALL AllocAry( p%FreqTSS, p%NTwSSModes, 2_IntKi,      'FreqTSS', ErrStat, ErrMsg ); IF ( ErrStat /= ErrID_None ) RETURN
 
    ALLOCATE ( p%TwistedSF(p%NumBl,2,3,0:p%TipNode,0:2) , STAT=ErrStat )
    IF ( ErrStat /= 0 ) THEN
@@ -4689,28 +4701,30 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
    REAL(ReKi)                   :: AxRdBld   (3,3)                                 ! Temporary result holding the current addition to the p%AxRedBld() array.
    REAL(ReKi)                   :: AxRdBldOld(3,3)                                 ! Previous AxRdBld (i.e., AxRdBld from the previous node)
-   REAL(ReKi)                   :: AxRdTFA   (2,2)                                 ! Temporary result holding the current addition to the AxRedTFA() array.
-   REAL(ReKi)                   :: AxRdTFAOld(2,2)                                 ! Previous AxRdTFA (i.e., AxRdTFA from the previous node)
-   REAL(ReKi)                   :: AxRdTSS   (2,2)                                 ! Temporary result holding the current addition to the AxRedTSS() array.
-   REAL(ReKi)                   :: AxRdTSSOld(2,2)                                 ! Previous AxRdTSS (i.e., AxRdTSS from the previous node)
+   REAL(ReKi), ALLOCATABLE       :: AxRdTFA   (:,:)                                 ! Temporary result holding the current addition to the AxRedTFA() array.
+   REAL(ReKi), ALLOCATABLE       :: AxRdTFAOld(:,:)                                 ! Previous AxRdTFA (i.e., AxRdTFA from the previous node)
+   REAL(ReKi), ALLOCATABLE       :: AxRdTSS   (:,:)                                 ! Temporary result holding the current addition to the AxRedTSS() array.
+   REAL(ReKi), ALLOCATABLE       :: AxRdTSSOld(:,:)                                 ! Previous AxRdTSS (i.e., AxRdTSS from the previous node)
    REAL(ReKi)                   :: ElmntStff                                       ! (Temporary) stiffness of an element.
    REAL(ReKi)                   :: ElStffFA                                        ! (Temporary) tower fore-aft stiffness of an element
    REAL(ReKi)                   :: ElStffSS                                        ! (Temporary) tower side-to-side  stiffness of an element
    REAL(ReKi)                   :: FMomAbvNd (p%NumBl,p%BldNodes)                  ! FMomAbvNd(K,J) = portion of the first moment of blade K about the rotor centerline (not root, like FirstMom(K)) associated with everything above node J (including tip brake masses).
    REAL(ReKi)                   :: KBECent   (p%NumBl,1,1)                         ! Centrifugal-term of generalized edgewise stiffness of the blades.
    REAL(ReKi)                   :: KBFCent   (p%NumBl,2,2)                         ! Centrifugal-term of generalized flapwise stiffness of the blades.
-   REAL(ReKi)                   :: KTFAGrav  (2,2)                                 ! Gravitational-term of generalized fore-aft stiffness of the tower.
-   REAL(ReKi)                   :: KTSSGrav  (2,2)                                 ! Gravitational-term of generalized side-to-side stiffness of the tower.
+   REAL(ReKi), ALLOCATABLE       :: KTFAGrav  (:,:)                                 ! Gravitational-term of generalized fore-aft stiffness of the tower.
+   REAL(ReKi), ALLOCATABLE       :: KTSSGrav  (:,:)                                 ! Gravitational-term of generalized side-to-side stiffness of the tower.
    REAL(ReKi)                   :: MBE       (p%NumBl,1,1)                         ! Generalized edgewise mass of the blades.
    REAL(ReKi)                   :: MBF       (p%NumBl,2,2)                         ! Generalized flapwise mass of the blades.
-   REAL(ReKi)                   :: MTFA      (2,2)                                 ! Generalized fore-aft mass of the tower.
-   REAL(ReKi)                   :: MTSS      (2,2)                                 ! Generalized side-to-side mass of the tower.
+   REAL(ReKi), ALLOCATABLE       :: MTFA      (:,:)                                 ! Generalized fore-aft mass of the tower.
+   REAL(ReKi), ALLOCATABLE       :: MTSS      (:,:)                                 ! Generalized side-to-side mass of the tower.
    REAL(ReKi)                   :: Shape                                           ! Temporary result holding a value from the SHP function
    REAL(ReKi)                   :: Shape1                                          ! Temporary result holding a value from the SHP function
    REAL(ReKi)                   :: Shape2                                          ! Temporary result holding a value from the SHP function
    REAL(ReKi)                   :: TMssAbvNd (p%TwrNodes)                          ! Portion of the tower mass associated with everything above node J (including tower-top effects)
    REAL(ReKi)                   :: TwstdSF   (2,3,0:1)                             ! Temperory result holding the current addition to the TwistedSF() array.
    REAL(ReKi)                   :: TwstdSFOld(2,3,0:1)                             ! Previous TwstdSF (i.e., TwstdSF from the previous node)
+   REAL(ReKi), ALLOCATABLE       :: TwFAMSh(:,:)                                    ! Repacked FA tower-mode-shape polynomial coefficients (coeff, mode)
+   REAL(ReKi), ALLOCATABLE       :: TwSSMSh(:,:)                                    ! Repacked SS tower-mode-shape polynomial coefficients (coeff, mode)
 
    INTEGER(IntKi)               :: I                                               ! Generic index.
    INTEGER(IntKi)               :: J                                               ! Loops through nodes / elements.
@@ -4720,6 +4734,16 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
    ErrStat = ErrID_None
    ErrMsg  = ''
+
+   ALLOCATE( MTFA(p%NTwFAModes,p%NTwFAModes), MTSS(p%NTwSSModes,p%NTwSSModes), &
+             KTFAGrav(p%NTwFAModes,p%NTwFAModes), KTSSGrav(p%NTwSSModes,p%NTwSSModes), &
+             AxRdTFA(p%NTwFAModes,p%NTwFAModes), AxRdTFAOld(p%NTwFAModes,p%NTwFAModes), &
+             AxRdTSS(p%NTwSSModes,p%NTwSSModes), AxRdTSSOld(p%NTwSSModes,p%NTwSSModes), STAT=ErrStat )
+   IF ( ErrStat /= 0 ) THEN
+      ErrStat = ErrID_Fatal
+      ErrMsg  = 'Error allocating tower modal temporaries in Coeff.'
+      RETURN
+   END IF
 
    !...............................................................................................................................
    ! Calculate the structure that furls with the rotor inertia term:
@@ -5156,8 +5180,10 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
       ! Initialize the generalized tower masses using tower-top mass effects:
 
-   DO I = 1,2  ! Loop through all tower modes in a single direction
+   DO I = 1,p%NTwFAModes  ! Loop through all tower modes in a single direction
       MTFA(I,I) = p%TwrTpMass
+   ENDDO       ! I - All tower modes in a single direction
+   DO I = 1,p%NTwSSModes  ! Loop through all tower modes in a single direction
       MTSS(I,I) = p%TwrTpMass
    ENDDO       ! I - All tower modes in a single direction
 
@@ -5166,25 +5192,36 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
    p%TwrSSSF(   :,0,0:1) = 0.0_ReKi
    p%AxRedTFA(:,:,0)     = 0.0_ReKi
    p%AxRedTSS(:,:,0)     = 0.0_ReKi
-   
+
+      ! Repack the legacy polynomial coefficients for looping over modes.
+      ! (A1' later replaces this repack + SHP with eigensolve tabulation; this is the seam.)
+   ALLOCATE( TwFAMSh(SIZE(InputFileData%TwFAM1Sh),p%NTwFAModes), &
+             TwSSMSh(SIZE(InputFileData%TwSSM1Sh),p%NTwSSModes), STAT=ErrStat )
+   IF ( ErrStat /= 0 ) THEN
+      ErrStat = ErrID_Fatal
+      ErrMsg  = 'Error allocating TwFAMSh and TwSSMSh arrays.'
+      RETURN
+   END IF
+   TwFAMSh(:,1) = InputFileData%TwFAM1Sh(:)
+   TwFAMSh(:,2) = InputFileData%TwFAM2Sh(:)
+   TwSSMSh(:,1) = InputFileData%TwSSM1Sh(:)
+   TwSSMSh(:,2) = InputFileData%TwSSM2Sh(:)
+
    DO J = 1,p%TwrNodes    ! Loop through the tower nodes / elements
 
 
       ! Calculate the tower shape functions (all derivatives):
 
-      p%TwrFASF(1,J,2) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwFAM1Sh(:), 2, ErrStat, ErrMsg )
-      p%TwrFASF(2,J,2) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwFAM2Sh(:), 2, ErrStat, ErrMsg )
-      p%TwrFASF(1,J,1) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwFAM1Sh(:), 1, ErrStat, ErrMsg )
-      p%TwrFASF(2,J,1) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwFAM2Sh(:), 1, ErrStat, ErrMsg )
-      p%TwrFASF(1,J,0) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwFAM1Sh(:), 0, ErrStat, ErrMsg )
-      p%TwrFASF(2,J,0) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwFAM2Sh(:), 0, ErrStat, ErrMsg )
-
-      p%TwrSSSF(1,J,2) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwSSM1Sh(:), 2, ErrStat, ErrMsg )
-      p%TwrSSSF(2,J,2) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwSSM2Sh(:), 2, ErrStat, ErrMsg )
-      p%TwrSSSF(1,J,1) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwSSM1Sh(:), 1, ErrStat, ErrMsg )
-      p%TwrSSSF(2,J,1) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwSSM2Sh(:), 1, ErrStat, ErrMsg )
-      p%TwrSSSF(1,J,0) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwSSM1Sh(:), 0, ErrStat, ErrMsg )
-      p%TwrSSSF(2,J,0) = SHP( p%HNodesNorm(J), p%TwrFlexL, InputFileData%TwSSM2Sh(:), 0, ErrStat, ErrMsg )
+      DO I = 1,p%NTwFAModes
+         p%TwrFASF(I,J,2) = SHP( p%HNodesNorm(J), p%TwrFlexL, TwFAMSh(:,I), 2, ErrStat, ErrMsg )
+         p%TwrFASF(I,J,1) = SHP( p%HNodesNorm(J), p%TwrFlexL, TwFAMSh(:,I), 1, ErrStat, ErrMsg )
+         p%TwrFASF(I,J,0) = SHP( p%HNodesNorm(J), p%TwrFlexL, TwFAMSh(:,I), 0, ErrStat, ErrMsg )
+      END DO
+      DO I = 1,p%NTwSSModes
+         p%TwrSSSF(I,J,2) = SHP( p%HNodesNorm(J), p%TwrFlexL, TwSSMSh(:,I), 2, ErrStat, ErrMsg )
+         p%TwrSSSF(I,J,1) = SHP( p%HNodesNorm(J), p%TwrFlexL, TwSSMSh(:,I), 1, ErrStat, ErrMsg )
+         p%TwrSSSF(I,J,0) = SHP( p%HNodesNorm(J), p%TwrFlexL, TwSSMSh(:,I), 0, ErrStat, ErrMsg )
+      END DO
 
 
       ! Integrate to find the generalized mass of the tower (including tower-top mass effects).
@@ -5192,8 +5229,10 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
       !   since these terms will never be used.
 
 
-      DO I = 1,2     ! Loop through all tower DOFs in one direction
+      DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
          MTFA  (I,I) = MTFA  (I,I) + p%TElmntMass(J)*p%TwrFASF(I,J,0)**2
+      ENDDO          ! I - through all tower DOFs in one direction
+      DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
          MTSS  (I,I) = MTSS  (I,I) + p%TElmntMass(J)*p%TwrSSSF(I,J,0)**2
       ENDDO          ! I - through all tower DOFs in one direction
 
@@ -5204,9 +5243,13 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
       ElStffFA       = p%StiffTFA(J)*abs(p%DHNodes(J))                        ! Fore-aft stiffness of tower element J
       ElStffSS       = p%StiffTSS(J)*abs(p%DHNodes(J))                        ! Side-to-side stiffness of tower element J
 
-      DO I = 1,2     ! Loop through all tower DOFs in one direction
-         DO L = 1,2  ! Loop through all tower DOFs in one direction
+      DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
+         DO L = 1,p%NTwFAModes  ! Loop through all tower DOFs in one direction
             p%KTFA (I,L) = p%KTFA    (I,L) + ElStffFA *p%TwrFASF(I,J,2)*p%TwrFASF(L,J,2)
+         ENDDO       ! L - All tower DOFs in one direction
+      ENDDO          ! I - through all tower DOFs in one direction
+      DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
+         DO L = 1,p%NTwSSModes  ! Loop through all tower DOFs in one direction
             p%KTSS (I,L) = p%KTSS    (I,L) + ElStffSS *p%TwrSSSF(I,J,2)*p%TwrSSSF(L,J,2)
          ENDDO       ! L - All tower DOFs in one direction
       ENDDO          ! I - through all tower DOFs in one direction
@@ -5218,20 +5261,25 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
       ElmntStff      = -TMssAbvNd(J)*abs(p%DHNodes(J))*p%Gravity              ! Gravitational stiffness of tower element J
 
-      DO I = 1,2     ! Loop through all tower DOFs in one direction
+      DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
          KTFAGrav(I,I) = KTFAGrav(I,I) + ElmntStff*p%TwrFASF(I,J,1)**2
+      ENDDO
+      DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
          KTSSGrav(I,I) = KTSSGrav(I,I) + ElmntStff*p%TwrSSSF(I,J,1)**2
       ENDDO
 
 
       ! Integrate to find the tower axial reduction shape functions:
 
-      DO I = 1,2     ! Loop through all tower DOFs in one direction
-         DO L = 1,2  ! Loop through all tower DOFs in one direction
+      DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
+         DO L = 1,p%NTwFAModes  ! Loop through all tower DOFs in one direction
             AxRdTFA (I,L) = 0.5*p%DHNodes(J)*p%TwrFASF(I,J,1)*p%TwrFASF(L,J,1)
-            AxRdTSS (I,L) = 0.5*p%DHNodes(J)*p%TwrSSSF(I,J,1)*p%TwrSSSF(L,J,1)
-
             p%AxRedTFA(I,L,J) = AxRdTFA(I,L)
+         ENDDO       ! L - All tower DOFs in one direction
+      ENDDO
+      DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
+         DO L = 1,p%NTwSSModes  ! Loop through all tower DOFs in one direction
+            AxRdTSS (I,L) = 0.5*p%DHNodes(J)*p%TwrSSSF(I,J,1)*p%TwrSSSF(L,J,1)
             p%AxRedTSS(I,L,J) = AxRdTSS(I,L)
          ENDDO       ! L - All tower DOFs in one direction
       ENDDO
@@ -5239,9 +5287,13 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
       IF ( J /= 1 )  THEN  ! All but the lowermost tower element
       ! Add the effects from the (not yet used) portion of element J-1
 
-         DO I = 1,2     ! Loop through all tower DOFs in one direction
-            DO L = 1,2  ! Loop through all tower DOFs in one direction
+         DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
+            DO L = 1,p%NTwFAModes  ! Loop through all tower DOFs in one direction
                p%AxRedTFA(I,L,J) = p%AxRedTFA(I,L,J) + p%AxRedTFA(I,L,J-1)+ AxRdTFAOld(I,L)
+            ENDDO       ! L - All tower DOFs in one direction
+         ENDDO
+         DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
+            DO L = 1,p%NTwSSModes  ! Loop through all tower DOFs in one direction
                p%AxRedTSS(I,L,J) = p%AxRedTSS(I,L,J) + p%AxRedTSS(I,L,J-1)+ AxRdTSSOld(I,L)
             ENDDO       ! L - All tower DOFs in one direction
          ENDDO
@@ -5259,10 +5311,13 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
    ! Apply the modal stiffness tuners of the tower to KTFA() and KTSS():
 
-   DO I = 1,2     ! Loop through all tower DOFs in one direction
-      DO L = 1,2  ! Loop through all tower DOFs in one direction
+   DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
+      DO L = 1,p%NTwFAModes  ! Loop through all tower DOFs in one direction
          p%KTFA(I,L) = SQRT( InputFileData%FAStTunr(I)*InputFileData%FAStTunr(L) )*p%KTFA(I,L)
-
+      ENDDO       ! L - All tower DOFs in one direction
+   ENDDO          ! I - through all tower DOFs in one direction
+   DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
+      DO L = 1,p%NTwSSModes  ! Loop through all tower DOFs in one direction
          p%KTSS(I,L) = SQRT( InputFileData%SSStTunr(I)*InputFileData%SSStTunr(L) )*p%KTSS(I,L)
       ENDDO       ! L - All tower DOFs in one direction
    ENDDO          ! I - through all tower DOFs in one direction
@@ -5270,28 +5325,33 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
       ! Calculate the tower natural frequencies:
 
-   DO I = 1,2     ! Loop through all tower DOFs in one direction
+   DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
       if ( EqualRealNos(( MTFA(I,I) - p%TwrTpMass ), 0.0_ReKi) ) then
          p%FreqTFA(I,1) = NaN ! Avoid creating a divide by zero signal, but set p%FreqTFA(I,1) = NaN
-      else        
+      else
          p%FreqTFA(I,1) = Inv2Pi*SQRT(   p%KTFA(I,I)/( MTFA(I,I) - p%TwrTpMass ) )  ! Natural tower I-fore-aft frequency w/o gravitational destiffening nor tower-top mass effects
       end if
+      p%FreqTFA(I,2) = Inv2Pi*SQRT( ( p%KTFA(I,I) + KTFAGrav(I,I) )/MTFA(I,I)               )  ! Natural tower I-fore-aft frequency w/  gravitational destiffening and tower-top mass effects
+   ENDDO          ! I - All tower DOFs in one direction
+   DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
       if ( EqualRealNos(( MTSS(I,I) - p%TwrTpMass ), 0.0_ReKi) ) then
          p%FreqTSS(I,1) = NaN ! Avoid creating a divide by zero signal, but set p%FreqTFS(I,1) = NaN
       else
          p%FreqTSS(I,1) = Inv2Pi*SQRT(   p%KTSS(I,I)/( MTSS(I,I) - p%TwrTpMass ) )  ! Natural tower I-side-to-side frequency w/o gravitational destiffening nor tower-top mass effects
       end if
-      p%FreqTFA(I,2) = Inv2Pi*SQRT( ( p%KTFA(I,I) + KTFAGrav(I,I) )/MTFA(I,I)               )  ! Natural tower I-fore-aft frequency w/  gravitational destiffening and tower-top mass effects
       p%FreqTSS(I,2) = Inv2Pi*SQRT( ( p%KTSS(I,I) + KTSSGrav(I,I) )/MTSS(I,I)               )  ! Natural tower I-side-to-side frequency w/  gravitational destiffening and tower-top mass effects
    ENDDO          ! I - All tower DOFs in one direction
 
 
       ! Calculate the generalized damping of the tower:
 
-   DO I = 1,2     ! Loop through all tower DOFs in one direction
-      DO L = 1,2  ! Loop through all tower DOFs in one direction
+   DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
+      DO L = 1,p%NTwFAModes  ! Loop through all tower DOFs in one direction
          p%CTFA(I,L) = ( 0.01*InputFileData%TwrFADmp(L) )*p%KTFA(I,L)/( Pi*p%FreqTFA(L,1) )
-
+      ENDDO       ! L - All tower DOFs in one direction
+   ENDDO          ! I - All tower DOFs in one direction
+   DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
+      DO L = 1,p%NTwSSModes  ! Loop through all tower DOFs in one direction
          p%CTSS(I,L) = ( 0.01*InputFileData%TwrSSDmp(L) )*p%KTSS(I,L)/( Pi*p%FreqTSS(L,1) )
       ENDDO       ! L - All tower DOFs in one direction
    ENDDO          ! I - All tower DOFs in one direction
@@ -5299,26 +5359,27 @@ SUBROUTINE Coeff(p,InputFileData, ErrStat, ErrMsg)
 
       ! Calculate the tower shape functions (all derivatives) at the tower-top:
 
-   p%TwrFASF(1,p%TTopNode,2) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwFAM1Sh(:), 2, ErrStat, ErrMsg )
-   p%TwrFASF(2,p%TTopNode,2) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwFAM2Sh(:), 2, ErrStat, ErrMsg )
-   p%TwrFASF(1,p%TTopNode,1) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwFAM1Sh(:), 1, ErrStat, ErrMsg )
-   p%TwrFASF(2,p%TTopNode,1) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwFAM2Sh(:), 1, ErrStat, ErrMsg )
-   p%TwrFASF(1,p%TTopNode,0) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwFAM1Sh(:), 0, ErrStat, ErrMsg )
-   p%TwrFASF(2,p%TTopNode,0) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwFAM2Sh(:), 0, ErrStat, ErrMsg )
-
-   p%TwrSSSF(1,p%TTopNode,2) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwSSM1Sh(:), 2, ErrStat, ErrMsg )
-   p%TwrSSSF(2,p%TTopNode,2) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwSSM2Sh(:), 2, ErrStat, ErrMsg )
-   p%TwrSSSF(1,p%TTopNode,1) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwSSM1Sh(:), 1, ErrStat, ErrMsg )
-   p%TwrSSSF(2,p%TTopNode,1) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwSSM2Sh(:), 1, ErrStat, ErrMsg )
-   p%TwrSSSF(1,p%TTopNode,0) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwSSM1Sh(:), 0, ErrStat, ErrMsg )
-   p%TwrSSSF(2,p%TTopNode,0) = SHP( 1.0_ReKi, p%TwrFlexL, InputFileData%TwSSM2Sh(:), 0, ErrStat, ErrMsg )
+   DO I = 1,p%NTwFAModes
+      p%TwrFASF(I,p%TTopNode,2) = SHP( 1.0_ReKi, p%TwrFlexL, TwFAMSh(:,I), 2, ErrStat, ErrMsg )
+      p%TwrFASF(I,p%TTopNode,1) = SHP( 1.0_ReKi, p%TwrFlexL, TwFAMSh(:,I), 1, ErrStat, ErrMsg )
+      p%TwrFASF(I,p%TTopNode,0) = SHP( 1.0_ReKi, p%TwrFlexL, TwFAMSh(:,I), 0, ErrStat, ErrMsg )
+   END DO
+   DO I = 1,p%NTwSSModes
+      p%TwrSSSF(I,p%TTopNode,2) = SHP( 1.0_ReKi, p%TwrFlexL, TwSSMSh(:,I), 2, ErrStat, ErrMsg )
+      p%TwrSSSF(I,p%TTopNode,1) = SHP( 1.0_ReKi, p%TwrFlexL, TwSSMSh(:,I), 1, ErrStat, ErrMsg )
+      p%TwrSSSF(I,p%TTopNode,0) = SHP( 1.0_ReKi, p%TwrFlexL, TwSSMSh(:,I), 0, ErrStat, ErrMsg )
+   END DO
 
 
       ! Integrate to find the tower axial reduction shape functions at the tower-top:
 
-   DO I = 1,2     ! Loop through all tower DOFs in one direction
-      DO L = 1,2  ! Loop through all tower DOFs in one direction
+   DO I = 1,p%NTwFAModes     ! Loop through all tower DOFs in one direction
+      DO L = 1,p%NTwFAModes  ! Loop through all tower DOFs in one direction
          p%AxRedTFA(I,L,p%TTopNode) = p%AxRedTFA(I,L,p%TwrNodes)+ AxRdTFAOld(I,L)
+      ENDDO       ! L - All tower DOFs in one direction
+   ENDDO
+   DO I = 1,p%NTwSSModes     ! Loop through all tower DOFs in one direction
+      DO L = 1,p%NTwSSModes  ! Loop through all tower DOFs in one direction
          p%AxRedTSS(I,L,p%TTopNode) = p%AxRedTSS(I,L,p%TwrNodes)+ AxRdTSSOld(I,L)
       ENDDO       ! L - All tower DOFs in one direction
    ENDDO
@@ -5781,96 +5842,26 @@ SUBROUTINE SetEnabledDOFIndexArrays( p )
    ENDIF
 
 
-   IF ( p%DOF_Flag(DOF_TFA1) )  THEN  ! 1st tower fore-aft.
-
-      p%DOFs%NActvDOF = p%DOFs%NActvDOF + 1
-      p%DOFs%NPCE     = p%DOFs%NPCE     + 1
-      p%DOFs%NPDE     = p%DOFs%NPDE     + 1
-      p%DOFs%NPIE     = p%DOFs%NPIE     + 1
-      p%DOFs%NPTTE    = p%DOFs%NPTTE    + 1
-      p%DOFs%NPTE     = p%DOFs%NPTE     + 1
-      p%DOFs%NPSE (:) = p%DOFs%NPSE (:) + 1
-      p%DOFs%NPUE     = p%DOFs%NPUE     + 1
-
-      p%DOFs%PS      (  p%DOFs%NActvDOF) = DOF_TFA1
-      p%DOFs%PCE     (  p%DOFs%NPCE    ) = DOF_TFA1
-      p%DOFs%PDE     (  p%DOFs%NPDE    ) = DOF_TFA1
-      p%DOFs%PIE     (  p%DOFs%NPIE    ) = DOF_TFA1
-      p%DOFs%PTTE    (  p%DOFs%NPTTE   ) = DOF_TFA1
-      p%DOFs%PTE     (  p%DOFs%NPTE    ) = DOF_TFA1
-      p%DOFs%PSE     (:,p%DOFs%NPSE (:)) = DOF_TFA1
-      p%DOFs%PUE     (  p%DOFs%NPUE    ) = DOF_TFA1
-
-   ENDIF
-
-
-   IF ( p%DOF_Flag(DOF_TSS1) )  THEN  ! 1st tower side-to-side.
-
-      p%DOFs%NActvDOF = p%DOFs%NActvDOF + 1
-      p%DOFs%NPCE     = p%DOFs%NPCE     + 1
-      p%DOFs%NPDE     = p%DOFs%NPDE     + 1
-      p%DOFs%NPIE     = p%DOFs%NPIE     + 1
-      p%DOFs%NPTTE    = p%DOFs%NPTTE    + 1
-      p%DOFs%NPTE     = p%DOFs%NPTE     + 1
-      p%DOFs%NPSE (:) = p%DOFs%NPSE (:) + 1
-      p%DOFs%NPUE     = p%DOFs%NPUE     + 1
-
-      p%DOFs%PS      (  p%DOFs%NActvDOF) = DOF_TSS1
-      p%DOFs%PCE     (  p%DOFs%NPCE    ) = DOF_TSS1
-      p%DOFs%PDE     (  p%DOFs%NPDE    ) = DOF_TSS1
-      p%DOFs%PIE     (  p%DOFs%NPIE    ) = DOF_TSS1
-      p%DOFs%PTTE    (  p%DOFs%NPTTE   ) = DOF_TSS1
-      p%DOFs%PTE     (  p%DOFs%NPTE    ) = DOF_TSS1
-      p%DOFs%PSE     (:,p%DOFs%NPSE (:)) = DOF_TSS1
-      p%DOFs%PUE     (  p%DOFs%NPUE    ) = DOF_TSS1
-
-   ENDIF
-
-
-   IF ( p%DOF_Flag(DOF_TFA2) )  THEN  ! 2nd tower fore-aft.
-
-      p%DOFs%NActvDOF = p%DOFs%NActvDOF + 1
-      p%DOFs%NPCE     = p%DOFs%NPCE     + 1
-      p%DOFs%NPDE     = p%DOFs%NPDE     + 1
-      p%DOFs%NPIE     = p%DOFs%NPIE     + 1
-      p%DOFs%NPTTE    = p%DOFs%NPTTE    + 1
-      p%DOFs%NPTE     = p%DOFs%NPTE     + 1
-      p%DOFs%NPSE (:) = p%DOFs%NPSE (:) + 1
-      p%DOFs%NPUE     = p%DOFs%NPUE     + 1
-
-      p%DOFs%PS      (  p%DOFs%NActvDOF) = DOF_TFA2
-      p%DOFs%PCE     (  p%DOFs%NPCE    ) = DOF_TFA2
-      p%DOFs%PDE     (  p%DOFs%NPDE    ) = DOF_TFA2
-      p%DOFs%PIE     (  p%DOFs%NPIE    ) = DOF_TFA2
-      p%DOFs%PTTE    (  p%DOFs%NPTTE   ) = DOF_TFA2
-      p%DOFs%PTE     (  p%DOFs%NPTE    ) = DOF_TFA2
-      p%DOFs%PSE     (:,p%DOFs%NPSE (:)) = DOF_TFA2
-      p%DOFs%PUE     (  p%DOFs%NPUE    ) = DOF_TFA2
-
-   ENDIF
-
-
-   IF ( p%DOF_Flag(DOF_TSS2) )  THEN  ! 2nd tower side-to-side.
-
-      p%DOFs%NActvDOF = p%DOFs%NActvDOF + 1
-      p%DOFs%NPCE     = p%DOFs%NPCE     + 1
-      p%DOFs%NPDE     = p%DOFs%NPDE     + 1
-      p%DOFs%NPIE     = p%DOFs%NPIE     + 1
-      p%DOFs%NPTTE    = p%DOFs%NPTTE    + 1
-      p%DOFs%NPTE     = p%DOFs%NPTE     + 1
-      p%DOFs%NPSE (:) = p%DOFs%NPSE (:) + 1
-      p%DOFs%NPUE     = p%DOFs%NPUE     + 1
-
-      p%DOFs%PS      (  p%DOFs%NActvDOF) = DOF_TSS2
-      p%DOFs%PCE     (  p%DOFs%NPCE    ) = DOF_TSS2
-      p%DOFs%PDE     (  p%DOFs%NPDE    ) = DOF_TSS2
-      p%DOFs%PIE     (  p%DOFs%NPIE    ) = DOF_TSS2
-      p%DOFs%PTTE    (  p%DOFs%NPTTE   ) = DOF_TSS2
-      p%DOFs%PTE     (  p%DOFs%NPTE    ) = DOF_TSS2
-      p%DOFs%PSE     (:,p%DOFs%NPSE (:)) = DOF_TSS2
-      p%DOFs%PUE     (  p%DOFs%NPUE    ) = DOF_TSS2
-
-   ENDIF
+   DO I = 7, 6 + p%NTwFAModes + p%NTwSSModes    ! all tower DOFs, ascending = legacy interleaved order
+      IF ( p%DOF_Flag(I) )  THEN
+         p%DOFs%NActvDOF = p%DOFs%NActvDOF + 1
+         p%DOFs%NPCE     = p%DOFs%NPCE     + 1
+         p%DOFs%NPDE     = p%DOFs%NPDE     + 1
+         p%DOFs%NPIE     = p%DOFs%NPIE     + 1
+         p%DOFs%NPTTE    = p%DOFs%NPTTE    + 1
+         p%DOFs%NPTE     = p%DOFs%NPTE     + 1
+         p%DOFs%NPSE (:) = p%DOFs%NPSE (:) + 1
+         p%DOFs%NPUE     = p%DOFs%NPUE     + 1
+         p%DOFs%PS      (  p%DOFs%NActvDOF) = I
+         p%DOFs%PCE     (  p%DOFs%NPCE    ) = I
+         p%DOFs%PDE     (  p%DOFs%NPDE    ) = I
+         p%DOFs%PIE     (  p%DOFs%NPIE    ) = I
+         p%DOFs%PTTE    (  p%DOFs%NPTTE   ) = I
+         p%DOFs%PTE     (  p%DOFs%NPTE    ) = I
+         p%DOFs%PSE     (:,p%DOFs%NPSE (:)) = I
+         p%DOFs%PUE     (  p%DOFs%NPUE    ) = I
+      ENDIF
+   END DO
 
 
    IF ( p%DOF_Flag(p%DOF_Yaw ) )  THEN  ! Nacelle yaw.
@@ -6045,6 +6036,18 @@ SUBROUTINE SetEnabledDOFIndexArrays( p )
 
    RETURN
 END SUBROUTINE SetEnabledDOFIndexArrays
+!----------------------------------------------------------------------------------------------------------------------------------
+!> Returns the ordinal string ('1st','2nd','3rd',...,'Nth') for tower-mode DOF descriptions.
+FUNCTION TwrModeOrd( i ) RESULT( s )
+   INTEGER(IntKi), INTENT(IN) :: i
+   CHARACTER(4)               :: s
+   SELECT CASE ( i )
+   CASE (1);      s = '1st'
+   CASE (2);      s = '2nd'
+   CASE (3);      s = '3rd'
+   CASE DEFAULT;  s = TRIM(Num2LStr(i))//'th'
+   END SELECT
+END FUNCTION TwrModeOrd
 !----------------------------------------------------------------------------------------------------------------------------------
 SUBROUTINE SetTowerDOFMap( p, ErrStat, ErrMsg )
 ! Build the runtime DOF index map. Tower FA/SS DOFs interleave (FA1,SS1,FA2,SS2,...)
