@@ -553,6 +553,35 @@ IMPLICIT NONE
     INTEGER(IntKi)  :: BldNodes = 0_IntKi      !< Number of blade nodes used in the analysis [-]
     INTEGER(IntKi)  :: TipNode = 0_IntKi      !< Index of the additional node located at the blade tip = BldNodes + 1 [-]
     INTEGER(IntKi)  :: NDOF = 0_IntKi      !< Number of total degrees of freedom (DOFs) [-]
+    INTEGER(IntKi)  :: NTwFAModes = 0_IntKi      !< Number of tower fore-aft bending modes [-]
+    INTEGER(IntKi)  :: NTwSSModes = 0_IntKi      !< Number of tower side-to-side bending modes [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: DOF_TFA      !< DOF indices of tower FA modes [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: DOF_TSS      !< DOF indices of tower SS modes [-]
+    INTEGER(IntKi)  :: DOF_Yaw = 0_IntKi      !< DOF index for nacelle yaw [-]
+    INTEGER(IntKi)  :: DOF_RFrl = 0_IntKi      !< DOF index for rotor furl [-]
+    INTEGER(IntKi)  :: DOF_GeAz = 0_IntKi      !< DOF index for generator azimuth [-]
+    INTEGER(IntKi)  :: DOF_DrTr = 0_IntKi      !< DOF index for drivetrain flexibility [-]
+    INTEGER(IntKi)  :: DOF_TFrl = 0_IntKi      !< DOF index for tail furl [-]
+    INTEGER(IntKi)  :: DOF_Teet = 0_IntKi      !< DOF index for rotor teeter [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: DOF_BP      !< DOF indices for blade pitch [-]
+    INTEGER(IntKi) , DIMENSION(:,:), ALLOCATABLE  :: DOF_BE      !< DOF indices for blade edge modes [-]
+    INTEGER(IntKi) , DIMENSION(:,:), ALLOCATABLE  :: DOF_BF      !< DOF indices for blade flap modes [-]
+    INTEGER(IntKi)  :: NPX = 0_IntKi      !< Size of PX [-]
+    INTEGER(IntKi)  :: NPF = 0_IntKi      !< Size of PF [-]
+    INTEGER(IntKi)  :: NPB = 0_IntKi      !< Size of PB [-]
+    INTEGER(IntKi)  :: NPN = 0_IntKi      !< Size of PN [-]
+    INTEGER(IntKi)  :: NPR = 0_IntKi      !< Size of PR [-]
+    INTEGER(IntKi)  :: NPL = 0_IntKi      !< Size of PL [-]
+    INTEGER(IntKi)  :: NPG = 0_IntKi      !< Size of PG [-]
+    INTEGER(IntKi)  :: NPA = 0_IntKi      !< Size of PA [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PX      !< DOFs contributing to platform angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PF      !< DOFs contributing to tower-element angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PB      !< DOFs contributing to tower-top/baseplate angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PN      !< DOFs contributing to nacelle angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PR      !< DOFs contributing to furling-structure angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PL      !< DOFs contributing to LSS angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PG      !< DOFs contributing to generator angular velocity [-]
+    INTEGER(IntKi) , DIMENSION(:), ALLOCATABLE  :: PA      !< DOFs contributing to tail angular velocity [-]
     REAL(R8Ki)  :: TwoPiNB = 0.0_R8Ki      !< Two pi divided by the number of blades [radians]
     INTEGER(IntKi)  :: NAug = 0_IntKi      !< Dimension of augmented solution matrix [-]
     INTEGER(IntKi)  :: NPH = 0_IntKi      !< Number of DOFs that contribute to the angular velocity of the hub (body H) in the inertia frame [-]
@@ -4843,6 +4872,178 @@ subroutine ED_CopyParam(SrcParamData, DstParamData, CtrlCode, ErrStat, ErrMsg)
    DstParamData%BldNodes = SrcParamData%BldNodes
    DstParamData%TipNode = SrcParamData%TipNode
    DstParamData%NDOF = SrcParamData%NDOF
+   DstParamData%NTwFAModes = SrcParamData%NTwFAModes
+   DstParamData%NTwSSModes = SrcParamData%NTwSSModes
+   if (allocated(SrcParamData%DOF_TFA)) then
+      LB(1:1) = lbound(SrcParamData%DOF_TFA)
+      UB(1:1) = ubound(SrcParamData%DOF_TFA)
+      if (.not. allocated(DstParamData%DOF_TFA)) then
+         allocate(DstParamData%DOF_TFA(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%DOF_TFA.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%DOF_TFA = SrcParamData%DOF_TFA
+   end if
+   if (allocated(SrcParamData%DOF_TSS)) then
+      LB(1:1) = lbound(SrcParamData%DOF_TSS)
+      UB(1:1) = ubound(SrcParamData%DOF_TSS)
+      if (.not. allocated(DstParamData%DOF_TSS)) then
+         allocate(DstParamData%DOF_TSS(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%DOF_TSS.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%DOF_TSS = SrcParamData%DOF_TSS
+   end if
+   DstParamData%DOF_Yaw = SrcParamData%DOF_Yaw
+   DstParamData%DOF_RFrl = SrcParamData%DOF_RFrl
+   DstParamData%DOF_GeAz = SrcParamData%DOF_GeAz
+   DstParamData%DOF_DrTr = SrcParamData%DOF_DrTr
+   DstParamData%DOF_TFrl = SrcParamData%DOF_TFrl
+   DstParamData%DOF_Teet = SrcParamData%DOF_Teet
+   if (allocated(SrcParamData%DOF_BP)) then
+      LB(1:1) = lbound(SrcParamData%DOF_BP)
+      UB(1:1) = ubound(SrcParamData%DOF_BP)
+      if (.not. allocated(DstParamData%DOF_BP)) then
+         allocate(DstParamData%DOF_BP(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%DOF_BP.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%DOF_BP = SrcParamData%DOF_BP
+   end if
+   if (allocated(SrcParamData%DOF_BE)) then
+      LB(1:2) = lbound(SrcParamData%DOF_BE)
+      UB(1:2) = ubound(SrcParamData%DOF_BE)
+      if (.not. allocated(DstParamData%DOF_BE)) then
+         allocate(DstParamData%DOF_BE(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%DOF_BE.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%DOF_BE = SrcParamData%DOF_BE
+   end if
+   if (allocated(SrcParamData%DOF_BF)) then
+      LB(1:2) = lbound(SrcParamData%DOF_BF)
+      UB(1:2) = ubound(SrcParamData%DOF_BF)
+      if (.not. allocated(DstParamData%DOF_BF)) then
+         allocate(DstParamData%DOF_BF(LB(1):UB(1),LB(2):UB(2)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%DOF_BF.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%DOF_BF = SrcParamData%DOF_BF
+   end if
+   DstParamData%NPX = SrcParamData%NPX
+   DstParamData%NPF = SrcParamData%NPF
+   DstParamData%NPB = SrcParamData%NPB
+   DstParamData%NPN = SrcParamData%NPN
+   DstParamData%NPR = SrcParamData%NPR
+   DstParamData%NPL = SrcParamData%NPL
+   DstParamData%NPG = SrcParamData%NPG
+   DstParamData%NPA = SrcParamData%NPA
+   if (allocated(SrcParamData%PX)) then
+      LB(1:1) = lbound(SrcParamData%PX)
+      UB(1:1) = ubound(SrcParamData%PX)
+      if (.not. allocated(DstParamData%PX)) then
+         allocate(DstParamData%PX(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PX.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PX = SrcParamData%PX
+   end if
+   if (allocated(SrcParamData%PF)) then
+      LB(1:1) = lbound(SrcParamData%PF)
+      UB(1:1) = ubound(SrcParamData%PF)
+      if (.not. allocated(DstParamData%PF)) then
+         allocate(DstParamData%PF(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PF.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PF = SrcParamData%PF
+   end if
+   if (allocated(SrcParamData%PB)) then
+      LB(1:1) = lbound(SrcParamData%PB)
+      UB(1:1) = ubound(SrcParamData%PB)
+      if (.not. allocated(DstParamData%PB)) then
+         allocate(DstParamData%PB(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PB.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PB = SrcParamData%PB
+   end if
+   if (allocated(SrcParamData%PN)) then
+      LB(1:1) = lbound(SrcParamData%PN)
+      UB(1:1) = ubound(SrcParamData%PN)
+      if (.not. allocated(DstParamData%PN)) then
+         allocate(DstParamData%PN(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PN.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PN = SrcParamData%PN
+   end if
+   if (allocated(SrcParamData%PR)) then
+      LB(1:1) = lbound(SrcParamData%PR)
+      UB(1:1) = ubound(SrcParamData%PR)
+      if (.not. allocated(DstParamData%PR)) then
+         allocate(DstParamData%PR(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PR.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PR = SrcParamData%PR
+   end if
+   if (allocated(SrcParamData%PL)) then
+      LB(1:1) = lbound(SrcParamData%PL)
+      UB(1:1) = ubound(SrcParamData%PL)
+      if (.not. allocated(DstParamData%PL)) then
+         allocate(DstParamData%PL(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PL.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PL = SrcParamData%PL
+   end if
+   if (allocated(SrcParamData%PG)) then
+      LB(1:1) = lbound(SrcParamData%PG)
+      UB(1:1) = ubound(SrcParamData%PG)
+      if (.not. allocated(DstParamData%PG)) then
+         allocate(DstParamData%PG(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PG.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PG = SrcParamData%PG
+   end if
+   if (allocated(SrcParamData%PA)) then
+      LB(1:1) = lbound(SrcParamData%PA)
+      UB(1:1) = ubound(SrcParamData%PA)
+      if (.not. allocated(DstParamData%PA)) then
+         allocate(DstParamData%PA(LB(1):UB(1)), stat=ErrStat2)
+         if (ErrStat2 /= 0) then
+            call SetErrStat(ErrID_Fatal, 'Error allocating DstParamData%PA.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
+      end if
+      DstParamData%PA = SrcParamData%PA
+   end if
    DstParamData%TwoPiNB = SrcParamData%TwoPiNB
    DstParamData%NAug = SrcParamData%NAug
    DstParamData%NPH = SrcParamData%NPH
@@ -5674,6 +5875,45 @@ subroutine ED_DestroyParam(ParamData, ErrStat, ErrMsg)
    character(*), parameter        :: RoutineName = 'ED_DestroyParam'
    ErrStat = ErrID_None
    ErrMsg  = ''
+   if (allocated(ParamData%DOF_TFA)) then
+      deallocate(ParamData%DOF_TFA)
+   end if
+   if (allocated(ParamData%DOF_TSS)) then
+      deallocate(ParamData%DOF_TSS)
+   end if
+   if (allocated(ParamData%DOF_BP)) then
+      deallocate(ParamData%DOF_BP)
+   end if
+   if (allocated(ParamData%DOF_BE)) then
+      deallocate(ParamData%DOF_BE)
+   end if
+   if (allocated(ParamData%DOF_BF)) then
+      deallocate(ParamData%DOF_BF)
+   end if
+   if (allocated(ParamData%PX)) then
+      deallocate(ParamData%PX)
+   end if
+   if (allocated(ParamData%PF)) then
+      deallocate(ParamData%PF)
+   end if
+   if (allocated(ParamData%PB)) then
+      deallocate(ParamData%PB)
+   end if
+   if (allocated(ParamData%PN)) then
+      deallocate(ParamData%PN)
+   end if
+   if (allocated(ParamData%PR)) then
+      deallocate(ParamData%PR)
+   end if
+   if (allocated(ParamData%PL)) then
+      deallocate(ParamData%PL)
+   end if
+   if (allocated(ParamData%PG)) then
+      deallocate(ParamData%PG)
+   end if
+   if (allocated(ParamData%PA)) then
+      deallocate(ParamData%PA)
+   end if
    if (allocated(ParamData%PH)) then
       deallocate(ParamData%PH)
    end if
@@ -5861,6 +6101,35 @@ subroutine ED_PackParam(RF, Indata)
    call RegPack(RF, InData%BldNodes)
    call RegPack(RF, InData%TipNode)
    call RegPack(RF, InData%NDOF)
+   call RegPack(RF, InData%NTwFAModes)
+   call RegPack(RF, InData%NTwSSModes)
+   call RegPackAlloc(RF, InData%DOF_TFA)
+   call RegPackAlloc(RF, InData%DOF_TSS)
+   call RegPack(RF, InData%DOF_Yaw)
+   call RegPack(RF, InData%DOF_RFrl)
+   call RegPack(RF, InData%DOF_GeAz)
+   call RegPack(RF, InData%DOF_DrTr)
+   call RegPack(RF, InData%DOF_TFrl)
+   call RegPack(RF, InData%DOF_Teet)
+   call RegPackAlloc(RF, InData%DOF_BP)
+   call RegPackAlloc(RF, InData%DOF_BE)
+   call RegPackAlloc(RF, InData%DOF_BF)
+   call RegPack(RF, InData%NPX)
+   call RegPack(RF, InData%NPF)
+   call RegPack(RF, InData%NPB)
+   call RegPack(RF, InData%NPN)
+   call RegPack(RF, InData%NPR)
+   call RegPack(RF, InData%NPL)
+   call RegPack(RF, InData%NPG)
+   call RegPack(RF, InData%NPA)
+   call RegPackAlloc(RF, InData%PX)
+   call RegPackAlloc(RF, InData%PF)
+   call RegPackAlloc(RF, InData%PB)
+   call RegPackAlloc(RF, InData%PN)
+   call RegPackAlloc(RF, InData%PR)
+   call RegPackAlloc(RF, InData%PL)
+   call RegPackAlloc(RF, InData%PG)
+   call RegPackAlloc(RF, InData%PA)
    call RegPack(RF, InData%TwoPiNB)
    call RegPack(RF, InData%NAug)
    call RegPack(RF, InData%NPH)
@@ -6119,6 +6388,35 @@ subroutine ED_UnPackParam(RF, OutData)
    call RegUnpack(RF, OutData%BldNodes); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TipNode); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%NDOF); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NTwFAModes); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NTwSSModes); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%DOF_TFA); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%DOF_TSS); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DOF_Yaw); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DOF_RFrl); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DOF_GeAz); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DOF_DrTr); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DOF_TFrl); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DOF_Teet); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%DOF_BP); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%DOF_BE); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%DOF_BF); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPX); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPF); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPB); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPN); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPR); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPL); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPG); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%NPA); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PX); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PF); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PB); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PN); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PR); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PL); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PG); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpackAlloc(RF, OutData%PA); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%TwoPiNB); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%NAug); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%NPH); if (RegCheckErr(RF, RoutineName)) return

@@ -546,6 +546,35 @@ typedef	^	ParameterType	DbKi	DT24	-	-	-	"=DT/24 (used in loose coupling)"	second
 typedef	^	ParameterType	IntKi	BldNodes	-	-	-	"Number of blade nodes used in the analysis"	-
 typedef	^	ParameterType	IntKi	TipNode	-	-	-	"Index of the additional node located at the blade tip = BldNodes + 1"	-
 typedef	^	ParameterType	IntKi	NDOF	-	-	-	"Number of total degrees of freedom (DOFs)"	-
+typedef	^	ParameterType	IntKi	NTwFAModes	-	-	-	"Number of tower fore-aft bending modes"	-
+typedef	^	ParameterType	IntKi	NTwSSModes	-	-	-	"Number of tower side-to-side bending modes"	-
+typedef	^	ParameterType	IntKi	DOF_TFA	{:}	-	-	"DOF indices of tower FA modes"	-
+typedef	^	ParameterType	IntKi	DOF_TSS	{:}	-	-	"DOF indices of tower SS modes"	-
+typedef	^	ParameterType	IntKi	DOF_Yaw	-	-	-	"DOF index for nacelle yaw"	-
+typedef	^	ParameterType	IntKi	DOF_RFrl	-	-	-	"DOF index for rotor furl"	-
+typedef	^	ParameterType	IntKi	DOF_GeAz	-	-	-	"DOF index for generator azimuth"	-
+typedef	^	ParameterType	IntKi	DOF_DrTr	-	-	-	"DOF index for drivetrain flexibility"	-
+typedef	^	ParameterType	IntKi	DOF_TFrl	-	-	-	"DOF index for tail furl"	-
+typedef	^	ParameterType	IntKi	DOF_Teet	-	-	-	"DOF index for rotor teeter"	-
+typedef	^	ParameterType	IntKi	DOF_BP	{:}	-	-	"DOF indices for blade pitch"	-
+typedef	^	ParameterType	IntKi	DOF_BE	{:}{:}	-	-	"DOF indices for blade edge modes"	-
+typedef	^	ParameterType	IntKi	DOF_BF	{:}{:}	-	-	"DOF indices for blade flap modes"	-
+typedef	^	ParameterType	IntKi	NPX	-	-	-	"Size of PX"	-
+typedef	^	ParameterType	IntKi	NPF	-	-	-	"Size of PF"	-
+typedef	^	ParameterType	IntKi	NPB	-	-	-	"Size of PB"	-
+typedef	^	ParameterType	IntKi	NPN	-	-	-	"Size of PN"	-
+typedef	^	ParameterType	IntKi	NPR	-	-	-	"Size of PR"	-
+typedef	^	ParameterType	IntKi	NPL	-	-	-	"Size of PL"	-
+typedef	^	ParameterType	IntKi	NPG	-	-	-	"Size of PG"	-
+typedef	^	ParameterType	IntKi	NPA	-	-	-	"Size of PA"	-
+typedef	^	ParameterType	IntKi	PX	{:}	-	-	"DOFs contributing to platform angular velocity"	-
+typedef	^	ParameterType	IntKi	PF	{:}	-	-	"DOFs contributing to tower-element angular velocity"	-
+typedef	^	ParameterType	IntKi	PB	{:}	-	-	"DOFs contributing to tower-top/baseplate angular velocity"	-
+typedef	^	ParameterType	IntKi	PN	{:}	-	-	"DOFs contributing to nacelle angular velocity"	-
+typedef	^	ParameterType	IntKi	PR	{:}	-	-	"DOFs contributing to furling-structure angular velocity"	-
+typedef	^	ParameterType	IntKi	PL	{:}	-	-	"DOFs contributing to LSS angular velocity"	-
+typedef	^	ParameterType	IntKi	PG	{:}	-	-	"DOFs contributing to generator angular velocity"	-
+typedef	^	ParameterType	IntKi	PA	{:}	-	-	"DOFs contributing to tail angular velocity"	-
 typedef	^	ParameterType	R8Ki	TwoPiNB	-	-	-	"Two pi divided by the number of blades"	radians
 typedef	^	ParameterType	IntKi	NAug	-	-	-	"Dimension of augmented solution matrix"	-
 typedef	^	ParameterType	IntKi	NPH	-	-	-	"Number of DOFs that contribute to the angular velocity of the hub (body H) in the inertia frame"

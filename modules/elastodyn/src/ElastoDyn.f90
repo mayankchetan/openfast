@@ -2235,6 +2235,9 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    ErrStat = ErrID_None
    ErrMsg  = ''
 
+   p%NTwFAModes = 2      ! A1: legacy input path is fixed at 2+2 modes
+   p%NTwSSModes = 2
+
    IF ( p%NumBl == 1 )  THEN
       p%NDOF = 19
    ELSEIF ( p%NumBl == 2 )  THEN
@@ -2244,6 +2247,19 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    ENDIF
 
    p%NAug = p%NDOF + 1
+
+   CALL SetTowerDOFMap( p, ErrStat, ErrMsg )
+   IF ( ErrStat /= ErrID_None ) RETURN
+
+   ! TEMPORARY A1 scaffolding assertion: map must reproduce legacy constants at 2+2
+   IF ( p%DOF_TFA(1)/=DOF_TFA1 .OR. p%DOF_TSS(1)/=DOF_TSS1 .OR. &
+        p%DOF_TFA(2)/=DOF_TFA2 .OR. p%DOF_TSS(2)/=DOF_TSS2 .OR. &
+        p%DOF_Yaw/=DOF_Yaw .OR. (p%NumBl==2 .AND. p%DOF_Teet/=DOF_Teet) .OR. &
+        p%DOF_BF(3,2)/=DOF_BF(3,2) ) THEN
+      ErrStat = ErrID_Fatal
+      ErrMsg  = 'SetTowerDOFMap does not reproduce legacy DOF numbering.'
+      RETURN
+   END IF
 
    ! ...........................................................................................................................
    ! allocate and set DOF_Flag and DOF_Desc
@@ -6027,6 +6043,87 @@ SUBROUTINE SetEnabledDOFIndexArrays( p )
 
    RETURN
 END SUBROUTINE SetEnabledDOFIndexArrays
+!----------------------------------------------------------------------------------------------------------------------------------
+SUBROUTINE SetTowerDOFMap( p, ErrStat, ErrMsg )
+! Build the runtime DOF index map. Tower FA/SS DOFs interleave (FA1,SS1,FA2,SS2,...)
+! to reproduce legacy numbering (DOF_TFA1=7, DOF_TSS1=8, DOF_TFA2=9, DOF_TSS2=10) at 2+2;
+! every downstream DOF index is its legacy value plus OffTw = NTwFAModes+NTwSSModes-4
+! (identically zero for legacy input, which is what makes the N=2 gate bit-exact).
+   TYPE(ED_ParameterType), INTENT(INOUT) :: p
+   INTEGER(IntKi),         INTENT(OUT)   :: ErrStat
+   CHARACTER(*),           INTENT(OUT)   :: ErrMsg
+   INTEGER(IntKi) :: I, K, idx, nPair, OffTw
+
+   ErrStat = ErrID_None
+   ErrMsg  = ''
+   CALL AllocAry( p%DOF_TFA, p%NTwFAModes, 'p%DOF_TFA', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%DOF_TSS, p%NTwSSModes, 'p%DOF_TSS', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%DOF_BP, MaxBl,        'p%DOF_BP', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%DOF_BE, MaxBl, NumBE, 'p%DOF_BE', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%DOF_BF, MaxBl, NumBF, 'p%DOF_BF', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+
+   nPair = MIN( p%NTwFAModes, p%NTwSSModes )
+   idx   = 6                          ! DOF_Y, last platform DOF
+   DO I = 1,nPair
+      p%DOF_TFA(I) = idx + 1
+      p%DOF_TSS(I) = idx + 2
+      idx = idx + 2
+   END DO
+   DO I = nPair+1,p%NTwFAModes
+      idx = idx + 1
+      p%DOF_TFA(I) = idx
+   END DO
+   DO I = nPair+1,p%NTwSSModes
+      idx = idx + 1
+      p%DOF_TSS(I) = idx
+   END DO
+   OffTw = idx - 10                   ! = NTwFAModes + NTwSSModes - 4
+
+   p%DOF_Yaw  = 11 + OffTw
+   p%DOF_RFrl = 12 + OffTw
+   p%DOF_GeAz = 13 + OffTw
+   p%DOF_DrTr = 14 + OffTw
+   p%DOF_TFrl = 15 + OffTw
+   DO K = 1,MaxBl
+      p%DOF_BP(K)   = p%DOF_TFrl + 4*(K-1) + 1
+      p%DOF_BF(K,1) = p%DOF_TFrl + 4*(K-1) + 2
+      p%DOF_BE(K,1) = p%DOF_TFrl + 4*(K-1) + 3
+      p%DOF_BF(K,2) = p%DOF_TFrl + 4*(K-1) + 4
+   END DO
+   p%DOF_Teet = p%DOF_TFrl + 4*p%NumBl + 1   ! only meaningful for 2-bladed teetering rotors
+
+   ! Ordered DOF-set arrays (legacy PARAMETER PF/PB/... reproduced at runtime).
+   ! Tower block is contiguous ascending [7 .. 6+NTw], matching the legacy
+   ! interleaved order (TFA1, TSS1, TFA2, TSS2).
+   p%NPX = 3
+   p%NPF = 3 + p%NTwFAModes + p%NTwSSModes
+   p%NPB = p%NPF
+   p%NPN = p%NPF + 1
+   p%NPR = p%NPF + 2
+   p%NPG = p%NPF + 3
+   p%NPL = p%NPF + 4
+   p%NPA = p%NPF + 2
+   CALL AllocAry( p%PX, p%NPX, 'p%PX', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PF, p%NPF, 'p%PF', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PB, p%NPB, 'p%PB', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PN, p%NPN, 'p%PN', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PR, p%NPR, 'p%PR', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PG, p%NPG, 'p%PG', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PL, p%NPL, 'p%PL', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+   CALL AllocAry( p%PA, p%NPA, 'p%PA', ErrStat, ErrMsg ); IF (ErrStat >= AbortErrLev) RETURN
+
+   p%PX = (/ DOF_R, DOF_P, DOF_Y /)
+   p%PF(1:3) = p%PX
+   DO I = 1, p%NTwFAModes + p%NTwSSModes
+      p%PF(3+I) = 6 + I               ! contiguous tower block
+   END DO
+   p%PB = p%PF
+   p%PN = (/ p%PF, p%DOF_Yaw /)
+   p%PR = (/ p%PN, p%DOF_RFrl /)
+   p%PG = (/ p%PR, p%DOF_GeAz /)
+   p%PL = (/ p%PG, p%DOF_DrTr /)
+   p%PA = (/ p%PN, p%DOF_TFrl /)
+END SUBROUTINE SetTowerDOFMap
 !----------------------------------------------------------------------------------------------------------------------------------
 !> This routine is used to define the internal coordinate systems for this particular time step.
 !! It also sets the TeeterAng and TeetAngVel for this time step.
