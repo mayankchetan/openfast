@@ -131,9 +131,15 @@ to pick up:
   retained for provenance only, superseded by `baseline-fpoff.*`.
 - `p%PH`/`p%PM` arrays converted to allocatable but **not** generalized past
   2+2 explicit tower-DOF references — deferred to A1′ (seam #2 above).
-- `TwrAxRedDisp` (new helper in `40a54ee12`) is a candidate for `PURE`
-  attribute; not applied in this branch (no correctness impact, deferred as
-  a style/optimization item).
+- `TwrAxRedDisp` (new helper in `40a54ee12`) is now marked `PURE` (all
+  dummies `INTENT(IN)`, no I/O, no impure calls; no correctness impact,
+  style/optimization item).
+- `TwrModeOrd` (mode-ordinal helper, `40a54ee12`) returns a `CHARACTER(4)`
+  result built from `SELECT CASE`/`Num2LStr(i)//'th'`; the truncation to 4
+  characters actually bites starting at the **100th** mode (`'100th'` is 5
+  characters), not the 1000th as an earlier draft of this note stated. Moot
+  behind the Finding-1 fatal mode-count guard at 2+2, not changed in
+  Fortran.
 
 ## Grep audit of remaining literal-2 tower assumptions
 
@@ -161,6 +167,18 @@ requirement):
   linearization Perturb-factor schedule (`0.020, 0.002`), size-2 by design
   since it encodes two specific legacy perturbation magnitudes, not a mode
   count.
+- `FAStTunr(2)`/`SSStTunr(2)`, `TwrFADmp(2)`/`TwrSSDmp(2)` — size-2 Registry
+  input arrays (per-mode stiffness tuners and structural-damping ratios)
+  indexed up to `p%NTwFAModes`/`p%NTwSSModes` in `Coeff`'s tuner and damping
+  loops; correct only because those counts are hardcoded to 2 (seam #1).
+
+All of the above seams — the two A1′ seams, the legacy-input-path literal-2
+sites, and these four size-2 tuner/damping arrays — are now guarded by a
+single fatal mode-count check (`Init_DOFparameters`, immediately after
+`p%NTwFAModes`/`p%NTwSSModes` are set): any future `N /= 2` fails loudly at
+one well-located point instead of silently corrupting physics. This check is
+the A1′ checklist — every site above must be generalized before it can be
+relaxed.
 
 **No hit represents a tower-mode assumption that would silently break at
 N>2** — the "must be empty or reported" list is empty.

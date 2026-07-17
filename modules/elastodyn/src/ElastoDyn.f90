@@ -2241,6 +2241,13 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    p%NTwFAModes = 2      ! A1: legacy input path is fixed at 2+2 modes
    p%NTwSSModes = 2
 
+   IF ( p%NTwFAModes /= 2 .OR. p%NTwSSModes /= 2 ) THEN
+      ErrStat = ErrID_Fatal
+      ErrMsg  = 'Init_DOFparameters: ElastoDyn tower is fixed at 2 FA + 2 SS modes in this build;'// &
+                ' other mode counts require the internal-eigensolve input path (not yet available).'
+      RETURN
+   END IF
+
    IF ( p%NumBl == 1 )  THEN
       p%NDOF = 19 + (p%NTwFAModes + p%NTwSSModes - 4)
    ELSEIF ( p%NumBl == 2 )  THEN
@@ -6125,7 +6132,7 @@ END SUBROUTINE SetTowerDOFMap
 !----------------------------------------------------------------------------------------------------------------------------------
 !> Returns 0.5 * q^T AxRed(node) q, summed FA then SS, diagonals first then 2x upper
 !! triangle -- term order matches the legacy hand expansion exactly at N=2.
-FUNCTION TwrAxRedDisp( p, QT, node ) RESULT( dz )
+PURE FUNCTION TwrAxRedDisp( p, QT, node ) RESULT( dz )
    TYPE(ED_ParameterType), INTENT(IN) :: p
    REAL(R8Ki),             INTENT(IN) :: QT(:)     ! full x%QT
    INTEGER(IntKi),         INTENT(IN) :: node
