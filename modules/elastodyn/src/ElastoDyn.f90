@@ -1403,10 +1403,10 @@ SUBROUTINE ED_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
    m%AllOuts( Q_RFrl   ) = x%QT(   p%DOF_RFrl    )
    m%AllOuts( Q_TFrl   ) = x%QT(   p%DOF_TFrl    )
    m%AllOuts( Q_Yaw    ) = x%QT(   p%DOF_Yaw     )
-   m%AllOuts( Q_TFA1   ) = x%QT(   DOF_TFA1    )
-   m%AllOuts( Q_TSS1   ) = x%QT(   DOF_TSS1    )
-   m%AllOuts( Q_TFA2   ) = x%QT(   DOF_TFA2    )
-   m%AllOuts( Q_TSS2   ) = x%QT(   DOF_TSS2    )
+   m%AllOuts( Q_TFA1   ) = x%QT(   p%DOF_TFA(1)    )
+   m%AllOuts( Q_TSS1   ) = x%QT(   p%DOF_TSS(1)    )
+   m%AllOuts( Q_TFA2   ) = x%QT(   p%DOF_TFA(2)    )
+   m%AllOuts( Q_TSS2   ) = x%QT(   p%DOF_TSS(2)    )
    m%AllOuts( Q_Sg     ) = x%QT(   DOF_Sg      )
    m%AllOuts( Q_Sw     ) = x%QT(   DOF_Sw      )
    m%AllOuts( Q_Hv     ) = x%QT(   DOF_Hv      )
@@ -1422,10 +1422,10 @@ SUBROUTINE ED_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
    m%AllOuts( QD_RFrl  ) = x%QDT(  p%DOF_RFrl    )
    m%AllOuts( QD_TFrl  ) = x%QDT(  p%DOF_TFrl    )
    m%AllOuts( QD_Yaw   ) = x%QDT(  p%DOF_Yaw     )
-   m%AllOuts( QD_TFA1  ) = x%QDT(  DOF_TFA1    )
-   m%AllOuts( QD_TSS1  ) = x%QDT(  DOF_TSS1    )
-   m%AllOuts( QD_TFA2  ) = x%QDT(  DOF_TFA2    )
-   m%AllOuts( QD_TSS2  ) = x%QDT(  DOF_TSS2    )
+   m%AllOuts( QD_TFA1  ) = x%QDT(  p%DOF_TFA(1)    )
+   m%AllOuts( QD_TSS1  ) = x%QDT(  p%DOF_TSS(1)    )
+   m%AllOuts( QD_TFA2  ) = x%QDT(  p%DOF_TFA(2)    )
+   m%AllOuts( QD_TSS2  ) = x%QDT(  p%DOF_TSS(2)    )
    m%AllOuts( QD_Sg    ) = x%QDT(  DOF_Sg      )
    m%AllOuts( QD_Sw    ) = x%QDT(  DOF_Sw      )
    m%AllOuts( QD_Hv    ) = x%QDT(  DOF_Hv      )
@@ -1441,10 +1441,10 @@ SUBROUTINE ED_CalcOutput( t, u, p, x, xd, z, OtherState, y, m, ErrStat, ErrMsg )
    m%AllOuts( QD2_RFrl ) = m%QD2T( p%DOF_RFrl    )
    m%AllOuts( QD2_TFrl ) = m%QD2T( p%DOF_TFrl    )
    m%AllOuts( QD2_Yaw  ) = m%QD2T( p%DOF_Yaw     )
-   m%AllOuts( QD2_TFA1 ) = m%QD2T( DOF_TFA1    )
-   m%AllOuts( QD2_TSS1 ) = m%QD2T( DOF_TSS1    )
-   m%AllOuts( QD2_TFA2 ) = m%QD2T( DOF_TFA2    )
-   m%AllOuts( QD2_TSS2 ) = m%QD2T( DOF_TSS2    )
+   m%AllOuts( QD2_TFA1 ) = m%QD2T( p%DOF_TFA(1)    )
+   m%AllOuts( QD2_TSS1 ) = m%QD2T( p%DOF_TSS(1)    )
+   m%AllOuts( QD2_TFA2 ) = m%QD2T( p%DOF_TFA(2)    )
+   m%AllOuts( QD2_TSS2 ) = m%QD2T( p%DOF_TSS(2)    )
    m%AllOuts( QD2_Sg   ) = m%QD2T( DOF_Sg      )
    m%AllOuts( QD2_Sw   ) = m%QD2T( DOF_Sw      )
    m%AllOuts( QD2_Hv   ) = m%QD2T( DOF_Hv      )
@@ -2254,18 +2254,6 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    CALL SetTowerDOFMap( p, ErrStat, ErrMsg )
    IF ( ErrStat /= ErrID_None ) RETURN
 
-   ! TEMPORARY A1 scaffolding assertion: tower-mode portion of the map must reproduce
-   ! the (still-live) legacy tower constants at 2+2. The Yaw/Teet/BF legacy PARAMETERs
-   ! this assertion used to also cross-check were retired in this task (their runtime
-   ! p%DOF_* map is now the sole source of truth), so those clauses were removed rather
-   ! than left as a self-comparison tautology.
-   IF ( p%DOF_TFA(1)/=DOF_TFA1 .OR. p%DOF_TSS(1)/=DOF_TSS1 .OR. &
-        p%DOF_TFA(2)/=DOF_TFA2 .OR. p%DOF_TSS(2)/=DOF_TSS2 ) THEN
-      ErrStat = ErrID_Fatal
-      ErrMsg  = 'SetTowerDOFMap does not reproduce legacy DOF numbering.'
-      RETURN
-   END IF
-
    ! ...........................................................................................................................
    ! allocate and set DOF_Flag and DOF_Desc
    ! ...........................................................................................................................
@@ -2412,7 +2400,7 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
    ENDIF
 
       ! Array of DOF indices (pointers) that contribute to the angular velocity of the hub (body H) in the inertia frame:
-   p%PH(1:11) = (/ DOF_R, DOF_P, DOF_Y, DOF_TFA1, DOF_TSS1, DOF_TFA2, DOF_TSS2, p%DOF_Yaw, p%DOF_RFrl, p%DOF_GeAz, p%DOF_DrTr /)
+   p%PH(1:11) = (/ DOF_R, DOF_P, DOF_Y, p%DOF_TFA(1), p%DOF_TSS(1), p%DOF_TFA(2), p%DOF_TSS(2), p%DOF_Yaw, p%DOF_RFrl, p%DOF_GeAz, p%DOF_DrTr /)
 
    IF ( p%NumBl == 2 )  THEN ! 2-blader (add p%DOF_Teet to the arrays)
 
@@ -2420,7 +2408,7 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
 
          ! Array of DOF indices (pointers) that contribute to the angular velocity of the blade elements (body M) in the inertia frame:
       DO K = 1,p%NumBl ! Loop through all blades
-         p%PM(K,:) = (/ DOF_R, DOF_P, DOF_Y, DOF_TFA1, DOF_TSS1, DOF_TFA2, DOF_TSS2, p%DOF_Yaw, p%DOF_RFrl, p%DOF_GeAz, p%DOF_DrTr, &
+         p%PM(K,:) = (/ DOF_R, DOF_P, DOF_Y, p%DOF_TFA(1), p%DOF_TSS(1), p%DOF_TFA(2), p%DOF_TSS(2), p%DOF_Yaw, p%DOF_RFrl, p%DOF_GeAz, p%DOF_DrTr, &
                         p%DOF_Teet,  p%DOF_BP(K) , p%DOF_BF(K,1) , p%DOF_BE(K,1)    , p%DOF_BF(K,2)          /)
       ENDDO          ! K - All blades
 
@@ -2428,7 +2416,7 @@ SUBROUTINE Init_DOFparameters( InputFileData, p, ErrStat, ErrMsg )
 
          ! Array of DOF indices (pointers) that contribute to the angular velocity of the blade elements (body M) in the inertia frame:
       DO K = 1,p%NumBl ! Loop through all blades
-         p%PM(K,:) = (/ DOF_R, DOF_P, DOF_Y, DOF_TFA1, DOF_TSS1, DOF_TFA2, DOF_TSS2, p%DOF_Yaw, p%DOF_RFrl, p%DOF_GeAz, p%DOF_DrTr, &
+         p%PM(K,:) = (/ DOF_R, DOF_P, DOF_Y, p%DOF_TFA(1), p%DOF_TSS(1), p%DOF_TFA(2), p%DOF_TSS(2), p%DOF_Yaw, p%DOF_RFrl, p%DOF_GeAz, p%DOF_DrTr, &
                                    p%DOF_BP(K) , p%DOF_BF(K,1) , p%DOF_BE(K,1)    , p%DOF_BF(K,2)         /)
       ENDDO          ! K - All blades
 
@@ -8438,10 +8426,11 @@ SUBROUTINE FillAugMat( p, x, CoordSys, u, HSSBrTrq, RtHSdat, AugMat )
    INTEGER(IntKi)               :: J                                               ! Counter for elements
    INTEGER(IntKi)               :: K                                               ! Counter for blades
    INTEGER(IntKi)               :: L                                               ! Generic index
+   INTEGER(IntKi)               :: M                                               ! Loops through tower modes
 
-   
+
       ! Initialize the matrix:
-      
+
    AugMat      = 0.0
    GBoxTrq    = ( u%GenTrq + HSSBrTrq )*ABS(p%GBRatio) ! bjj: do we use HSSBrTrqC or HSSBrTrq?
    
@@ -8711,58 +8700,36 @@ SUBROUTINE FillAugMat( p, x, CoordSys, u, HSSBrTrq, RtHSdat, AugMat )
          AugMat(DOF_Y   ,         p%NAug) =     DOT_PRODUCT( RtHSdat%PAngVelEX(DOF_Y  ,0,:), RtHSdat%MomXAllt              )        ! {-f(qd,q,t)}X + {-f(qd,q,t)}GravX + {-f(qd,q,t)}HydroX + {-f(qd,q,t)}T + {-f(qd,q,t)}GravT + {-f(qd,q,t)}AeroT + {-f(qd,q,t)}HydroT + {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
    ENDIF
 
-   IF ( p%DOF_Flag (DOF_TFA1) )  THEN
-      DO I = p%DOFs%Diag(DOF_TFA1),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
-         AugMat(p%DOFs%SrtPS(I),DOF_TFA1) = AugMat(p%DOFs%SrtPS(I),DOF_TFA1)                             &
-                                          -  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TFA1,0,:),       &
-                                                          RtHSdat%PFrcONcRt(:,p%DOFs%SrtPS(I)) ) &                          ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
-                                          -  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TFA1,0,:),       &
-                                                          RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )
-      ENDDO                            ! I - All active (enabled) DOFs on or below the diagonal
-         AugMat(DOF_TFA1,         p%NAug) = AugMat(DOF_TFA1,    p%NAug)                                  &
-                                          +  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TFA1,0,:), RtHSdat%FrcONcRtt  ) &   ! {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
-                                          +  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TFA1,0,:), RtHSdat%MomBNcRtt  )
-   ENDIF
+   DO M = 1,p%NTwFAModes
+      IF ( p%DOF_Flag (p%DOF_TFA(M)) )  THEN
+         DO I = p%DOFs%Diag(p%DOF_TFA(M)),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
+            AugMat(p%DOFs%SrtPS(I),p%DOF_TFA(M)) = AugMat(p%DOFs%SrtPS(I),p%DOF_TFA(M))                             &
+                                             -  DOT_PRODUCT( RtHSdat%PLinVelEO(p%DOF_TFA(M),0,:),       &
+                                                             RtHSdat%PFrcONcRt(:,p%DOFs%SrtPS(I)) ) &                          ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
+                                             -  DOT_PRODUCT( RtHSdat%PAngVelEB(p%DOF_TFA(M),0,:),       &
+                                                             RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )
+         ENDDO                            ! I - All active (enabled) DOFs on or below the diagonal
+            AugMat(p%DOF_TFA(M),         p%NAug) = AugMat(p%DOF_TFA(M),    p%NAug)                                  &
+                                             +  DOT_PRODUCT( RtHSdat%PLinVelEO(p%DOF_TFA(M),0,:), RtHSdat%FrcONcRtt  ) &   ! {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
+                                             +  DOT_PRODUCT( RtHSdat%PAngVelEB(p%DOF_TFA(M),0,:), RtHSdat%MomBNcRtt  )
+      ENDIF
+   END DO
 
-   IF ( p%DOF_Flag (DOF_TSS1) )  THEN
-      DO I = p%DOFs%Diag(DOF_TSS1),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
-         AugMat(p%DOFs%SrtPS(I),DOF_TSS1) = AugMat(p%DOFs%SrtPS(I),DOF_TSS1)                             &
-                                          -  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TSS1,0,:),       &
-                                                          RtHSdat%PFrcONcRt(:,p%DOFs%SrtPS(I)) ) &                          ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
-                                          -  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TSS1,0,:),       &
-                                                          RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )
-      ENDDO                            ! I - All active (enabled) DOFs on or below the diagonal
-         AugMat(DOF_TSS1,         p%NAug) = AugMat(DOF_TSS1,    p%NAug)                                  &
-                                          +  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TSS1,0,:), RtHSdat%FrcONcRtt  ) &   ! {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
-                                          +  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TSS1,0,:), RtHSdat%MomBNcRtt  )
-   ENDIF
+   DO M = 1,p%NTwSSModes
+      IF ( p%DOF_Flag (p%DOF_TSS(M)) )  THEN
+         DO I = p%DOFs%Diag(p%DOF_TSS(M)),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
+            AugMat(p%DOFs%SrtPS(I),p%DOF_TSS(M)) = AugMat(p%DOFs%SrtPS(I),p%DOF_TSS(M))                             &
+                                             -  DOT_PRODUCT( RtHSdat%PLinVelEO(p%DOF_TSS(M),0,:),       &
+                                                             RtHSdat%PFrcONcRt(:,p%DOFs%SrtPS(I)) ) &                          ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
+                                             -  DOT_PRODUCT( RtHSdat%PAngVelEB(p%DOF_TSS(M),0,:),       &
+                                                             RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )
+         ENDDO                            ! I - All active (enabled) DOFs on or below the diagonal
+            AugMat(p%DOF_TSS(M),         p%NAug) = AugMat(p%DOF_TSS(M),    p%NAug)                                  &
+                                             +  DOT_PRODUCT( RtHSdat%PLinVelEO(p%DOF_TSS(M),0,:), RtHSdat%FrcONcRtt  ) &   ! {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
+                                             +  DOT_PRODUCT( RtHSdat%PAngVelEB(p%DOF_TSS(M),0,:), RtHSdat%MomBNcRtt  )
+      ENDIF
+   END DO
 
-   IF ( p%DOF_Flag (DOF_TFA2) )  THEN
-      DO I = p%DOFs%Diag(DOF_TFA2),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
-         AugMat(p%DOFs%SrtPS(I),DOF_TFA2) = AugMat(p%DOFs%SrtPS(I),DOF_TFA2)                             &
-                                          -  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TFA2,0,:),       &
-                                                          RtHSdat%PFrcONcRt(:,p%DOFs%SrtPS(I)) ) &                          ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
-                                          -  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TFA2,0,:),       &
-                                                          RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )
-      ENDDO                            ! I - All active (enabled) DOFs on or below the diagonal
-         AugMat(DOF_TFA2,         p%NAug) = AugMat(DOF_TFA2,    p%NAug)                                  &
-                                          +  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TFA2,0,:), RtHSdat%FrcONcRtt  ) &   ! {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
-                                          +  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TFA2,0,:), RtHSdat%MomBNcRtt  )
-   ENDIF
-
-   IF ( p%DOF_Flag (DOF_TSS2) )  THEN
-      DO I = p%DOFs%Diag(DOF_TSS2),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
-         AugMat(p%DOFs%SrtPS(I),DOF_TSS2) = AugMat(p%DOFs%SrtPS(I),DOF_TSS2)                             &
-                                          -  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TSS2,0,:),       &
-                                                          RtHSdat%PFrcONcRt(:,p%DOFs%SrtPS(I)) ) &                          ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
-                                          -  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TSS2,0,:),       &
-                                                          RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )
-      ENDDO                            ! I - All active (enabled) DOFs on or below the diagonal
-         AugMat(DOF_TSS2,         p%NAug) = AugMat(DOF_TSS2,    p%NAug)                                  &
-                                          +  DOT_PRODUCT( RtHSdat%PLinVelEO(DOF_TSS2,0,:), RtHSdat%FrcONcRtt  ) &   ! {-f(qd,q,t)}N + {-f(qd,q,t)}GravN + {-f(qd,q,t)}R + {-f(qd,q,t)}GravR + {-f(qd,q,t)}G + {-f(qd,q,t)}H + {-f(qd,q,t)}GravH + {-f(qd,q,t)}B + {-f(qd,q,t)}GravB + {-f(qd,q,t)}AeroB + {-f(qd,q,t)}A + {-f(qd,q,t)}GravA + {-f(qd,q,t)}AeroA
-                                          +  DOT_PRODUCT( RtHSdat%PAngVelEB(DOF_TSS2,0,:), RtHSdat%MomBNcRtt  )
-   ENDIF
-   
    IF ( p%DOF_Flag (p%DOF_Yaw ) )  THEN
       DO I = p%DOFs%Diag(p%DOF_Yaw ),p%DOFs%NActvDOF   ! Loop through all active (enabled) DOFs on or below the diagonal
          AugMat(p%DOFs%SrtPS(I),p%DOF_Yaw ) = -DOT_PRODUCT( RtHSdat%PAngVelEN(p%DOF_Yaw ,0,:), RtHSdat%PMomBNcRt(:,p%DOFs%SrtPS(I)) )   ! [C(q,t)]N + [C(q,t)]R + [C(q,t)]G + [C(q,t)]H + [C(q,t)]B + [C(q,t)]A
@@ -11205,6 +11172,11 @@ subroutine ED_InitVars(u, p, x, y, m, Vars, InputFileData, Linearize, ErrStat, E
    integer(IntKi), allocatable   :: BladeMeshFields(:)
    real(R8Ki)                    :: MaxThrust, MaxTorque, ScaleLength
    integer(IntKi)                :: Flags, Field
+   logical                       :: TwFADOF(p%NTwFAModes)  ! Local repack of TwFADOF1/TwFADOF2 for looping
+   logical                       :: TwSSDOF(p%NTwSSModes)  ! Local repack of TwSSDOF1/TwSSDOF2 for looping
+   integer(IntKi)                :: nPair                  ! Number of interleaved FA/SS mode pairs (legacy .lin name/order contract)
+   real(R8Ki), parameter         :: TwrFAPerturbFact(2) = (/ 0.020_R8Ki, 0.002_R8Ki /)  ! legacy per-mode Perturb factors (fore-aft)
+   real(R8Ki), parameter         :: TwrSSPerturbFact(2) = (/ 0.020_R8Ki, 0.002_R8Ki /)  ! legacy per-mode Perturb factors (side-to-side)
 
    ErrStat = ErrID_None
    ErrMsg = ""
@@ -11259,33 +11231,49 @@ subroutine ED_InitVars(u, p, x, y, m, Vars, InputFileData, Linearize, ErrStat, E
                   LinNames=['Platform yaw rotation DOF (internal DOF index = DOF_Y), rad'], &
                   Active=InputFileData%PtfmYDOF)
 
-   call MV_AddVar(Vars%x, 'TowerFA1', FieldTransDisp, &
-                  DL=DatLoc(ED_x_QT), iAry=DOF_TFA1, &
-                  Flags=VF_DerivOrder2, &
-                  Perturb=0.020_R8Ki * D2R_D * p%TwrFlexL, &
-                  LinNames=['1st tower fore-aft bending mode DOF (internal DOF index = DOF_TFA1), m'], &
-                  Active=InputFileData%TwFADOF1)
+   ! Tower fore-aft / side-to-side bending-mode DOFs.
+   ! Legacy call order was interleaved by mode number (FA1, SS1, FA2, SS2, ...); reproduce that
+   ! order exactly since Vars%x registration order sets the .lin state ordering (bit-for-bit).
+   ! TwrFAPerturbFact/TwrSSPerturbFact hard-code the legacy 2-mode Perturb schedule (0.020, 0.002,
+   ! decreasing by mode); a general N-mode formula is left to a future generalization of the tower
+   ! input path (still fixed at 2+2 here).
+   TwFADOF = (/ InputFileData%TwFADOF1, InputFileData%TwFADOF2 /)   ! local LOGICAL(2)
+   TwSSDOF = (/ InputFileData%TwSSDOF1, InputFileData%TwSSDOF2 /)
 
-   call MV_AddVar(Vars%x, 'TowerSS1', FieldTransDisp, &
-                  DL=DatLoc(ED_x_QT), iAry=DOF_TSS1, &
-                  Flags=VF_DerivOrder2, &
-                  Perturb=0.020_R8Ki * D2R_D * p%TwrFlexL, &
-                  LinNames=['1st tower side-to-side bending mode DOF (internal DOF index = DOF_TSS1), m'], &
-                  Active=InputFileData%TwSSDOF1)
+   nPair = MIN(p%NTwFAModes, p%NTwSSModes)
+   do i = 1, nPair
+      call MV_AddVar(Vars%x, 'TowerFA'//trim(Num2LStr(i)), FieldTransDisp, &
+                     DL=DatLoc(ED_x_QT), iAry=p%DOF_TFA(i), &
+                     Flags=VF_DerivOrder2, &
+                     Perturb=TwrFAPerturbFact(i) * D2R_D * p%TwrFlexL, &
+                     LinNames=[trim(TwrModeOrd(i))//' tower fore-aft bending mode DOF (internal DOF index = DOF_TFA'//trim(Num2LStr(i))//'), m'], &
+                     Active=TwFADOF(i))
 
-   call MV_AddVar(Vars%x, 'TowerFA2', FieldTransDisp, &
-                  DL=DatLoc(ED_x_QT), iAry=DOF_TFA2, &
-                  Flags=VF_DerivOrder2, &
-                  Perturb=0.002_R8Ki * D2R_D * p%TwrFlexL, &
-                  LinNames=['2nd tower fore-aft bending mode DOF (internal DOF index = DOF_TFA2), m'], &
-                  Active=InputFileData%TwFADOF2)
+      call MV_AddVar(Vars%x, 'TowerSS'//trim(Num2LStr(i)), FieldTransDisp, &
+                     DL=DatLoc(ED_x_QT), iAry=p%DOF_TSS(i), &
+                     Flags=VF_DerivOrder2, &
+                     Perturb=TwrSSPerturbFact(i) * D2R_D * p%TwrFlexL, &
+                     LinNames=[trim(TwrModeOrd(i))//' tower side-to-side bending mode DOF (internal DOF index = DOF_TSS'//trim(Num2LStr(i))//'), m'], &
+                     Active=TwSSDOF(i))
+   end do
 
-   call MV_AddVar(Vars%x, 'TowerSS2', FieldTransDisp, &
-                  DL=DatLoc(ED_x_QT), iAry=DOF_TSS2, &
-                  Flags=VF_DerivOrder2, &
-                  Perturb=0.002_R8Ki * D2R_D * p%TwrFlexL, &
-                  LinNames=['2nd tower side-to-side bending mode DOF (internal DOF index = DOF_TSS2), m'], &
-                  Active=InputFileData%TwSSDOF2)
+   do i = nPair+1, p%NTwFAModes
+      call MV_AddVar(Vars%x, 'TowerFA'//trim(Num2LStr(i)), FieldTransDisp, &
+                     DL=DatLoc(ED_x_QT), iAry=p%DOF_TFA(i), &
+                     Flags=VF_DerivOrder2, &
+                     Perturb=TwrFAPerturbFact(i) * D2R_D * p%TwrFlexL, &
+                     LinNames=[trim(TwrModeOrd(i))//' tower fore-aft bending mode DOF (internal DOF index = DOF_TFA'//trim(Num2LStr(i))//'), m'], &
+                     Active=TwFADOF(i))
+   end do
+
+   do i = nPair+1, p%NTwSSModes
+      call MV_AddVar(Vars%x, 'TowerSS'//trim(Num2LStr(i)), FieldTransDisp, &
+                     DL=DatLoc(ED_x_QT), iAry=p%DOF_TSS(i), &
+                     Flags=VF_DerivOrder2, &
+                     Perturb=TwrSSPerturbFact(i) * D2R_D * p%TwrFlexL, &
+                     LinNames=[trim(TwrModeOrd(i))//' tower side-to-side bending mode DOF (internal DOF index = DOF_TSS'//trim(Num2LStr(i))//'), m'], &
+                     Active=TwSSDOF(i))
+   end do
 
    call MV_AddVar(Vars%x, 'NacelleYaw', FieldAngularDisp, &
                   DL=DatLoc(ED_x_QT), iAry=p%DOF_Yaw, &
