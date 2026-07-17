@@ -6130,6 +6130,34 @@ SUBROUTINE SetTowerDOFMap( p, ErrStat, ErrMsg )
    p%PA = (/ p%PN, p%DOF_TFrl /)
 END SUBROUTINE SetTowerDOFMap
 !----------------------------------------------------------------------------------------------------------------------------------
+!> Returns 0.5 * q^T AxRed(node) q, summed FA then SS, diagonals first then 2x upper
+!! triangle -- term order matches the legacy hand expansion exactly at N=2.
+FUNCTION TwrAxRedDisp( p, QT, node ) RESULT( dz )
+   TYPE(ED_ParameterType), INTENT(IN) :: p
+   REAL(R8Ki),             INTENT(IN) :: QT(:)     ! full x%QT
+   INTEGER(IntKi),         INTENT(IN) :: node
+   REAL(R8Ki)                         :: dz
+   INTEGER(IntKi) :: I, L
+   dz = 0.0_R8Ki
+   DO I = 1,p%NTwFAModes
+      dz = dz + p%AxRedTFA(I,I,node)*QT(p%DOF_TFA(I))*QT(p%DOF_TFA(I))
+   END DO
+   DO I = 1,p%NTwFAModes-1
+      DO L = I+1,p%NTwFAModes
+         dz = dz + 2.0*p%AxRedTFA(I,L,node)*QT(p%DOF_TFA(I))*QT(p%DOF_TFA(L))
+      END DO
+   END DO
+   DO I = 1,p%NTwSSModes
+      dz = dz + p%AxRedTSS(I,I,node)*QT(p%DOF_TSS(I))*QT(p%DOF_TSS(I))
+   END DO
+   DO I = 1,p%NTwSSModes-1
+      DO L = I+1,p%NTwSSModes
+         dz = dz + 2.0*p%AxRedTSS(I,L,node)*QT(p%DOF_TSS(I))*QT(p%DOF_TSS(L))
+      END DO
+   END DO
+   dz = 0.5*dz
+END FUNCTION TwrAxRedDisp
+!----------------------------------------------------------------------------------------------------------------------------------
 !> This routine is used to define the internal coordinate systems for this particular time step.
 !! It also sets the TeeterAng and TeetAngVel for this time step.
 SUBROUTINE SetCoordSy( t, CoordSys, RtHSdat, BlPitch, p, x, ErrStat, ErrMsg )
@@ -6181,6 +6209,7 @@ SUBROUTINE SetCoordSy( t, CoordSys, RtHSdat, BlPitch, p, x, ErrStat, ErrMsg )
    REAL(R8Ki)                   :: ThetaSS                                         ! Tower side-to-side tilt deflection angle.
    REAL(R8Ki)                   :: TransMat  (3,3)                                 ! The resulting transformation matrix due to three orthogonal rotations, (-).
 
+   INTEGER(IntKi)               :: I                                               ! Loops through tower modes.
    INTEGER(IntKi)               :: J                                               ! Loops through nodes / elements.
    INTEGER(IntKi)               :: K                                               ! Loops through blades.
 
@@ -6229,8 +6258,14 @@ SUBROUTINE SetCoordSy( t, CoordSys, RtHSdat, BlPitch, p, x, ErrStat, ErrMsg )
 
       ! Tower element-fixed coordinate system:
 
-      ThetaFA = -p%TwrFASF(1,J       ,1)*x%QT(DOF_TFA1) - p%TwrFASF(2,J       ,1)*x%QT(DOF_TFA2)
-      ThetaSS =  p%TwrSSSF(1,J       ,1)*x%QT(DOF_TSS1) + p%TwrSSSF(2,J       ,1)*x%QT(DOF_TSS2)
+      ThetaFA = 0.0_R8Ki
+      DO I = 1,p%NTwFAModes
+         ThetaFA = ThetaFA - p%TwrFASF(I,J       ,1)*x%QT(p%DOF_TFA(I))
+      END DO
+      ThetaSS = 0.0_R8Ki
+      DO I = 1,p%NTwSSModes
+         ThetaSS = ThetaSS + p%TwrSSSF(I,J       ,1)*x%QT(p%DOF_TSS(I))
+      END DO
 
       CALL SmllRotTrans( 'tower deflection (ElastoDyn SetCoordSy)', ThetaSS, 0.0_R8Ki, ThetaFA, TransMat, ErrStat=ErrStat2, ErrMsg=ErrMsg2 )   ! Get the transformation matrix, TransMat, from tower-base to tower element-fixed coordinate systems.
          CALL CheckError( ErrStat2, ErrMsg2 )
@@ -6246,8 +6281,14 @@ SUBROUTINE SetCoordSy( t, CoordSys, RtHSdat, BlPitch, p, x, ErrStat, ErrMsg )
 
       ! Tower-top / base plate coordinate system:
 
-   ThetaFA    = -p%TwrFASF(1,p%TTopNode,1)*x%QT(DOF_TFA1) - p%TwrFASF(2,p%TTopNode,1)*x%QT(DOF_TFA2)
-   ThetaSS    =  p%TwrSSSF(1,p%TTopNode,1)*x%QT(DOF_TSS1) + p%TwrSSSF(2,p%TTopNode,1)*x%QT(DOF_TSS2)
+   ThetaFA    = 0.0_R8Ki
+   DO I = 1,p%NTwFAModes
+      ThetaFA = ThetaFA - p%TwrFASF(I,p%TTopNode,1)*x%QT(p%DOF_TFA(I))
+   END DO
+   ThetaSS    = 0.0_R8Ki
+   DO I = 1,p%NTwSSModes
+      ThetaSS = ThetaSS + p%TwrSSSF(I,p%TTopNode,1)*x%QT(p%DOF_TSS(I))
+   END DO
 
    CALL SmllRotTrans( 'tower deflection (ElastoDyn SetCoordSy)', ThetaSS, 0.0_R8Ki, ThetaFA, TransMat, ErrStat=ErrStat2, ErrMsg=ErrMsg2 )   ! Get the transformation matrix, TransMat, from tower-base to tower-top/base-plate coordinate systems.
       CALL CheckError( ErrStat2, ErrMsg2 )
@@ -6792,8 +6833,11 @@ SUBROUTINE CalculatePositions( p, x, CoordSys, RtHSdat )
       !Local variables
    !REAL(R8Ki)                   :: rQ        (3)                                   ! Position vector from inertial frame origin to apex of rotation (point Q).
 
+   INTEGER(IntKi)               :: I                                               ! Counter for tower modes
    INTEGER(IntKi)               :: J                                               ! Counter for elements
    INTEGER(IntKi)               :: K                                               ! Counter for blades
+   REAL(R8Ki)                   :: TmpSumFA                                        ! Accumulator for fore-aft tower-mode contributions.
+   REAL(R8Ki)                   :: TmpSumSS                                        ! Accumulator for side-to-side tower-mode contributions.
 
       !-------------------------------------------------------------------------------------------------
       ! Positions
@@ -6805,14 +6849,17 @@ SUBROUTINE CalculatePositions( p, x, CoordSys, RtHSdat )
    RtHSdat%rZ    = x%QT(DOF_Sg)* CoordSys%z1 + x%QT(DOF_Hv)* CoordSys%z2 - x%QT(DOF_Sw)* CoordSys%z3                          ! Position vector from inertia frame origin to platform reference (point Z).
    RtHSdat%rZY   = p%rZYxt*CoordSys%a1 - p%rZYyt*CoordSys%a3 + p%rZYzt*CoordSys%a2                                            ! Position vector from platform reference (point Z) to platform mass center (point Y).
    RtHSdat%rZT0  = p%rZT0zt* CoordSys%a2                                                                                      ! Position vector from platform reference (point Z) to tower base (point T(0))
-   RtHSdat%rZO   = ( x%QT(DOF_TFA1) + x%QT(DOF_TFA2)                                                        )*CoordSys%a1 &   ! Position vector from platform reference (point Z) to tower-top / base plate (point O).
-                    + ( p%RefTwrHt - 0.5*(      p%AxRedTFA(1,1,p%TTopNode)*x%QT(DOF_TFA1)*x%QT(DOF_TFA1) &
-                                          +     p%AxRedTFA(2,2,p%TTopNode)*x%QT(DOF_TFA2)*x%QT(DOF_TFA2) &
-                                          + 2.0*p%AxRedTFA(1,2,p%TTopNode)*x%QT(DOF_TFA1)*x%QT(DOF_TFA2) &
-                                          +     p%AxRedTSS(1,1,p%TTopNode)*x%QT(DOF_TSS1)*x%QT(DOF_TSS1) &
-                                          +     p%AxRedTSS(2,2,p%TTopNode)*x%QT(DOF_TSS2)*x%QT(DOF_TSS2) &
-                                          + 2.0*p%AxRedTSS(1,2,p%TTopNode)*x%QT(DOF_TSS1)*x%QT(DOF_TSS2)   ) )*CoordSys%a2 &
-                    + ( x%QT(DOF_TSS1) + x%QT(DOF_TSS2)                                                      )*CoordSys%a3
+   TmpSumFA = 0.0_R8Ki
+   DO I = 1,p%NTwFAModes
+      TmpSumFA = TmpSumFA + x%QT(p%DOF_TFA(I))
+   END DO
+   TmpSumSS = 0.0_R8Ki
+   DO I = 1,p%NTwSSModes
+      TmpSumSS = TmpSumSS + x%QT(p%DOF_TSS(I))
+   END DO
+   RtHSdat%rZO   = TmpSumFA*CoordSys%a1 &                                                                                       ! Position vector from platform reference (point Z) to tower-top / base plate (point O).
+                 + ( p%RefTwrHt - TwrAxRedDisp( p, x%QT, p%TTopNode ) )*CoordSys%a2 &
+                 + TmpSumSS*CoordSys%a3
    RtHSdat%rOU   =   p%NacCMxn*CoordSys%d1  +  p%NacCMzn  *CoordSys%d2  -  p%NacCMyn  *CoordSys%d3                            ! Position vector from tower-top / base plate (point O) to nacelle center of mass (point U).
    RtHSdat%rOV   = p%RFrlPnt_n(1)*CoordSys%d1  +  p%RFrlPnt_n(3)*CoordSys%d2  -  p%RFrlPnt_n(2)*CoordSys%d3                            ! Position vector from tower-top / base plate (point O) to specified point on rotor-furl axis (point V).
    RtHSdat%rVIMU =   p%rVIMUxn*CoordSys%rf1 +  p%rVIMUzn  *CoordSys%rf2 -   p%rVIMUyn *CoordSys%rf3                           ! Position vector from specified point on rotor-furl axis (point V) to nacelle IMU (point IMU).
@@ -6902,14 +6949,17 @@ SUBROUTINE CalculatePositions( p, x, CoordSys, RtHSdat )
 
       ! Calculate the position vector of the current node:
 
-      RtHSdat%rT0T(:,J) = ( p%TwrFASF(1,J,0)*x%QT(DOF_TFA1) + p%TwrFASF(2,J,0)*x%QT(DOF_TFA2)           )*CoordSys%a1 &       ! Position vector from base of flexible portion of tower (point T(0)) to current node (point T(J)).
-                        + ( p%HNodes(J) - 0.5*(     p%AxRedTFA(1,1,J)*x%QT(DOF_TFA1)*x%QT(DOF_TFA1) &
-                                              +     p%AxRedTFA(2,2,J)*x%QT(DOF_TFA2)*x%QT(DOF_TFA2) &
-                                              + 2.0*p%AxRedTFA(1,2,J)*x%QT(DOF_TFA1)*x%QT(DOF_TFA2) &
-                                              +     p%AxRedTSS(1,1,J)*x%QT(DOF_TSS1)*x%QT(DOF_TSS1) &
-                                              +     p%AxRedTSS(2,2,J)*x%QT(DOF_TSS2)*x%QT(DOF_TSS2) &
-                                              + 2.0*p%AxRedTSS(1,2,J)*x%QT(DOF_TSS1)*x%QT(DOF_TSS2)   ) )*CoordSys%a2 &
-                        + ( p%TwrSSSF(1,J,0)*x%QT(DOF_TSS1) + p%TwrSSSF(2,J,0)*x%QT(DOF_TSS2)           )*CoordSys%a3
+      TmpSumFA = 0.0_R8Ki
+      DO I = 1,p%NTwFAModes
+         TmpSumFA = TmpSumFA + p%TwrFASF(I,J,0)*x%QT(p%DOF_TFA(I))
+      END DO
+      TmpSumSS = 0.0_R8Ki
+      DO I = 1,p%NTwSSModes
+         TmpSumSS = TmpSumSS + p%TwrSSSF(I,J,0)*x%QT(p%DOF_TSS(I))
+      END DO
+      RtHSdat%rT0T(:,J) = TmpSumFA*CoordSys%a1 &                                                                               ! Position vector from base of flexible portion of tower (point T(0)) to current node (point T(J)).
+                        + ( p%HNodes(J) - TwrAxRedDisp( p, x%QT, J ) )*CoordSys%a2 &
+                        + TmpSumSS*CoordSys%a3
       RtHSdat%rZT (:,J) = RtHSdat%rZT0 + RtHSdat%rT0T(:,J)                                                                    ! Position vector from platform reference (point Z) to the current node (point T(HNodes(J)).
 
 
@@ -6939,6 +6989,7 @@ SUBROUTINE CalculateAngularPosVelPAcc( p, x, CoordSys, RtHSdat, ErrStat, ErrMsg 
    REAL(ReKi)                   :: AngVelHM  (3)                                   ! Angular velocity of eleMent J of blade K (body M) in the hub (body H).
 !   REAL(ReKi)                   :: AngVelEN  (3)                                   ! Angular velocity of the nacelle (body N) in the inertia frame (body E for earth).
    REAL(ReKi)                   :: AngAccELt (3)                                   ! Portion of the angular acceleration of the low-speed shaft (body L) in the inertia frame (body E for earth) associated with everything but the QD2T()'s.
+   INTEGER(IntKi)               :: I                                               ! Counter for tower modes
    INTEGER(IntKi)               :: J                                               ! Counter for elements
    INTEGER(IntKi)               :: K                                               ! Counter for blades
    REAL(R8Ki)                   :: PtfmOrientation (3,3)                           ! Orientation matrix for the platform (-).
@@ -7150,8 +7201,14 @@ ENDIF
                                                              + x%QT (DOF_TSS2)*RtHSdat%PAngVelEF(J,DOF_TSS2,0,:)
 
       !RtHSdat%AngPosEF (:,J)            =  RtHSdat%AngPosEX  + RtHSdat%AngPosXF(:,J) ! LW: This is no longer right with large Ptfm Rotation
-      ThetaSS =  p%TwrSSSF(1,J,1)*x%QT(DOF_TSS1) + p%TwrSSSF(2,J,1)*x%QT(DOF_TSS2)
-      ThetaFA = -p%TwrFASF(1,J,1)*x%QT(DOF_TFA1) - p%TwrFASF(2,J,1)*x%QT(DOF_TFA2)
+      ThetaSS = 0.0_R8Ki
+      DO I = 1,p%NTwSSModes
+         ThetaSS = ThetaSS + p%TwrSSSF(I,J,1)*x%QT(p%DOF_TSS(I))
+      END DO
+      ThetaFA = 0.0_R8Ki
+      DO I = 1,p%NTwFAModes
+         ThetaFA = ThetaFA - p%TwrFASF(I,J,1)*x%QT(p%DOF_TFA(I))
+      END DO
       CALL SmllRotTrans('tower element rotation',ThetaSS,-ThetaFA,0.0_R8Ki,TransMat,'',ErrStat2,ErrMsg2)
       CALL SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
       if (ErrStat>=AbortErrLev) then
