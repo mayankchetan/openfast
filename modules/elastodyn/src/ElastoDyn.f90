@@ -3614,7 +3614,9 @@ SUBROUTINE Init_ContStates( x, p, InputFileData, OtherState, ErrStat, ErrMsg  )
    REAL(ReKi)                                   :: InitQE1(p%NumBl)  ! Initial value of the 1st blade edge DOF
    REAL(ReKi)                                   :: InitQF1(p%NumBl)  ! Initial value of the 1st blade flap DOF
    REAL(ReKi)                                   :: InitQF2(p%NumBl)  ! Initial value of the 2nd blade flap DOF
-!   INTEGER(IntKi)                               :: I                 ! loop counter
+   INTEGER(IntKi)                               :: I                 ! loop counter (for tower modes)
+   LOGICAL                                      :: TwFADOF(p%NTwFAModes)  ! Local repack of TwFADOF1/TwFADOF2 for looping
+   LOGICAL                                      :: TwSSDOF(p%NTwSSModes)  ! Local repack of TwSSDOF1/TwSSDOF2 for looping
 
       
       ! First allocate the arrays stored here:
@@ -3713,27 +3715,30 @@ SUBROUTINE Init_ContStates( x, p, InputFileData, OtherState, ErrStat, ErrMsg  )
       !   is disabled and mode 2 is enabled, assign all displacements to mode 2.
       ! If both modes are disabled, set the displacements to zero.
 
-   x%QT   (DOF_TFA1) =  0.0
-   x%QT   (DOF_TSS1) =  0.0
-   x%QT   (DOF_TFA2) =  0.0
-   x%QT   (DOF_TSS2) =  0.0
+   TwFADOF = (/ InputFileData%TwFADOF1, InputFileData%TwFADOF2 /)   ! local LOGICAL(2)
+   TwSSDOF = (/ InputFileData%TwSSDOF1, InputFileData%TwSSDOF2 /)
 
-   IF (    InputFileData%TwFADOF1 )  THEN   ! First fore-aft tower mode is enabled.
-      x%QT(DOF_TFA1) =  InputFileData%TTDspFA
-   ELSEIF( InputFileData%TwFADOF2 )  THEN   ! Second fore-aft tower mode is enabled, but first is not.
-      x%QT(DOF_TFA2) =  InputFileData%TTDspFA
-   ENDIF
+   DO I = 1,p%NTwFAModes
+      x%QT (p%DOF_TFA(I)) = 0.0
+      x%QDT(p%DOF_TFA(I)) = 0.0
+   END DO
+   DO I = 1,p%NTwSSModes
+      x%QT (p%DOF_TSS(I)) = 0.0
+      x%QDT(p%DOF_TSS(I)) = 0.0
+   END DO
 
-   IF (    InputFileData%TwSSDOF1 )  THEN   ! First side-to-side tower mode is enabled.
-      x%QT(DOF_TSS1) = -InputFileData%TTDspSS
-   ELSEIF( InputFileData%TwSSDOF2 )  THEN   ! Second side-to-side tower mode is enabled, but first is not.
-      x%QT(DOF_TSS2) = -InputFileData%TTDspSS
-   ENDIF
-
-   x%QDT  (DOF_TFA1) =  0.0
-   x%QDT  (DOF_TSS1) =  0.0
-   x%QDT  (DOF_TFA2) =  0.0
-   x%QDT  (DOF_TSS2) =  0.0
+   DO I = 1,p%NTwFAModes        ! initial tower-top displacement goes to the first ENABLED FA mode
+      IF ( TwFADOF(I) ) THEN
+         x%QT(p%DOF_TFA(I)) = InputFileData%TTDspFA
+         EXIT
+      END IF
+   END DO
+   DO I = 1,p%NTwSSModes
+      IF ( TwSSDOF(I) ) THEN
+         x%QT(p%DOF_TSS(I)) = -InputFileData%TTDspSS
+         EXIT
+      END IF
+   END DO
 
 
 
@@ -7025,18 +7030,24 @@ SUBROUTINE CalculateAngularPosVelPAcc( p, x, CoordSys, RtHSdat, ErrStat, ErrMsg 
    PtfmOrientation = EulerConstructZYX((/x%QT(DOF_R),x%QT(DOF_P),x%QT(DOF_Y)/))
 
    RtHSdat%PAngVelEB(       :,0,:) =  RtHSdat%PAngVelEX(:,0,:)
-   RtHSdat%PAngVelEB(DOF_TFA1,0,:) = -p%TwrFASF(1,p%TTopNode,1)*CoordSys%a3
-   RtHSdat%PAngVelEB(DOF_TSS1,0,:) =  p%TwrSSSF(1,p%TTopNode,1)*CoordSys%a1
-   RtHSdat%PAngVelEB(DOF_TFA2,0,:) = -p%TwrFASF(2,p%TTopNode,1)*CoordSys%a3
-   RtHSdat%PAngVelEB(DOF_TSS2,0,:) =  p%TwrSSSF(2,p%TTopNode,1)*CoordSys%a1
-   RtHSdat%AngVelEB                =  RtHSdat%AngVelEX + x%QDT(DOF_TFA1)*RtHSdat%PAngVelEB(DOF_TFA1,0,:) &
-                                                       + x%QDT(DOF_TSS1)*RtHSdat%PAngVelEB(DOF_TSS1,0,:) &
-                                                       + x%QDT(DOF_TFA2)*RtHSdat%PAngVelEB(DOF_TFA2,0,:) &
-                                                       + x%QDT(DOF_TSS2)*RtHSdat%PAngVelEB(DOF_TSS2,0,:)
-   RtHSdat%AngPosXB                =                     x%QT (DOF_TFA1)*RtHSdat%PAngVelEB(DOF_TFA1,0,:) &
-                                                       + x%QT (DOF_TSS1)*RtHSdat%PAngVelEB(DOF_TSS1,0,:) &
-                                                       + x%QT (DOF_TFA2)*RtHSdat%PAngVelEB(DOF_TFA2,0,:) &
-                                                       + x%QT (DOF_TSS2)*RtHSdat%PAngVelEB(DOF_TSS2,0,:)
+   DO I = 1,p%NTwFAModes
+      RtHSdat%PAngVelEB(p%DOF_TFA(I),0,:) = -p%TwrFASF(I,p%TTopNode,1)*CoordSys%a3
+   END DO
+   DO I = 1,p%NTwSSModes
+      RtHSdat%PAngVelEB(p%DOF_TSS(I),0,:) =  p%TwrSSSF(I,p%TTopNode,1)*CoordSys%a1
+   END DO
+   RtHSdat%AngVelEB                =  RtHSdat%AngVelEX
+   RtHSdat%AngPosXB                =  0.0
+   DO I = 1,MAX(p%NTwFAModes,p%NTwSSModes)
+      IF ( I <= p%NTwFAModes ) THEN
+         RtHSdat%AngVelEB = RtHSdat%AngVelEB + x%QDT(p%DOF_TFA(I))*RtHSdat%PAngVelEB(p%DOF_TFA(I),0,:)
+         RtHSdat%AngPosXB = RtHSdat%AngPosXB + x%QT (p%DOF_TFA(I))*RtHSdat%PAngVelEB(p%DOF_TFA(I),0,:)
+      END IF
+      IF ( I <= p%NTwSSModes ) THEN
+         RtHSdat%AngVelEB = RtHSdat%AngVelEB + x%QDT(p%DOF_TSS(I))*RtHSdat%PAngVelEB(p%DOF_TSS(I),0,:)
+         RtHSdat%AngPosXB = RtHSdat%AngPosXB + x%QT (p%DOF_TSS(I))*RtHSdat%PAngVelEB(p%DOF_TSS(I),0,:)
+      END IF
+   END DO
 
    RtHSdat%PAngVelEN(       :,0,:)= RtHSdat%PAngVelEB(:,0,:)
    RtHSdat%PAngVelEN(p%DOF_Yaw ,0,:)= CoordSys%d2
@@ -7081,14 +7092,17 @@ ENDIF
                                      + x%QDT(DOF_P)*RtHSdat%PAngVelEX(DOF_P   ,1,:)
 
    RtHSdat%PAngVelEB(       :,1,:) =                  RtHSdat%PAngVelEX(:,1,:)
-   RtHSdat%PAngVelEB(DOF_TFA1,1,:) = CROSS_PRODUCT(   RtHSdat%AngVelEX,                   RtHSdat%PAngVelEB(DOF_TFA1,0,:) )
-   RtHSdat%PAngVelEB(DOF_TSS1,1,:) = CROSS_PRODUCT(   RtHSdat%AngVelEX,                   RtHSdat%PAngVelEB(DOF_TSS1,0,:) )
-   RtHSdat%PAngVelEB(DOF_TFA2,1,:) = CROSS_PRODUCT(   RtHSdat%AngVelEX,                   RtHSdat%PAngVelEB(DOF_TFA2,0,:) )
-   RtHSdat%PAngVelEB(DOF_TSS2,1,:) = CROSS_PRODUCT(   RtHSdat%AngVelEX,                   RtHSdat%PAngVelEB(DOF_TSS2,0,:) )
-   RtHSdat%AngAccEBt               =                  RtHSdat%AngAccEXt + x%QDT(DOF_TFA1)*RtHSdat%PAngVelEB(DOF_TFA1,1,:) &
-                                                                        + x%QDT(DOF_TSS1)*RtHSdat%PAngVelEB(DOF_TSS1,1,:) &
-                                                                        + x%QDT(DOF_TFA2)*RtHSdat%PAngVelEB(DOF_TFA2,1,:) &
-                                                                        + x%QDT(DOF_TSS2)*RtHSdat%PAngVelEB(DOF_TSS2,1,:)
+   DO I = 1,p%NTwFAModes
+      RtHSdat%PAngVelEB(p%DOF_TFA(I),1,:) = CROSS_PRODUCT(   RtHSdat%AngVelEX,   RtHSdat%PAngVelEB(p%DOF_TFA(I),0,:) )
+   END DO
+   DO I = 1,p%NTwSSModes
+      RtHSdat%PAngVelEB(p%DOF_TSS(I),1,:) = CROSS_PRODUCT(   RtHSdat%AngVelEX,   RtHSdat%PAngVelEB(p%DOF_TSS(I),0,:) )
+   END DO
+   RtHSdat%AngAccEBt               =                  RtHSdat%AngAccEXt
+   DO I = 1,MAX(p%NTwFAModes,p%NTwSSModes)
+      IF ( I <= p%NTwFAModes ) RtHSdat%AngAccEBt = RtHSdat%AngAccEBt + x%QDT(p%DOF_TFA(I))*RtHSdat%PAngVelEB(p%DOF_TFA(I),1,:)
+      IF ( I <= p%NTwSSModes ) RtHSdat%AngAccEBt = RtHSdat%AngAccEBt + x%QDT(p%DOF_TSS(I))*RtHSdat%PAngVelEB(p%DOF_TSS(I),1,:)
+   END DO
 
    RtHSdat%PAngVelEN(       :,1,:) =                 RtHSdat%PAngVelEB(:,1,:)
    RtHSdat%PAngVelEN(p%DOF_Yaw ,1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEB,                    RtHSdat%PAngVelEN(p%DOF_Yaw ,0,:) )
@@ -7178,27 +7192,34 @@ ENDIF
       !   of DOF I for body F of element J in body E.
 
       RtHSdat%PAngVelEF (J,       :,0,:) = RtHSdat%PAngVelEX(:,0,:)
-      RtHSdat%PAngVelEF (J,DOF_TFA1,0,:) = -p%TwrFASF(1,J,1)*CoordSys%a3
-      RtHSdat%PAngVelEF (J,DOF_TSS1,0,:) =  p%TwrSSSF(1,J,1)*CoordSys%a1
-      RtHSdat%PAngVelEF (J,DOF_TFA2,0,:) = -p%TwrFASF(2,J,1)*CoordSys%a3
-      RtHSdat%PAngVelEF (J,DOF_TSS2,0,:) =  p%TwrSSSF(2,J,1)*CoordSys%a1
+      DO I = 1,p%NTwFAModes
+         RtHSdat%PAngVelEF (J,p%DOF_TFA(I),0,:) = -p%TwrFASF(I,J,1)*CoordSys%a3
+      END DO
+      DO I = 1,p%NTwSSModes
+         RtHSdat%PAngVelEF (J,p%DOF_TSS(I),0,:) =  p%TwrSSSF(I,J,1)*CoordSys%a1
+      END DO
 
       RtHSdat%PAngVelEF (J,       :,1,:) = RtHSdat%PAngVelEX(:,1,:)
-      RtHSdat%PAngVelEF (J,DOF_TFA1,1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEX  ,  RtHSdat%PAngVelEF(J,DOF_TFA1,0,:) )
-      RtHSdat%PAngVelEF (J,DOF_TSS1,1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEX  ,  RtHSdat%PAngVelEF(J,DOF_TSS1,0,:) )
-      RtHSdat%PAngVelEF (J,DOF_TFA2,1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEX  ,  RtHSdat%PAngVelEF(J,DOF_TFA2,0,:) )
-      RtHSdat%PAngVelEF (J,DOF_TSS2,1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEX  ,  RtHSdat%PAngVelEF(J,DOF_TSS2,0,:) )
+      DO I = 1,p%NTwFAModes
+         RtHSdat%PAngVelEF (J,p%DOF_TFA(I),1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEX  ,  RtHSdat%PAngVelEF(J,p%DOF_TFA(I),0,:) )
+      END DO
+      DO I = 1,p%NTwSSModes
+         RtHSdat%PAngVelEF (J,p%DOF_TSS(I),1,:) = CROSS_PRODUCT(  RtHSdat%AngVelEX  ,  RtHSdat%PAngVelEF(J,p%DOF_TSS(I),0,:) )
+      END DO
 
 
-      RtHSdat%AngVelEF (:,J)            =  RtHSdat%AngVelEX  + x%QDT(DOF_TFA1)*RtHSdat%PAngVelEF(J,DOF_TFA1,0,:) &
-                                                             + x%QDT(DOF_TSS1)*RtHSdat%PAngVelEF(J,DOF_TSS1,0,:) &
-                                                             + x%QDT(DOF_TFA2)*RtHSdat%PAngVelEF(J,DOF_TFA2,0,:) &
-                                                             + x%QDT(DOF_TSS2)*RtHSdat%PAngVelEF(J,DOF_TSS2,0,:)
-
-      RtHSdat%AngPosXF (:,J)            =                      x%QT (DOF_TFA1)*RtHSdat%PAngVelEF(J,DOF_TFA1,0,:) &
-                                                             + x%QT (DOF_TSS1)*RtHSdat%PAngVelEF(J,DOF_TSS1,0,:) &
-                                                             + x%QT (DOF_TFA2)*RtHSdat%PAngVelEF(J,DOF_TFA2,0,:) &
-                                                             + x%QT (DOF_TSS2)*RtHSdat%PAngVelEF(J,DOF_TSS2,0,:)
+      RtHSdat%AngVelEF (:,J)            =  RtHSdat%AngVelEX
+      RtHSdat%AngPosXF (:,J)            =  0.0
+      DO I = 1,MAX(p%NTwFAModes,p%NTwSSModes)
+         IF ( I <= p%NTwFAModes ) THEN
+            RtHSdat%AngVelEF (:,J) = RtHSdat%AngVelEF (:,J) + x%QDT(p%DOF_TFA(I))*RtHSdat%PAngVelEF(J,p%DOF_TFA(I),0,:)
+            RtHSdat%AngPosXF (:,J) = RtHSdat%AngPosXF (:,J) + x%QT (p%DOF_TFA(I))*RtHSdat%PAngVelEF(J,p%DOF_TFA(I),0,:)
+         END IF
+         IF ( I <= p%NTwSSModes ) THEN
+            RtHSdat%AngVelEF (:,J) = RtHSdat%AngVelEF (:,J) + x%QDT(p%DOF_TSS(I))*RtHSdat%PAngVelEF(J,p%DOF_TSS(I),0,:)
+            RtHSdat%AngPosXF (:,J) = RtHSdat%AngPosXF (:,J) + x%QT (p%DOF_TSS(I))*RtHSdat%PAngVelEF(J,p%DOF_TSS(I),0,:)
+         END IF
+      END DO
 
       !RtHSdat%AngPosEF (:,J)            =  RtHSdat%AngPosEX  + RtHSdat%AngPosXF(:,J) ! LW: This is no longer right with large Ptfm Rotation
       ThetaSS = 0.0_R8Ki
@@ -7216,10 +7237,11 @@ ENDIF
       end if
       RtHSdat%AngPosEF (:,J) = EulerExtractZYX(MatMul(TransMat,PtfmOrientation)) ! Extract tower element yaw, pitch, and roll angles from the combined platform and tower element rotation
 
-      RtHSdat%AngAccEFt(:,J)            =  RtHSdat%AngAccEXt + x%QDT(DOF_TFA1)*RtHSdat%PAngVelEF(J,DOF_TFA1,1,:) &
-                                                             + x%QDT(DOF_TSS1)*RtHSdat%PAngVelEF(J,DOF_TSS1,1,:) &
-                                                             + x%QDT(DOF_TFA2)*RtHSdat%PAngVelEF(J,DOF_TFA2,1,:) &
-                                                             + x%QDT(DOF_TSS2)*RtHSdat%PAngVelEF(J,DOF_TSS2,1,:)
+      RtHSdat%AngAccEFt(:,J)            =  RtHSdat%AngAccEXt
+      DO I = 1,MAX(p%NTwFAModes,p%NTwSSModes)
+         IF ( I <= p%NTwFAModes ) RtHSdat%AngAccEFt(:,J) = RtHSdat%AngAccEFt(:,J) + x%QDT(p%DOF_TFA(I))*RtHSdat%PAngVelEF(J,p%DOF_TFA(I),1,:)
+         IF ( I <= p%NTwSSModes ) RtHSdat%AngAccEFt(:,J) = RtHSdat%AngAccEFt(:,J) + x%QDT(p%DOF_TSS(I))*RtHSdat%PAngVelEF(J,p%DOF_TSS(I),1,:)
+      END DO
 
    END DO ! J
 
@@ -7270,6 +7292,8 @@ SUBROUTINE CalculateLinearVelPAcc( p, x, CoordSys, RtHSdat )
    INTEGER(IntKi)               :: I                                               ! Loops through some or all of the DOFs
    INTEGER(IntKi)               :: J                                               ! Counter for elements
    INTEGER(IntKi)               :: K                                               ! Counter for blades
+   INTEGER(IntKi)               :: L                                               ! Counter for tower modes (inner AxRed sum)
+   REAL(R8Ki)                   :: TmpSum                                          ! Accumulator for tower-mode AxRed sums.
 
 
       ! Initializations:
@@ -7343,37 +7367,49 @@ SUBROUTINE CalculateLinearVelPAcc( p, x, CoordSys, RtHSdat )
 
 
    RtHSdat%PLinVelEO(       :,:,:) = RtHSdat%PLinVelEZ(:,:,:)
-   RtHSdat%PLinVelEO(DOF_TFA1,0,:) = CoordSys%a1 - (   p%AxRedTFA(1,1,p%TTopNode)* x%QT(DOF_TFA1) &
-                                                     + p%AxRedTFA(1,2,p%TTopNode)* x%QT(DOF_TFA2)   )*CoordSys%a2
-   RtHSdat%PLinVelEO(DOF_TSS1,0,:) = CoordSys%a3 - (   p%AxRedTSS(1,1,p%TTopNode)* x%QT(DOF_TSS1) &
-                                                     + p%AxRedTSS(1,2,p%TTopNode)* x%QT(DOF_TSS2)   )*CoordSys%a2
-   RtHSdat%PLinVelEO(DOF_TFA2,0,:) = CoordSys%a1 - (   p%AxRedTFA(2,2,p%TTopNode)* x%QT(DOF_TFA2) &
-                                                     + p%AxRedTFA(1,2,p%TTopNode)* x%QT(DOF_TFA1)   )*CoordSys%a2
-   RtHSdat%PLinVelEO(DOF_TSS2,0,:) = CoordSys%a3 - (   p%AxRedTSS(2,2,p%TTopNode)* x%QT(DOF_TSS2) &
-                                                     + p%AxRedTSS(1,2,p%TTopNode)* x%QT(DOF_TSS1)   )*CoordSys%a2
+   DO I = 1,p%NTwFAModes
+      TmpSum = 0.0_R8Ki
+      DO L = 1,p%NTwFAModes
+         TmpSum = TmpSum + p%AxRedTFA(MIN(I,L),MAX(I,L),p%TTopNode)*x%QT(p%DOF_TFA(L))
+      END DO
+      RtHSdat%PLinVelEO(p%DOF_TFA(I),0,:) = CoordSys%a1 - TmpSum*CoordSys%a2
 
-   TmpVec1 = CROSS_PRODUCT(   RtHSdat%AngVelEX   , RtHSdat%PLinVelEO(DOF_TFA1,0,:) )
-   TmpVec2 = CROSS_PRODUCT(   RtHSdat%AngVelEX   , RtHSdat%PLinVelEO(DOF_TSS1,0,:) )
-   TmpVec3 = CROSS_PRODUCT(   RtHSdat%AngVelEX   , RtHSdat%PLinVelEO(DOF_TFA2,0,:) )
-   TmpVec4 = CROSS_PRODUCT(   RtHSdat%AngVelEX   , RtHSdat%PLinVelEO(DOF_TSS2,0,:) )
+      TmpVec1 = CROSS_PRODUCT(   RtHSdat%AngVelEX   , RtHSdat%PLinVelEO(p%DOF_TFA(I),0,:) )
 
-   RtHSdat%PLinVelEO(DOF_TFA1,1,:) = TmpVec1 - (   p%AxRedTFA(1,1,p%TTopNode)*x%QDT(DOF_TFA1) &
-                                                 + p%AxRedTFA(1,2,p%TTopNode)*x%QDT(DOF_TFA2)   )*CoordSys%a2
-   RtHSdat%PLinVelEO(DOF_TSS1,1,:) = TmpVec2 - (   p%AxRedTSS(1,1,p%TTopNode)*x%QDT(DOF_TSS1) &
-                                                 + p%AxRedTSS(1,2,p%TTopNode)*x%QDT(DOF_TSS2)   )*CoordSys%a2
-   RtHSdat%PLinVelEO(DOF_TFA2,1,:) = TmpVec3 - (   p%AxRedTFA(2,2,p%TTopNode)*x%QDT(DOF_TFA2) &
-                                                 + p%AxRedTFA(1,2,p%TTopNode)*x%QDT(DOF_TFA1)   )*CoordSys%a2
-   RtHSdat%PLinVelEO(DOF_TSS2,1,:) = TmpVec4 - (   p%AxRedTSS(2,2,p%TTopNode)*x%QDT(DOF_TSS2) &
-                                                 + p%AxRedTSS(1,2,p%TTopNode)*x%QDT(DOF_TSS1)   )*CoordSys%a2
+      TmpSum = 0.0_R8Ki
+      DO L = 1,p%NTwFAModes
+         TmpSum = TmpSum + p%AxRedTFA(MIN(I,L),MAX(I,L),p%TTopNode)*x%QDT(p%DOF_TFA(L))
+      END DO
+      RtHSdat%PLinVelEO(p%DOF_TFA(I),1,:) = TmpVec1 - TmpSum*CoordSys%a2
+   END DO
+   DO I = 1,p%NTwSSModes
+      TmpSum = 0.0_R8Ki
+      DO L = 1,p%NTwSSModes
+         TmpSum = TmpSum + p%AxRedTSS(MIN(I,L),MAX(I,L),p%TTopNode)*x%QT(p%DOF_TSS(L))
+      END DO
+      RtHSdat%PLinVelEO(p%DOF_TSS(I),0,:) = CoordSys%a3 - TmpSum*CoordSys%a2
 
-    LinVelXO               =              x%QDT(DOF_TFA1)*RtHSdat%PLinVelEO(DOF_TFA1,0,:) &
-                                        + x%QDT(DOF_TSS1)*RtHSdat%PLinVelEO(DOF_TSS1,0,:) &
-                                        + x%QDT(DOF_TFA2)*RtHSdat%PLinVelEO(DOF_TFA2,0,:) &
-                                        + x%QDT(DOF_TSS2)*RtHSdat%PLinVelEO(DOF_TSS2,0,:)
-    RtHSdat%LinAccEOt              =      x%QDT(DOF_TFA1)*RtHSdat%PLinVelEO(DOF_TFA1,1,:) &
-                                        + x%QDT(DOF_TSS1)*RtHSdat%PLinVelEO(DOF_TSS1,1,:) &
-                                        + x%QDT(DOF_TFA2)*RtHSdat%PLinVelEO(DOF_TFA2,1,:) &
-                                        + x%QDT(DOF_TSS2)*RtHSdat%PLinVelEO(DOF_TSS2,1,:)
+      TmpVec2 = CROSS_PRODUCT(   RtHSdat%AngVelEX   , RtHSdat%PLinVelEO(p%DOF_TSS(I),0,:) )
+
+      TmpSum = 0.0_R8Ki
+      DO L = 1,p%NTwSSModes
+         TmpSum = TmpSum + p%AxRedTSS(MIN(I,L),MAX(I,L),p%TTopNode)*x%QDT(p%DOF_TSS(L))
+      END DO
+      RtHSdat%PLinVelEO(p%DOF_TSS(I),1,:) = TmpVec2 - TmpSum*CoordSys%a2
+   END DO
+
+    LinVelXO               =  0.0
+    RtHSdat%LinAccEOt       =  0.0
+    DO I = 1,MAX(p%NTwFAModes,p%NTwSSModes)
+       IF ( I <= p%NTwFAModes ) THEN
+          LinVelXO          = LinVelXO          + x%QDT(p%DOF_TFA(I))*RtHSdat%PLinVelEO(p%DOF_TFA(I),0,:)
+          RtHSdat%LinAccEOt = RtHSdat%LinAccEOt  + x%QDT(p%DOF_TFA(I))*RtHSdat%PLinVelEO(p%DOF_TFA(I),1,:)
+       END IF
+       IF ( I <= p%NTwSSModes ) THEN
+          LinVelXO          = LinVelXO          + x%QDT(p%DOF_TSS(I))*RtHSdat%PLinVelEO(p%DOF_TSS(I),0,:)
+          RtHSdat%LinAccEOt = RtHSdat%LinAccEOt  + x%QDT(p%DOF_TSS(I))*RtHSdat%PLinVelEO(p%DOF_TSS(I),1,:)
+       END IF
+    END DO
     
    RtHSdat%LinVelEO = LinVelXO + RtHSdat%LinVelEZ
    DO I = 1,p%NPX   ! Loop through all DOFs associated with the angular motion of the platform (body X)
@@ -7652,37 +7688,49 @@ SUBROUTINE CalculateLinearVelPAcc( p, x, CoordSys, RtHSdat )
       EwXXrZT                   = CROSS_PRODUCT(  RtHSdat%AngVelEX, RtHSdat%rZT(:,J) )
 
       RtHSdat%PLinVelET(J,       :,:,:) = RtHSdat%PLinVelEZ(:,:,:)  !bjj: can this line be optimized
-      RtHSdat%PLinVelET(J,DOF_TFA1,0,:) = p%TwrFASF(1,J,0)*CoordSys%a1 - (   p%AxRedTFA(1,1,J)* x%QT(DOF_TFA1) &
-                                                                           + p%AxRedTFA(1,2,J)* x%QT(DOF_TFA2)   )*CoordSys%a2  
-      RtHSdat%PLinVelET(J,DOF_TSS1,0,:) = p%TwrSSSF(1,J,0)*CoordSys%a3 - (   p%AxRedTSS(1,1,J)* x%QT(DOF_TSS1) &
-                                                                           + p%AxRedTSS(1,2,J)* x%QT(DOF_TSS2)   )*CoordSys%a2
-      RtHSdat%PLinVelET(J,DOF_TFA2,0,:) = p%TwrFASF(2,J,0)*CoordSys%a1 - (   p%AxRedTFA(2,2,J)* x%QT(DOF_TFA2) &
-                                                                           + p%AxRedTFA(1,2,J)* x%QT(DOF_TFA1)   )*CoordSys%a2
-      RtHSdat%PLinVelET(J,DOF_TSS2,0,:) = p%TwrSSSF(2,J,0)*CoordSys%a3 - (   p%AxRedTSS(2,2,J)* x%QT(DOF_TSS2) &
-                                                                           + p%AxRedTSS(1,2,J)* x%QT(DOF_TSS1)   )*CoordSys%a2
+      DO I = 1,p%NTwFAModes
+         TmpSum = 0.0_R8Ki
+         DO L = 1,p%NTwFAModes
+            TmpSum = TmpSum + p%AxRedTFA(MIN(I,L),MAX(I,L),J)*x%QT(p%DOF_TFA(L))
+         END DO
+         RtHSdat%PLinVelET(J,p%DOF_TFA(I),0,:) = p%TwrFASF(I,J,0)*CoordSys%a1 - TmpSum*CoordSys%a2
 
-      TmpVec1 = CROSS_PRODUCT( RtHSdat%AngVelEX, RtHSdat%PLinVelET(J,DOF_TFA1,0,:) )
-      TmpVec2 = CROSS_PRODUCT( RtHSdat%AngVelEX, RtHSdat%PLinVelET(J,DOF_TSS1,0,:) )
-      TmpVec3 = CROSS_PRODUCT( RtHSdat%AngVelEX, RtHSdat%PLinVelET(J,DOF_TFA2,0,:) )
-      TmpVec4 = CROSS_PRODUCT( RtHSdat%AngVelEX, RtHSdat%PLinVelET(J,DOF_TSS2,0,:) )
+         TmpVec1 = CROSS_PRODUCT( RtHSdat%AngVelEX, RtHSdat%PLinVelET(J,p%DOF_TFA(I),0,:) )
 
-      RtHSdat%PLinVelET(J,DOF_TFA1,1,:) = TmpVec1 - (   p%AxRedTFA(1,1,J)*x%QDT(DOF_TFA1) &
-                                                      + p%AxRedTFA(1,2,J)*x%QDT(DOF_TFA2)   )*CoordSys%a2
-      RtHSdat%PLinVelET(J,DOF_TSS1,1,:) = TmpVec2 - (   p%AxRedTSS(1,1,J)*x%QDT(DOF_TSS1) &
-                                                      + p%AxRedTSS(1,2,J)*x%QDT(DOF_TSS2)   )*CoordSys%a2
-      RtHSdat%PLinVelET(J,DOF_TFA2,1,:) = TmpVec3 - (   p%AxRedTFA(2,2,J)*x%QDT(DOF_TFA2) &
-                                                      + p%AxRedTFA(1,2,J)*x%QDT(DOF_TFA1)   )*CoordSys%a2
-      RtHSdat%PLinVelET(J,DOF_TSS2,1,:) = TmpVec4 - (   p%AxRedTSS(2,2,J)*x%QDT(DOF_TSS2) &
-                                                      + p%AxRedTSS(1,2,J)*x%QDT(DOF_TSS1)   )*CoordSys%a2
+         TmpSum = 0.0_R8Ki
+         DO L = 1,p%NTwFAModes
+            TmpSum = TmpSum + p%AxRedTFA(MIN(I,L),MAX(I,L),J)*x%QDT(p%DOF_TFA(L))
+         END DO
+         RtHSdat%PLinVelET(J,p%DOF_TFA(I),1,:) = TmpVec1 - TmpSum*CoordSys%a2
+      END DO
+      DO I = 1,p%NTwSSModes
+         TmpSum = 0.0_R8Ki
+         DO L = 1,p%NTwSSModes
+            TmpSum = TmpSum + p%AxRedTSS(MIN(I,L),MAX(I,L),J)*x%QT(p%DOF_TSS(L))
+         END DO
+         RtHSdat%PLinVelET(J,p%DOF_TSS(I),0,:) = p%TwrSSSF(I,J,0)*CoordSys%a3 - TmpSum*CoordSys%a2
 
-              LinVelXT       = x%QDT(DOF_TFA1)*RtHSdat%PLinVelET(J,DOF_TFA1,0,:) &
-                             + x%QDT(DOF_TSS1)*RtHSdat%PLinVelET(J,DOF_TSS1,0,:) &
-                             + x%QDT(DOF_TFA2)*RtHSdat%PLinVelET(J,DOF_TFA2,0,:) &
-                             + x%QDT(DOF_TSS2)*RtHSdat%PLinVelET(J,DOF_TSS2,0,:)
-      RtHSdat%LinAccETt(:,J) = x%QDT(DOF_TFA1)*RtHSdat%PLinVelET(J,DOF_TFA1,1,:) &
-                             + x%QDT(DOF_TSS1)*RtHSdat%PLinVelET(J,DOF_TSS1,1,:) &
-                             + x%QDT(DOF_TFA2)*RtHSdat%PLinVelET(J,DOF_TFA2,1,:) &
-                             + x%QDT(DOF_TSS2)*RtHSdat%PLinVelET(J,DOF_TSS2,1,:)
+         TmpVec2 = CROSS_PRODUCT( RtHSdat%AngVelEX, RtHSdat%PLinVelET(J,p%DOF_TSS(I),0,:) )
+
+         TmpSum = 0.0_R8Ki
+         DO L = 1,p%NTwSSModes
+            TmpSum = TmpSum + p%AxRedTSS(MIN(I,L),MAX(I,L),J)*x%QDT(p%DOF_TSS(L))
+         END DO
+         RtHSdat%PLinVelET(J,p%DOF_TSS(I),1,:) = TmpVec2 - TmpSum*CoordSys%a2
+      END DO
+
+              LinVelXT       = 0.0
+      RtHSdat%LinAccETt(:,J) = 0.0
+      DO I = 1,MAX(p%NTwFAModes,p%NTwSSModes)
+         IF ( I <= p%NTwFAModes ) THEN
+            LinVelXT               = LinVelXT               + x%QDT(p%DOF_TFA(I))*RtHSdat%PLinVelET(J,p%DOF_TFA(I),0,:)
+            RtHSdat%LinAccETt(:,J) = RtHSdat%LinAccETt(:,J)  + x%QDT(p%DOF_TFA(I))*RtHSdat%PLinVelET(J,p%DOF_TFA(I),1,:)
+         END IF
+         IF ( I <= p%NTwSSModes ) THEN
+            LinVelXT               = LinVelXT               + x%QDT(p%DOF_TSS(I))*RtHSdat%PLinVelET(J,p%DOF_TSS(I),0,:)
+            RtHSdat%LinAccETt(:,J) = RtHSdat%LinAccETt(:,J)  + x%QDT(p%DOF_TSS(I))*RtHSdat%PLinVelET(J,p%DOF_TSS(I),1,:)
+         END IF
+      END DO
 
       RtHSdat%LinVelET(:,J)  = LinVelXT + RtHSdat%LinVelEZ
       DO I = 1,p%NPX   ! Loop through all DOFs associated with the angular motion of the platform (body X)
@@ -8384,6 +8432,7 @@ SUBROUTINE FillAugMat( p, x, CoordSys, u, HSSBrTrq, RtHSdat, AugMat )
    REAL(ReKi)                   :: TmpVec3   (3)                                   ! A temporary vector used in various computations.
    REAL(ReKi)                   :: GBoxTrq                                         ! Gearbox torque on the LSS side in N-m (calculated from inputs and parameters).
    REAL(ReKi)                   :: GBoxEffFac2                                     ! A second gearbox efficiency factor = ( 1 / GBoxEff^SgnPrvLSTQ - 1 )
+   REAL(R8Ki)                   :: TmpRHS                                          ! Accumulator for the tower elasticity/damping RHS terms (kind matches AugMat).
 
    INTEGER(IntKi)               :: I                                               ! Loops through some or all of the DOFs
    INTEGER(IntKi)               :: J                                               ! Counter for elements
@@ -8582,26 +8631,30 @@ SUBROUTINE FillAugMat( p, x, CoordSys, u, HSSBrTrq, RtHSdat, AugMat )
    !   calculated using partial loads):
    !..................................................................................................................................
 
-   IF ( p%DOF_Flag(DOF_TFA1) )  THEN
-      AugMat(    DOF_TFA1,p%NAug) = AugMat(DOF_TFA1,p%NAug)                                   &
-                                  - p%KTFA(1,1)*x%QT( DOF_TFA1) - p%KTFA(1,2)*x%QT( DOF_TFA2) &                                     !
-                                  - p%CTFA(1,1)*x%QDT(DOF_TFA1) - p%CTFA(1,2)*x%QDT(DOF_TFA2)
-   ENDIF
-   IF ( p%DOF_Flag(DOF_TSS1) )  THEN
-      AugMat(    DOF_TSS1,p%NAug) = AugMat(DOF_TSS1,p%NAug)                                   &
-                                  - p%KTSS(1,1)*x%QT( DOF_TSS1) - p%KTSS(1,2)*x%QT( DOF_TSS2) &                                     ! {-f(qd,q,t)}ElasticT + {-f(qd,q,t)}DampT
-                                  - p%CTSS(1,1)*x%QDT(DOF_TSS1) - p%CTSS(1,2)*x%QDT(DOF_TSS2)
-   ENDIF
-   IF ( p%DOF_Flag(DOF_TFA2) )  THEN
-      AugMat(    DOF_TFA2,p%NAug) = AugMat(DOF_TFA2,p%NAug)                                   &
-                                  - p%KTFA(2,1)*x%QT( DOF_TFA1) - p%KTFA(2,2)*x%QT( DOF_TFA2) &                                     !
-                                  - p%CTFA(2,1)*x%QDT(DOF_TFA1) - p%CTFA(2,2)*x%QDT(DOF_TFA2)
-   ENDIF
-   IF ( p%DOF_Flag(DOF_TSS2) )  THEN
-      AugMat(    DOF_TSS2,p%NAug) = AugMat(DOF_TSS2,p%NAug)                                   &
-                                  - p%KTSS(2,1)*x%QT( DOF_TSS1) - p%KTSS(2,2)*x%QT( DOF_TSS2) &                                     !
-                                  - p%CTSS(2,1)*x%QDT(DOF_TSS1) - p%CTSS(2,2)*x%QDT(DOF_TSS2)
-   ENDIF
+   DO I = 1,p%NTwFAModes
+      IF ( p%DOF_Flag(p%DOF_TFA(I)) )  THEN
+         TmpRHS = AugMat(p%DOF_TFA(I),p%NAug)
+         DO L = 1,p%NTwFAModes
+            TmpRHS = TmpRHS - p%KTFA(I,L)*x%QT( p%DOF_TFA(L))
+         END DO
+         DO L = 1,p%NTwFAModes
+            TmpRHS = TmpRHS - p%CTFA(I,L)*x%QDT(p%DOF_TFA(L))
+         END DO
+         AugMat(p%DOF_TFA(I),p%NAug) = TmpRHS
+      ENDIF
+   END DO
+   DO I = 1,p%NTwSSModes
+      IF ( p%DOF_Flag(p%DOF_TSS(I)) )  THEN
+         TmpRHS = AugMat(p%DOF_TSS(I),p%NAug)
+         DO L = 1,p%NTwSSModes
+            TmpRHS = TmpRHS - p%KTSS(I,L)*x%QT( p%DOF_TSS(L))
+         END DO
+         DO L = 1,p%NTwSSModes
+            TmpRHS = TmpRHS - p%CTSS(I,L)*x%QDT(p%DOF_TSS(L))
+         END DO
+         AugMat(p%DOF_TSS(I),p%NAug) = TmpRHS
+      ENDIF
+   END DO
    
    
    
