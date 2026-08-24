@@ -1643,7 +1643,13 @@ end subroutine ParseBlockNode
 !> True when a content line is a block-sequence item ("- item" or a bare "-").
 logical function IsSeqItem(Text) result(IsItem)
    character(*), intent(in) :: Text
-   IsItem = (Text == '-') .or. (len(Text) >= 2 .and. Text(1:2) == '- ')
+   ! Fortran does not short-circuit .and., so guard the substring explicitly
+   ! (a 1-character content line would otherwise index Text(1:2) out of bounds).
+   if (len(Text) >= 2) then
+      IsItem = (Text(1:2) == '- ')
+   else
+      IsItem = (Text == '-')
+   end if
 end function IsSeqItem
 
 !> Parse a block mapping whose keys sit at indentation Indent, adding entries under iNode.
