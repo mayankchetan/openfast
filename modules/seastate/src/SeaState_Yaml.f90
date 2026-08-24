@@ -411,6 +411,10 @@ subroutine ParseYamlDoc(Doc, InitInp, InputFileData, ErrStat, ErrMsg)
    if (Failed()) return
    call YamlGet(Doc, 'current:CurrDIDir', InputFileData%Current%CurrDIDir, TmpErrStat, TmpErrMsg)
    if (Failed()) return
+   ! CurrFile (CurrMod=3 user-defined profile); relative paths are resolved against the
+   ! primary-file directory in the shared post-read checks, exactly as for the text path.
+   call YamlGet(Doc, 'current:CurrFile', InputFileData%Current%CurrFile, TmpErrStat, TmpErrMsg, Default='')
+   if (Failed()) return
 
    !----------------------------------------------------------------------------------
    ! maccamy_fuchs (required)
