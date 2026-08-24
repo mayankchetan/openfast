@@ -69,7 +69,7 @@ module SubDyn_Yaml
    use NWTC_Library
    use SubDyn_Types
    use SD_FEM
-   use FEM, only: Determinant
+   use FEM, only: Determinant, FINDLOCI
    use YamlInput
 
    implicit none
@@ -627,7 +627,8 @@ end subroutine ParseInterfaces
 
 !> members:members -- a list of row mappings {MemberID, MJointID1, MJointID2, MPropSetID1,
 !! MPropSetID2, MType, MSpin (required for beam-type members; the member's spin about its own
-!! axis, degrees), COSMID (required for any other/spring-type member)}. MType accepts an
+!! axis, degrees), COSMID (required for any other/spring-type member), MDivSize (optional,
+!! beam-type members only: maximum element length in m, overrides NDiv)}. MType accepts an
 !! integer (idMemberBeamCirc=1, idMemberBeamRect=-1, idMemberCable=2, idMemberRigid=3,
 !! idMemberBeamArb=4, or any other integer for a spring member referencing COSMID) or the
 !! text format's "1c"/"1r" spellings for the circular/rectangular beam types.
@@ -641,7 +642,7 @@ subroutine ParseMembers(Doc, Init, p, ErrStat, ErrMsg)
    character(*), parameter :: RoutineName = 'SD_ParseMembers'
    integer(IntKi)           :: iSeq, iRow, i
    character(16)            :: MTypeStr
-   logical                  :: HasSpin, HasCOSMID, bInteger
+   logical                  :: HasSpin, HasCOSMID, HasDivSize, bInteger
    real(ReKi)               :: MTypeFloat
    integer(IntKi)           :: TmpErrStat
    character(ErrMsgLen)     :: TmpErrMsg
@@ -659,8 +660,12 @@ subroutine ParseMembers(Doc, Init, p, ErrStat, ErrMsg)
 
    call AllocAry(Init%Members,    p%NMembers, MembersCol, 'Members',    TmpErrStat, TmpErrMsg); if (Failed()) return
    call AllocAry(Init%MemberSpin, p%NMembers,             'MemberSpin', TmpErrStat, TmpErrMsg); if (Failed()) return
-   Init%Members(:,:)  = 0
-   Init%MemberSpin(:) = 0.0_ReKi
+   call AllocAry(Init%MemberDivSize, p%NMembers,          'MemberDivSize', TmpErrStat, TmpErrMsg); if (Failed()) return
+   call AllocAry(Init%MemberNDiv,    p%NMembers,          'MemberNDiv', TmpErrStat, TmpErrMsg); if (Failed()) return
+   Init%Members(:,:)     = 0
+   Init%MemberSpin(:)    = 0.0_ReKi
+   Init%MemberDivSize(:) = 0.0_ReKi
+   Init%MemberNDiv(:)    = 0_IntKi
 
    do i = 1, p%NMembers
       iRow = Yaml_Child(Doc, iSeq, i)
@@ -696,9 +701,18 @@ subroutine ParseMembers(Doc, Init, p, ErrStat, ErrMsg)
          end if
          Init%MemberSpin(i) = Init%MemberSpin(i) * D2R
          Init%Members(i,7) = -1
+         Init%MemberNDiv(i) = Init%NDiv
+         ! Optional per-member maximum element length (overrides NDiv for this beam member).
+         call YamlGet(Doc, 'MDivSize', Init%MemberDivSize(i), TmpErrStat, TmpErrMsg, Found=HasDivSize, From=iRow); if (Failed()) return
+         if (HasDivSize .and. Init%MemberDivSize(i) <= 0.0_ReKi) then
+            call SetErrStat(ErrID_Fatal, 'members:members entry '//trim(Num2LStr(i))// &
+               ': MDivSize must be greater than zero.', ErrStat, ErrMsg, RoutineName)
+            return
+         end if
       else if (Init%Members(i,6) == idMemberCable .or. Init%Members(i,6) == idMemberRigid) then
          Init%MemberSpin(i) = 0.0_ReKi
          Init%Members(i,7) = -1
+         Init%MemberNDiv(i) = 1
       else
          Init%MemberSpin(i) = 0.0_ReKi
          call YamlGet(Doc, 'COSMID', Init%Members(i,7), TmpErrStat, TmpErrMsg, Found=HasCOSMID, From=iRow); if (Failed()) return
@@ -707,6 +721,7 @@ subroutine ParseMembers(Doc, Init, p, ErrStat, ErrMsg)
                ': COSMID is required for spring-type members (MType not a beam/cable/rigid type).', ErrStat, ErrMsg, RoutineName)
             return
          end if
+         Init%MemberNDiv(i) = 1
       end if
    end do
 
@@ -1058,6 +1073,8 @@ subroutine ParseMemberOutputList(Doc, Init, p, ErrStat, ErrMsg)
    character(*),           intent(  out) :: ErrMsg
 
    character(*), parameter :: RoutineName = 'SD_ParseMemberOutputList'
+   integer(IntKi)           :: MemberDivCount, MemberNodeMax
+   real(ReKi)               :: MemberLen
    integer(IntKi), allocatable :: NodeCnt(:)
    integer(IntKi)           :: iSeq, iRow, i, j, k, flg
    logical                  :: SecFound
@@ -1094,9 +1111,9 @@ subroutine ParseMemberOutputList(Doc, Init, p, ErrStat, ErrMsg)
          call YamlGet(Doc, 'NodeCnt', NodeCnt, TmpErrStat, TmpErrMsg, From=iRow); if (Failed()) return
 
          p%MOutLst(i)%NOutCnt = size(NodeCnt)
-         if (p%MOutLst(i)%NOutCnt < 1 .or. p%MOutLst(i)%NOutCnt > 9 .or. p%MOutLst(i)%NOutCnt > Init%NDiv+1) then
+         if (p%MOutLst(i)%NOutCnt < 1 .or. p%MOutLst(i)%NOutCnt > 9) then
             call SetErrStat(ErrID_Fatal, 'member_output_list:members entry '//trim(Num2LStr(i))// &
-               ': NodeCnt must list >= 1 and <= minimum(Ndiv+1,9) entries', ErrStat, ErrMsg, RoutineName)
+               ': NodeCnt must list >= 1 and <= 9 entries', ErrStat, ErrMsg, RoutineName)
             return
          end if
 
@@ -1107,10 +1124,23 @@ subroutine ParseMemberOutputList(Doc, Init, p, ErrStat, ErrMsg)
          do j = 1, p%NMembers
             if (p%MOutLst(i)%MemberID == Init%Members(j,1)) then
                flg = flg + 1
+               ! per-member node count: NDiv, or ceil(L/MDivSize) for beams with MDivSize (text-path parity)
+               MemberDivCount = Init%MemberNDiv(j)
+               if (Init%MemberDivSize(j) > 0.0_ReKi .and. (Init%Members(j,6) == idMemberBeamCirc .or. &
+                   Init%Members(j,6) == idMemberBeamRect .or. Init%Members(j,6) == idMemberBeamArb)) then
+                  MemberLen = SD_YamlMemberLength(j, Init, TmpErrStat, TmpErrMsg); if (Failed()) return
+                  MemberDivCount = max(1_IntKi, int(ceiling(MemberLen/Init%MemberDivSize(j)), IntKi))
+               end if
+               MemberNodeMax = MemberDivCount + 1
+               if (p%MOutLst(i)%NOutCnt > min(MemberNodeMax, 9_IntKi)) then
+                  call SetErrStat(ErrID_Fatal, 'member_output_list:members entry '//trim(Num2LStr(i))// &
+                     ': NOutCnt should be less than or equal to min(number of nodes on the requested member, 9).', ErrStat, ErrMsg, RoutineName)
+                  return
+               end if
                do k = 1, p%MOutLst(i)%NOutCnt
-                  if (p%MOutLst(i)%NodeCnt(k) > (Init%NDiv+1) .or. p%MOutLst(i)%NodeCnt(k) < 1) then
+                  if (p%MOutLst(i)%NodeCnt(k) > MemberNodeMax .or. p%MOutLst(i)%NodeCnt(k) < 1) then
                      call SetErrStat(ErrID_Fatal, 'member_output_list:members entry '//trim(Num2LStr(i))// &
-                        ': NodeCnt should be less than NDIV+1 and greater than 0.', ErrStat, ErrMsg, RoutineName)
+                        ': NodeCnt should be less than or equal to the number of nodes on the requested member and greater than 0.', ErrStat, ErrMsg, RoutineName)
                      return
                   end if
                end do
@@ -1178,5 +1208,30 @@ contains
    end function Failed
 
 end subroutine ParseOutList
+
+
+!> Straight-line length of member iMember from its two joints (mirrors SubDyn's MemberLength,
+!! which lives in module SubDyn and cannot be USEd here without a circular dependency).
+function SD_YamlMemberLength(iMember, Init, ErrStat, ErrMsg) result(L)
+   integer(IntKi),    intent(in   ) :: iMember
+   type(SD_InitType), intent(in   ) :: Init
+   integer(IntKi),    intent(  out) :: ErrStat
+   character(*),      intent(  out) :: ErrMsg
+   real(ReKi)                       :: L
+   integer(IntKi)                   :: Joint1, Joint2
+   character(*), parameter          :: RoutineName = 'SD_YamlMemberLength'
+   ErrStat = ErrID_None; ErrMsg = ''; L = 0.0_ReKi
+   Joint1 = FINDLOCI(Init%Joints(:,1), Init%Members(iMember,2))
+   Joint2 = FINDLOCI(Init%Joints(:,1), Init%Members(iMember,3))
+   if (Joint1 <= 0 .or. Joint2 <= 0) then
+      call SetErrStat(ErrID_Fatal, ' Member with ID '//trim(Num2LStr(Init%Members(iMember,1)))// &
+         ' references a joint that is not in the joint list.', ErrStat, ErrMsg, RoutineName); return
+   end if
+   L = sqrt(sum((Init%Joints(Joint2,2:4) - Init%Joints(Joint1,2:4))**2))
+   if (EqualRealNos(L, 0.0_ReKi)) then
+      call SetErrStat(ErrID_Fatal, ' Member with ID '//trim(Num2LStr(Init%Members(iMember,1)))// &
+         ' has zero length!', ErrStat, ErrMsg, RoutineName); return
+   end if
+end function SD_YamlMemberLength
 
 end module SubDyn_Yaml
