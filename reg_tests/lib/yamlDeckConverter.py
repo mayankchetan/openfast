@@ -1110,12 +1110,15 @@ def convert_subdyn(text_path):
     w('  members:')
     for raw in member_rows:
         toks = _row_tokens(raw)
-        if len(toks) != 7:
-            raise ValueError('convert_subdyn: members row "{}" in {} has {} value(s); expected 7'.format(
-                raw, text_path, len(toks)))
+        if len(toks) not in (7, 8):
+            raise ValueError('convert_subdyn: members row "{}" in {} has {} value(s); expected 7 '
+                             '(or 8 with the optional MDivSize column)'.format(raw, text_path, len(toks)))
         mtype_code = _sd_mtype_code(toks[5])
         last_key = 'MSpin' if mtype_code in _SD_MTYPE_BEAM else 'COSMID'
         keys = ('MemberID', 'MJointID1', 'MJointID2', 'MPropSetID1', 'MPropSetID2', 'MType', last_key)
+        if len(toks) == 8:
+            # optional 8th column: per-member max element length (beam members; ignored otherwise)
+            keys = keys + ('MDivSize',)
         # MType stays exactly as written ("1c"/"1r"/int); only its case/spelling is
         # preserved verbatim so SD_ParseMembers' own "1C"/"1R" dispatch sees the same text
         w(_row_map(keys, toks))
@@ -1992,6 +1995,7 @@ def convert_seastate(text_path):
     w('  CurrNSDir: ' + d.scalar('CurrNSDir'))
     w('  CurrDIV: '    + d.scalar('CurrDIV'))
     w('  CurrDIDir: ' + d.scalar('CurrDIDir'))
+    w('  CurrFile: ' + _as_str(d.scalar('CurrFile')))
     w('')
 
     w('maccamy_fuchs:')

@@ -300,6 +300,11 @@ if module == "openfast":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit directly under buildDirectory -- the SAME depth as the shared
         turbine-data dirs above -- so relative paths like "../AWT27/..." resolve."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -353,6 +358,11 @@ elif module == "inflowwind":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs (e.g. ../../../glue-codes/...) resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -436,6 +446,11 @@ elif module == "aerodisk":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -519,6 +534,11 @@ elif module == "simple-elastodyn":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -603,6 +623,11 @@ elif module == "seastate":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -717,6 +742,11 @@ elif module == "hydrodyn":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs (e.g. ../../../glue-codes/...) resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -817,6 +847,11 @@ elif module == "beamdyn":
     CASE_EXCLUDE_EXT = ['.ech', '.yaml', '.sum', '.log', '.out', '.outb']
 
     def stage(variant):
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -916,6 +951,11 @@ elif module == "subdyn":
     INPUT_GLOBS = ("*.dat", "*.dvr", "*.csv")
 
     def stage(variant):
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -1052,6 +1092,11 @@ elif module == "aerodyn":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs (e.g. ../BAR_Baseline/...) resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -1218,6 +1263,11 @@ elif module == "unsteadyaero":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -1268,6 +1318,11 @@ elif module == "moordyn":
         """Copy the case inputs into <build>/<case>_yamleq_<variant>; return the dir.
         Variant dirs sit at the same depth as a normally-staged case so that relative
         paths in the inputs resolve identically."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -1395,6 +1450,11 @@ elif module == "turbsim":
         WrADFF on (and WrBLFF off) so a .bts full-field file is produced to compare, and
         switching TurbModel to the non-IEC NWTCUP spectral model (see the module block's
         own comment above for why this is required, not cosmetic)."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)
@@ -1472,6 +1532,11 @@ elif module == "fastfarm":
         Variant dirs sit directly under buildDirectory -- the SAME depth as the shared
         SIBLING_DIRS staged above -- so relative paths like "../TSinflow/..." and
         "../5MW_Baseline/..." resolve."""
+        if mode == "driver" and variant in ("text", "yaml"):
+            # driver-mode tests run concurrently with the module-mode test of the same
+            # case (ctest -j); give them their own text/yaml dirs so neither wipes the
+            # other mid-run
+            variant = "dvr_" + variant
         d = os.path.join(buildDirectory, caseName + "_yamleq_" + variant)
         if os.path.isdir(d):
             shutil.rmtree(d)

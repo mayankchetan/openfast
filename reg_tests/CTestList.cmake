@@ -712,11 +712,15 @@ yaml_equiv_driver("simple-elastodyn" "sed_test_HSSbrk"    "${CTEST_SED_EXECUTABL
 # WaveMod/constrained-wave code paths while staying cheap (short NSteps/TimeInterval).
 yaml_equiv("seastate" "seastate_1"    "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 yaml_equiv("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
+# seastate_CurrMod3: CurrMod=3 user-defined current profile (CurrFile path, added upstream
+# 2026-08) -- covers the CurrFile key and its relative-path resolution.
+yaml_equiv("seastate" "seastate_CurrMod3" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 # Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above): also
 # converts seastate_driver.inp itself to YAML (class-B/sequential-reader driver) and
 # runs yaml driver -> yaml primary.
 yaml_equiv_driver("seastate" "seastate_1"    "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 yaml_equiv_driver("seastate" "seastate_CNW1" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
+yaml_equiv_driver("seastate" "seastate_CurrMod3" "${CTEST_SEASTATE_EXECUTABLE}" "seastate;yaml")
 
 # AWT_YFix_WSt: CompServo=1 with no DISCON DLL (all ServoDyn control modes 0), so its
 # all-yaml/single-file modes exercise ServoDyn YAML conversion and the inline ServoFile
@@ -915,12 +919,16 @@ yaml_equiv_openfast("5MW_Land_BD_Init" "singlefile" "${CTEST_OPENFAST_EXECUTABLE
 # property table's optional CtrlChannel field.
 yaml_equiv("subdyn" "SD_Cable_5Joints" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
 yaml_equiv("subdyn" "SD_MultiTP"       "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
+# SD_2Beam_MixedDiscretization: MEMBERS table with the optional 8th MDivSize column on one
+# member and 7 columns on the other (upstream 2026-08 per-member discretization).
+yaml_equiv("subdyn" "SD_2Beam_MixedDiscretization" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
 # Wave 4 driver-conversion mode (see yaml_equiv_driver's own comment above): also
 # convert the standalone driver's own input file to YAML. SD_MultiTP is the preferred
 # table exerciser (nTP=2, so tp_ref_points/TPIdx both list more than one entry);
 # SD_Cable_5Joints (nTP=1, nAppliedLoads=0) covers the single-TP/no-loads path.
 yaml_equiv_driver("subdyn" "SD_MultiTP"       "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
 yaml_equiv_driver("subdyn" "SD_Cable_5Joints" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
+yaml_equiv_driver("subdyn" "SD_2Beam_MixedDiscretization" "${CTEST_SUBDYN_EXECUTABLE}" "subdyn;yaml")
 
 # 5MW_OC3Mnpl_Linear: CompSub=1 (SubDyn), CompHydro=0, CompServo=0 (no DISCON DLL) --
 # the cheapest CompSub=1 glue case in r-test (TMax=DT=0.005s), so the SubFile
